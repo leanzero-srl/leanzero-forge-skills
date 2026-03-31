@@ -836,6 +836,88 @@ await workflowRules.onConfigure(onConfigureFn);
 
 ---
 
+## Custom UI Development
+
+Forge Custom UI enables rich, interactive interfaces that communicate with backend functions through the Bridge API.
+
+### Custom UI Overview
+
+Custom UI apps:
+- Run React applications within Atlassian products
+- Communicate with backend functions using the Resolver pattern
+- Access Jira/Confluence APIs securely through authenticated endpoints
+- Provide dynamic configuration panels
+
+### Basic Custom UI Structure
+
+```yaml
+modules:
+  customPage:
+    - key: my-custom-page
+      name: { value: 'My Custom Page' }
+      resource: main
+      
+resources:
+  - key: main
+    path: src/main.js
+```
+
+### Using the Bridge API
+
+```javascript
+import { bridge } from '@forge/bridge';
+
+// Make authenticated Jira API calls
+export const fetchIssueData = async (issueKey) => {
+  const response = await bridge.requestJira(
+    `/rest/api/3/issue/${issueKey}?expand=changelog`
+  );
+  
+  return await response.json();
+};
+
+// Get user context
+export const getCurrentUser = async () => {
+  const context = await bridge.getContext();
+  return {
+    accountId: context.accountId,
+    accountType: context.accountType
+  };
+};
+```
+
+### Resolver Pattern for Backend Communication
+
+```javascript
+import Resolver from '@forge/resolver';
+
+const resolver = new Resolver();
+
+// Define backend function
+resolver.define('fetchData', async ({ payload }, context) => {
+  const response = await api.asApp().requestJira('/rest/api/3/myself');
+  return { user: await response.json() };
+});
+
+export const handler = resolver.getDefinitions();
+```
+
+### Common Use Cases
+
+1. **Workflow Rule Configuration** - Build custom configuration UIs for validators, conditions, and post functions
+2. **Dashboard Widgets** - Create rich visualizations on Jira dashboards
+3. **Service Portal Enhancement** - Extend customer portal views with additional functionality
+4. **Macro Rendering** - Build dynamic content for Confluence pages
+
+### Best Practices
+
+- Keep UI lightweight and responsive
+- Use the Bridge API for secure backend communication
+- Handle errors gracefully in your components
+- Test across different screen sizes and Atlassian products
+
+---
+
 ## Best Practices for API Calls
 
 1. **Use `api.asApp()`** when making calls from within a workflow context (no user session)
@@ -853,19 +935,62 @@ The `.cline/skills/atlassian-jira-forge-skill/docs/` directory contains detailed
 | Topic | File |
 |-------|------|
 | Core Concepts | `docs/01-core-concepts.md` |
-| Workflow Validators | `docs/02-workflow-validators.md` |
-| Workflow Conditions | `docs/03-workflow-conditions.md` |
-| Workflow Post Functions | `docs/04-workflow-post-functions.md` |
-| Events & Payloads | `docs/05-events-payloads.md` |
-| API Endpoints (Enhanced) | `docs/06-api-endpoints-enhanced.md` |
-| Permissions & Scopes | `docs/07-permissions-scopes.md` |
-| CLI Commands | `docs/08-cli-commands.md` |
-| Scheduled Triggers | `docs/09-scheduled-triggers.md` |
-| Automation Actions | `docs/10-automation-actions.md` |
-| Event Filters | `docs/11-event-filters.md` |
-| Dashboard Widgets | `docs/12-dashboard-widgets.md` |
-| Bitbucket Merge Checks | `docs/13-merge-checks.md` |
-| Confluence Content Properties | `docs/14-content-properties.md` |
+| UI Modifications | `docs/02-ui-modifications.md` |
+| Workflow Validators | `docs/03-workflow-validators.md` |
+| Workflow Conditions | `docs/04-workflow-conditions.md` |
+| Workflow Post Functions | `docs/05-workflow-post-functions.md` |
+| Events & Payloads | `docs/06-events-payloads.md` |
+| API Endpoints (Enhanced) | `docs/07-api-endpoints-enhanced.md` |
+| Permissions & Scopes | `docs/08-permissions-scopes.md` |
+| CLI Commands | `docs/09-cli-commands.md` |
+| Scheduled Triggers | `docs/10-scheduled-triggers.md` |
+| Automation Actions | `docs/11-automation-actions.md` |
+| Event Filters | `docs/12-event-filters.md` |
+| Dashboard Widgets | `docs/13-dashboard-widgets.md` |
+| Bitbucket Merge Checks | `docs/14-merge-checks.md` |
+| Confluence Content Properties | `docs/15-content-properties.md` |
+| Bridge API Reference | `docs/16-bridge-api-reference.md` |
+| Resolver Patterns | `docs/17-resolver-patterns.md` |
+| UI Kit Components | `docs/18-ui-kit-components.md` |
+| Advanced Custom UI | `docs/19-custom-ui-advanced.md` |
+
+---
+
+## Jira Service Management (JSM) Modules
+
+Forge apps can extend Jira Service Management through portal modules:
+
+### Available Module Types
+
+| Module | Description |
+|--------|-------------|
+| `jiraServiceManagement:portalRequestDetail` | Add panels to portal request views |
+| `jiraServiceManagement:portalHeader` | Custom header in customer portal |
+| `jiraServiceManagement:portalFooter` | Custom footer in customer portal |
+| `jiraServiceManagement:organizationPanel` | Add panels to organization views |
+
+### Example Configuration
+
+```yaml
+modules:
+  jiraServiceManagement:portalRequestDetail:
+    - key: request-info-panel
+      name: { value: 'Request Information' }
+      description: { value: 'Shows extended request details' }
+      resource: main
+      
+      location: com.atlassian.jira.issue.views:right-sidebar
+      
+      conditions:
+        - condition: user_is_authenticated
+
+permissions:
+  scopes:
+    - read:jira-work
+    - read:issue:jira
+```
+
+See `forge-skill/jsm-modules/README.md` for complete JSM documentation.
 
 ---
 
@@ -901,8 +1026,70 @@ The `.cline/skills/atlassian-jira-forge-skill/docs/` directory contains detailed
 
 The `forge-skill/` directory contains additional detailed documentation:
 
+### API References
 - **api-endpoints/jira-rest-api.md** - Comprehensive Jira REST API v3 reference
 - **api-endpoints/jira-rest-api-v2.md** - Jira REST API v2 endpoints (legacy)
 - **api-endpoints/confluence-rest-api.md** - Confluence REST API v3 reference
 - **api-endpoints/confluence-rest-api-v2.md** - Confluence REST API v2 endpoints (legacy)
 - **api-endpoints/bitbucket-rest-api.md** - Bitbucket Cloud REST API
+- **api-endpoints/forge-runtime-apis.md** - Forge runtime APIs reference
+
+### Modules Documentation
+- **jira-modules/README.md** - Jira modules overview
+- **bitbucket-modules/README.md** - Bitbucket modules overview
+- **confluence-modules/README.md** - Confluence modules overview
+- **jsm-modules/README.md** - Jira Service Management modules
+
+### Events & Payloads
+- **events-payloads/jira-events.md** - Jira event payloads reference
+- **events-payloads/bitbucket-events.md** - Bitbucket event payloads
+- **events-payloads/confluence-events.md** - Confluence event payloads
+- **events-payloads/jira-event-filters.md** - Jira expression filters
+
+### Additional Resources
+- **01-getting-started.md** - Forge getting started guide
+- **02-jira-modules.md** - Jira modules reference
+- **06-events-payloads.md** - Events and payloads overview
+- **07-api-endpoints.md** - API endpoints reference
+- **08-storage-kvs.md** - Key-value storage
+- **09-resolver-context.md** - Resolver pattern guide
+- **10-cli-commands.md** - CLI command reference
+- **11-permissions-scopes.md** - Permissions and scopes
+
+---
+
+## Quick Start: Creating a Custom UI App
+
+### 1. Initialize the project
+```bash
+forge init my-custom-ui-app
+cd my-custom-ui-app
+```
+
+### 2. Configure manifest.yml
+```yaml
+modules:
+  customPage:
+    - key: my-page
+      name: { value: 'My Custom Page' }
+      resource: main
+
+resources:
+  - key: main
+    path: src/main.js
+```
+
+### 3. Create your React app (src/main.js)
+```javascript
+import React from 'react';
+import ReactDOM from 'react-dom';
+import App from './App';
+
+ReactDOM.render(<App />, document.getElementById('app'));
+```
+
+### 4. Deploy and test
+```bash
+forge deploy
+forge install --upgrade -e development
+```

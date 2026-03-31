@@ -1,124 +1,287 @@
 # Implementation Plan
 
-[Overview]
-This implementation plan outlines the addition of valuable code snippets and reference materials related to recently resolved Forge Jira topics, REST API endpoints, and best practices from the Atlassian community. The goal is to expand the skill's knowledge base with practical examples and up-to-date information that developers frequently seek.
+## Overview
+This plan extends the Atlassian Jira Forge development skill to include comprehensive coverage of all available Forge modules, UI modifications, bridge API patterns, and advanced implementation techniques. The goal is to transform the current documentation from a working reference into a complete developer guide.
 
-[Types]  
-The type system will remain unchanged as this update focuses on adding reference documentation rather than modifying core logic structures.
+## Types
 
-Detailed additions:
+### Module Configuration Structure (Extended)
+```yaml
+modules:
+  # Jira workflow modules
+  jira:workflowValidator: [...]
+  jira:workflowCondition: [...]
+  jira:workflowPostFunction: [...]
+  
+  # Jira UI modification modules
+  jira:uiModification: [...]           # Modify existing UI elements
+  jira:jqlFunction: [...]               # Custom JQL functions
+  jira:adminPage: [...]                 # Admin configuration pages
+  
+  # Confluence modules
+  macro: [...]                          # Page macros
+  full-page: [...]                      # Full page apps
+  dashboard-background-script: [...]    # Dashboard widgets
+  
+  # Bitbucket modules
+  bitbucket:mergeCheck: [...]           # PR validation
+  bitbucket:uiModification: [...]       # UI extensions
+  
+  # JSM modules (Jira Service Management)
+  jiraServiceManagement:portalRequestDetail: [...]
+  jiraServiceManagement:portalHeader: [...]
+  jiraServiceManagement:organizationPanel: [...]
+  jiraServiceManagement:requestTypeForms: [...]
+  
+  # Additional module types
+  scheduledTrigger: [...]               # Timed execution
+  action: [...]                         # Automation actions
+  trigger: [...]                        # Event triggers
+  
+  # Custom UI and resources
+  customPage: [...]                     # Full page apps
+  page: [...]                           # Page modules
+  
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - read:project:jira
+    - storage:app
+```
 
-1. API Endpoint Types
-   - Jira REST API v2 endpoints (new)
-   - Confluence REST API v2 endpoints (enhancement)
-   - Bitbucket REST API endpoints (enhancement)
+### Bridge API Types (Custom UI Communication)
+```typescript
+// Bridge API methods available in custom UI
+interface ForgeBridge {
+  // Data fetching
+  requestJira(endpoint: string, options?: RequestInit): Promise<Response>
+  requestConfluence(endpoint: string, options?: RequestInit): Promise<Response>
+  
+  // Context access
+  getInstallContext(): Promise<InstallContext>
+  getContext(): Promise<UserContext>
+  
+  // UI operations
+  configure(configuration: object): Promise<void>
+  close(): Promise<void>
+  refresh(): Promise<void>
+  
+  // Router
+  useRouter(): Router
+}
 
-2. Module Type Definitions
-   - New module types for enhanced functionality:
-     * Scheduled triggers
-     * Automation actions
-     * Dashboard widgets (EAP)
-     * Confluence content properties
-     * Bitbucket merge checks
+interface InstallContext {
+  cloudId: string
+  installKey: string
+  product: string
+}
 
-[Files]
-Detailed breakdown of new files and modifications:
+interface UserContext {
+  accountId: string
+  accountType: 'licensed' | 'unlicensed' | 'customer' | 'anonymous'
+}
+```
 
-New Files to be Created:
-1. forge-skill/api-endpoints/jira-rest-api-v2.md - Comprehensive list of Jira REST API v2 endpoints
-2. forge-skill/api-endpoints/confluence-rest-api-v2.md - Confluence REST API v2 endpoints reference
-3. forge-skill/snippets/scheduled-triggers.md - Code examples for scheduled triggers
-4. forge-skill/snippets/automation-actions.md - Automation action implementation patterns
-5. forge-skill/snippets/dashboard-widgets.md - Dashboard widget examples (EAP)
-6. forge-skill/snippets/bitbucket-merge-checks.md - Merge check configuration and examples
-7. forge-skill/events-payloads/jira-event-filters.md - Event filtering with Jira expressions
-8. forge-skill/snippets/confluence-content-properties.md - Content property handling
+### Resolver Pattern Types
+```typescript
+// Resolver pattern for backend communication
+class ForgeResolver {
+  define(name: string, handler: Function): void
+  getDefinitions(): Record<string, Function>
+}
 
-Existing Files to be Modified:
-1. forge-skill/README.md - Add new sections for snippets directory and API references
-2. forge-skill/api-endpoints/README.md - Link to v2 API documentation
-3. forge-skill/events-payloads/README.md - Include event filtering information
+interface ResolverPayload {
+  payload?: any
+  parameters?: Record<string, any>
+}
 
-[Functions]
-Function examples to be added:
+interface ResolverContext {
+  accountId: string
+  cloudId: string
+  installContext: string
+}
+```
 
-New Functions:
-1. Scheduled Trigger Function
-   - File: forge-skill/snippets/scheduled-triggers.md
-   - Signature: handler(event, context)
-   - Purpose: Execute logic at scheduled intervals (fiveMinute, hour, day, week)
+## Files
 
-2. Automation Action Handler
-   - File: forge-skill/snippets/automation-actions.md
-   - Signature: actionHandler(payload, context)
-   - Purpose: Handle custom automation actions in Jira rules
-
-3. Merge Check Validator
-   - File: forge-skill/snippets/bitbucket-merge-checks.md
-   - Signature: validate(mergeProperties, context)
-   - Purpose: Validate pull requests before merging
-
-4. Dashboard Widget Resolver
-   - File: forge-skill/snippets/dashboard-widgets.md
-   - Signature: resolver(context)
-   - Purpose: Provide dynamic content for dashboard widgets
-
-Modified Functions:
-1. Event Filter Expression Builder
-   - Current file: forge-skill/events-payloads/
-   - Required changes: Add examples of Jira expression syntax for filtering
-
-[Classes]
-No new classes will be added as Forge primarily uses function modules.
-
-Key Module Types to Document:
-1. scheduledTrigger - For time-based execution
-2. action - For custom automation
-3. dashboard-background-script - For EAP dashboard widgets
-4. macro - For Confluence macros
-5. confluence:contentAction - For Confluence page actions
-
-[Dependencies]
-No external dependencies are required for this update.
-
-Current dependencies in project:
-- @atlaskit/css-reset (Confluence styling)
-- React (UI rendering)
-
-[Testing]
-Testing approach:
-
-1. Validate manifest.yml syntax using `forge lint`
-2. Test scheduled triggers with `forge deploy` and monitor execution
-3. Verify automation actions appear in Jira rule builder
-4. Test dashboard widgets installation via `forge install`
-
-Validation strategies:
-- Use forge validate-manifest to check configuration
-- Review web trigger logs for error handling
-- Test filter expressions against sample payloads
-
-[Implementation Order]
-Numbered steps showing the logical order of changes:
-
-1. Create API endpoint documentation files (v2 references)
-   a. jira-rest-api-v2.md
-   b. confluence-rest-api-v2.md
+### New Documentation Files to Create
+1. **`.cline/skills/atlassian-jira-forge-skill/docs/02-ui-modifications.md`**
+   - Jira UI modifications for extending existing UI elements
+   - Confluence macro development with custom UI
+   - Bitbucket UI extensions and PR page modifications
    
-2. Add event filtering documentation
-   a. Update events-payloads/README.md
-   b. Create jira-event-filters.md with examples
+2. **`.cline/skills/atlassian-jira-forge-skill/docs/15-bridge-api-reference.md`**
+   - Complete bridge API reference (requestJira, requestConfluence)
+   - Context retrieval patterns
+   - Router and navigation patterns
+   - Configuration UI examples
+   
+3. **`.cline/skills/atlassian-jira-forge-skill/docs/16-resolver-patterns.md`**
+   - Resolver pattern introduction and architecture
+   - Frontend to backend communication
+   - Async data fetching patterns
+   - Error handling in resolvers
 
-3. Create code snippet files for common patterns
-   a. scheduled-triggers.md
-   b. automation-actions.md
-   c. bitbucket-merge-checks.md
-   d. dashboard-widgets.md (if available)
+4. **`.cline/skills/atlassian-jira-forge-skill/docs/17-ui-kit-components.md`**
+   - Complete UI Kit component reference
+   - Form components (Form, Field, Button, etc.)
+   - Layout components (Layout, Section, Grid)
+   - Data display components (Table, List, Spinner)
+   - Feedback components (Alert, Toast, Modal)
 
-4. Add content property documentation
-   a. confluence-content-properties.md
-   b. Space and issue property handling
+5. **`.cline/skills/atlassian-jira-forge-skill/docs/18-custom-ui-advanced.md`**
+   - React component patterns
+   - State management with hooks
+   - Routing and navigation
+   - Custom CSS and styling
+   - Performance optimization
 
-5. Update main README files
-   a. Add navigation to new snippet categories
-   b. Include links to API v2 references
+### Files to Modify
+
+**`.cline/skills/atlassian-jira-forge-skill/SKILL.md`**
+- Add new sections for UI modifications, bridge API, resolver patterns, UI Kit components
+- Update the table of contents
+- Add advanced implementation patterns section
+- Update Quick Reference with more module types
+
+**`.cline/skills/atlassian-jira-forge-skill/docs/01-core-concepts.md`**
+- Add comprehensive list of all available Forge modules by product
+- Add module resolution flow diagram description
+- Expand on Custom UI architecture
+
+### Files to Update for JSM Modules
+
+**`forge-skill/jsm-modules/README.md`**
+- Complete rewrite with detailed examples for each JSM module type
+- Add organization panel documentation
+- Add request type forms documentation
+- Add portal footer/header customization examples
+- Include advanced patterns and best practices
+
+## Functions
+
+### New Function Examples to Document
+
+1. **UI Modification Handler** (`src/ui-modifications.js`)
+   ```javascript
+   export const modifyIssuePanel = async (payload, context) => {
+     // Handle UI modification requests
+     return {
+       content: renderCustomContent(payload)
+     };
+   };
+   ```
+
+2. **Resolver Definition** (`src/resolver.js`)
+   ```javascript
+   import Resolver from '@forge/resolver';
+   
+   const resolver = new Resolver();
+   resolver.define('fetchData', fetchDataHandler);
+   resolver.define('saveConfiguration', saveConfigHandler);
+   
+   export const handler = resolver.getDefinitions();
+   ```
+
+3. **Bridge Data Fetcher** (`src/bridge-api.js`)
+   ```javascript
+   import { bridge } from '@forge/bridge';
+   
+   export const loadIssueData = async (issueKey) => {
+     const response = await bridge.requestJira(`/rest/api/3/issue/${issueKey}`);
+     return await response.json();
+   };
+   ```
+
+### Modified Function Signatures
+
+The existing workflow function signatures remain the same, but will be expanded with more comprehensive examples including:
+- Complex configuration handling
+- Multiple return patterns
+- Error recovery strategies
+
+## Classes
+
+### New Classes to Document
+
+1. **ForgeResolver Class**
+   - `define(name, handler)` - Register a resolver function
+   - `getDefinitions()` - Get all registered definitions
+   - Usage for frontend-to-backend communication
+
+2. **Bridge API Methods** (Documentation of available methods)
+   - `requestJira(endpoint, options)`
+   - `requestConfluence(endpoint, options)`
+   - `getContext()`
+   - `configure(configuration)`
+   - `close()`, `refresh()`
+
+3. **UI Kit Components** (React components reference)
+   - Form components
+   - Layout components
+   - Data display components
+
+### Modified Classes
+- Existing Resolver pattern documentation will be expanded with comprehensive examples
+
+## Dependencies
+
+### New External Resources to Reference
+- Atlassian Forge UI Kit GitHub repository
+- Bridge API documentation site
+- Jira Expressions reference
+
+### Internal Dependencies Update
+No new dependencies required. The skill leverages:
+- `@forge/api` - For backend functions and API calls
+- `@forge/bridge` - For Custom UI communication
+- `@forge/resolver` - For resolver pattern implementation
+- Forge UI Kit for React components
+
+## Testing
+
+### Test File Requirements
+Create example test patterns in documentation:
+
+1. **Unit Tests**
+   - Resolver function testing with mock context
+   - Bridge API response mocking
+   - Event handler testing
+
+2. **Integration Tests**
+   - End-to-end workflow validator testing
+   - UI modification rendering validation
+   - Custom UI component interaction testing
+
+3. **Testing Commands to Document**
+   ```bash
+   # Run local tests
+   npm test
+   
+   # With coverage
+   npm run test:coverage
+   
+   # Lint and type check
+   npm run lint
+   npm run type-check
+   ```
+
+## Implementation Order
+
+1. **Update core concepts** - Add comprehensive module list to `01-core-concepts.md`
+2. **Create UI modifications documentation** - Document all Jira/Confluence/Bitbucket UI modification modules
+3. **Create bridge API reference** - Complete reference for bridge methods with examples
+4. **Create resolver patterns documentation** - Frontend-to-backend communication guide
+5. **Create UI Kit components reference** - All available UI components with examples
+6. **Create advanced custom UI guide** - React patterns, state management, optimization
+7. **Rewrite JSM modules documentation** - Complete documentation for all JSM module types
+8. **Update main SKILL.md file** - Integrate all new sections into the skill documentation
+
+## Next Steps After Implementation
+
+1. Update `implementation_plan.md` to point to new section anchors
+2. Create a "Module Selection Guide" in the main README
+3. Add troubleshooting section for common issues
+4. Include performance optimization tips
+5. Add security best practices section
