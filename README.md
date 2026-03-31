@@ -21,43 +21,59 @@ A comprehensive documentation skill for building Atlassian Forge apps that exten
 | File | Description |
 |------|-------------|
 | `SKILL.md` | Main instructions and quick reference guide |
-| `docs/01-core-concepts.md` | Core Forge concepts and manifest structure |
-| `docs/02-workflow-validators.md` | Workflow validator documentation |
-| `docs/03-workflow-conditions.md` | Workflow condition documentation |
-| `docs/04-workflow-post-functions.md` | Workflow post function documentation |
-| `docs/05-events-payloads.md` | Event structures and payloads |
-| `docs/06-api-endpoints.md` | API endpoint reference |
-| `docs/06-api-endpoints-enhanced.md` | **Enhanced** Jira REST API reference with comprehensive endpoints |
-| `docs/07-permissions-scopes.md` | Permissions and scopes reference |
-| `docs/08-cli-commands.md` | CLI commands reference |
+| `docs/01-core-concepts.md` | Core Forge concepts, manifest structure, context object |
 
-### Jira Modules Documentation
+### Jira Workflow Modules
 | File | Description |
 |------|-------------|
-| `jira-modules/README.md` | Overview of all Jira module types |
-| `jira-modules/workflow-validators.md` | Workflow validator detailed docs |
-| `jira-modules/workflow-conditions.md` | Workflow condition detailed docs |
-| `jira-modules/workflow-post-functions.md` | Workflow post-function detailed docs |
+| `docs/02-workflow-validators.md` | Complete workflow validator documentation with examples |
+| `docs/03-workflow-conditions.md` | Complete workflow condition documentation |
+| `docs/04-workflow-post-functions.md` | Complete workflow post function documentation |
 
 ### Events & Payloads
 | File | Description |
 |------|-------------|
-| `events-payloads/jira-events.md` | Jira issue, comment, workflow events |
-| `events-payloads/bitbucket-events.md` | Bitbucket repository, PR events |
-| `events-payloads/confluence-events.md` | Confluence page, space events |
+| `docs/05-events-payloads.md` | Event structures and payloads reference |
+| `events-payloads/jira-events.md` | Jira issue, comment, workflow events (external) |
+| `events-payloads/bitbucket-events.md` | Bitbucket repository, PR events (external) |
+| `events-payloads/confluence-events.md` | Confluence page, space events (external) |
 
 ### API Endpoints
 | File | Description |
 |------|-------------|
-| `api-endpoints/jira-rest-api.md` | Comprehensive Jira Cloud REST API reference |
-| `api-endpoints/bitbucket-rest-api.md` | Bitbucket Cloud REST API v2.0 reference |
-| `api-endpoints/confluence-rest-api.md` | Confluence Cloud REST API v2 reference |
-| `api-endpoints/forge-runtime-apis.md` | Forge platform APIs (@forge/api, resolver, kvs) |
+| `docs/06-api-endpoints-enhanced.md` | **Enhanced** Jira REST API reference with comprehensive endpoints |
+| `api-endpoints/jira-rest-api.md` | Comprehensive Jira Cloud REST API v3 reference (external) |
+| `api-endpoints/bitbucket-rest-api.md` | Bitbucket Cloud REST API v2.0 reference (external) |
+| `api-endpoints/confluence-rest-api.md` | Confluence Cloud REST API v2 reference (external) |
 
-### Add-on Product Modules
+### Permissions & CLI
 | File | Description |
 |------|-------------|
-| `jsm-modules/README.md` | Jira Service Management module types |
+| `docs/07-permissions-scopes.md` | Permissions and scopes reference |
+| `docs/08-cli-commands.md` | CLI commands reference |
+
+### Advanced Features
+| File | Description |
+|------|-------------|
+| `docs/09-scheduled-triggers.md` | Scheduled trigger modules for recurring tasks |
+| `docs/10-automation-actions.md` | Jira automation action modules |
+| `docs/11-event-filters.md` | Event filters with Jira expressions |
+| `docs/12-dashboard-widgets.md` | Dashboard widget modules |
+| `docs/13-merge-checks.md` | Bitbucket merge check modules |
+| `docs/14-content-properties.md` | Confluence content property modules |
+
+### Custom UI Development
+| File | Description |
+|------|-------------|
+| `docs/15-bridge-api-reference.md` | Bridge API for frontend-backend communication |
+| `docs/16-resolver-patterns.md` | Resolver pattern implementation guide |
+| `docs/17-ui-kit-components.md` | UI Kit components reference |
+| `docs/18-custom-ui-advanced.md` | Advanced Custom UI development guide |
+
+### Module-Specific Documentation
+| File | Description |
+|------|-------------|
+| `docs/02-ui-modifications.md` | UI modification modules and patterns |
 
 ## When to Use This Skill
 
@@ -67,26 +83,32 @@ Use this skill when working on:
 - Creating **workflow post-functions** - execute logic after transition
 - Building custom UIs for workflow rule configuration
 - Making Jira REST API calls from a Forge app
+- Setting up scheduled triggers for recurring tasks
+- Creating automation actions in Jira rules
+- Developing dashboard widgets
+- Implementing Bitbucket merge checks
 
 ## Complete Module Types Reference
 
 ### Jira Modules
 | Module Type | Documentation |
 |-------------|---------------|
-| `jira:workflowValidator` | [Workflow Validators](./forge-skill/jira-modules/workflow-validators.md) |
-| `jira:workflowCondition` | [Workflow Conditions](./forge-skill/jira-modules/workflow-conditions.md) |
-| `jira:workflowPostFunction` | [Workflow Post Functions](./forge-skill/jira-modules/workflow-post-functions.md) |
+| `jira:workflowValidator` | [Workflow Validators](./docs/02-workflow-validators.md) |
+| `jira:workflowCondition` | [Workflow Conditions](./docs/03-workflow-conditions.md) |
+| `jira:workflowPostFunction` | [Workflow Post Functions](./docs/04-workflow-post-functions.md) |
+| `scheduledTrigger` | [Scheduled Triggers](./docs/09-scheduled-triggers.md) |
+| `action` | [Automation Actions](./docs/10-automation-actions.md) |
 
 ### Confluence Modules
 | Module Type | Documentation |
 |-------------|---------------|
-| `confluence:macro` | [Macro Module](./forge-skill/confluence-modules/macro.md) |
-| `confluence:fullPage` | [Full Page Module](./forge-skill/confluence-modules/full-page.md) |
+| `confluence:macro` | Macro Module (external) |
+| `confluence:fullPage` | Full Page Module (external) |
 
 ### Bitbucket Modules
 | Module Type | Documentation |
 |-------------|---------------|
-| `bitbucket:mergeCheck` | [Merge Check Module](./forge-skill/bitbucket-modules/merge-checks.md) |
+| `bitbucket:mergeCheck` | [Merge Check Module](./docs/13-merge-checks.md) |
 
 ## API Reference Summary
 
@@ -132,9 +154,11 @@ The skill includes extensive documentation for Jira Cloud REST API v3 endpoints:
 | Validate fields before transition | `jira:workflowValidator` |
 | Control transition visibility | `jira:workflowCondition` |
 | Execute logic after transition | `jira:workflowPostFunction` |
+| Schedule recurring tasks | `scheduledTrigger` |
+| Create automation actions | `action` |
+| Custom UI development | @forge/bridge, @forge/resolver |
 | Create Jira issues | Jira REST API `/rest/api/3/issue` |
 | Search issues with JQL | Jira REST API `/rest/api/3/search` |
-| Bulk update issues | Jira REST API `/rest/api/3/bulk/issues/fields` |
 
 ## Skill Configuration
 
