@@ -14,7 +14,9 @@ This skill provides comprehensive documentation for building Forge apps that ext
 - Creating workflow post-functions (execute logic after transition)
 - Building custom UIs for workflow rule configuration
 - Making Jira REST API calls from a Forge app
-- Understanding Forge manifest structure and permissions
+- Setting up scheduled triggers and automation actions
+- Configuring dashboard widgets
+- Implementing merge checks for Bitbucket
 
 ## Quick Reference
 
@@ -24,6 +26,8 @@ This skill provides comprehensive documentation for building Forge apps that ext
 | Control transition visibility | `jira:workflowCondition` | `function` or `expression` |
 | Execute logic after successful transition | `jira:workflowPostFunction` | `function` |
 | Build configuration UI | Custom React UI with @forge/bridge | N/A |
+| Run scheduled tasks | `scheduledTrigger` | `function` |
+| Create automation actions | `action` | `function` |
 
 ---
 
@@ -86,6 +90,8 @@ export const handler = async (payload, context) => {
 };
 ```
 
+---
+
 ## Workflow Validators
 
 ### Module Configuration
@@ -138,6 +144,8 @@ permissions:
     - read:workflow:jira   # Access workflow info
 ```
 
+---
+
 ## Workflow Conditions
 
 **Key Difference from Validators**: Conditions control UI visibility (hide/show transitions), while validators block transitions after validation.
@@ -168,6 +176,8 @@ export const checkLicense = async (args) => {
   return { result: isActive };  // true=show, false=hide
 };
 ```
+
+---
 
 ## Workflow Post Functions
 
@@ -216,6 +226,448 @@ export const enhanceSummary = async (args) => {
 - **Continue workflow**: `return { result: true };`
 - **Log but don't block**: `return { result: false, warnings: [...] };`
 
+---
+
+## Scheduled Triggers
+
+Scheduled triggers execute your function at regular intervals (fiveMinute, hour, day, week).
+
+### Manifest Configuration
+
+```yaml
+modules:
+  scheduledTrigger:
+    - key: daily-report-trigger
+      name: { value: 'Daily Report Generator' }
+      description: { value: 'Generates and sends daily activity report' }
+      function: dailyReportFunction
+      schedule:
+        period: day
+        time: '09:00'
+```
+
+### Function Implementation
+
+```javascript
+export const dailyReportFunction = async (event, context) => {
+  console.log('Scheduled trigger executed:', event);
+  
+  // Get execution metadata
+  const { scheduledTrigger } = event;
+  console.log(`Running at: ${scheduledTrigger.timestamp}`);
+  console.log(`Schedule period: ${scheduledTrigger.period}`);
+  
+  try {
+    // Your scheduled logic here
+    await generateAndSendReport();
+    
+    return {
+      status: 'success',
+      message: 'Daily report generated successfully'
+    };
+  } catch (error) {
+    console.error('Error in scheduled trigger:', error);
+    throw error;
+  }
+};
+
+const generateAndSendReport = async () => {
+  // Example: Get issues created today
+  const response = await api.asApp().requestJira('/rest/api/3/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jql: 'created >= startOfDay()',
+      maxResults: 50
+    })
+  });
+  
+  const data = await response.json();
+  // Process and send report...
+};
+```
+
+### Multiple Schedule Intervals
+
+```yaml
+modules:
+  scheduledTrigger:
+    - key: hourly-check-trigger
+      name: { value: 'Hourly Service Check' }
+      function: hourlyCheckFunction
+      schedule:
+        period: hour
+        
+    - key: daily-summary-trigger  
+      name: { value: 'Daily Summary Email' }
+      function: dailySummaryFunction
+      schedule:
+        period: day
+        time: '09:00'
+        
+    - key: weekly-report-trigger
+      name: { value: 'Weekly Analytics Report' }
+      function: weeklyReportFunction
+      schedule:
+        period: week
+        dayOfWeek: MONDAY
+        time: '10:00'
+```
+
+### Accessing Execution Context
+
+```javascript
+export const myScheduledFunction = async (event, context) => {
+  // Scheduled trigger information
+  const { timestamp, period, dayOfWeek, time } = event.scheduledTrigger;
+  
+  console.log(`Execution time: ${timestamp}`);
+  console.log(`Schedule: Every ${period} at ${time}`);
+  
+  // Context contains app information
+  const { cloudId, moduleKey } = context;
+  return { status: 'processed' };
+};
+```
+
+---
+
+## Automation Actions
+
+Automation actions appear in Jira's automation rule builder and can perform custom logic when triggered.
+
+### Module Configuration
+
+```yaml
+modules:
+  action:
+    - key: custom-issue-update-action
+      name: { value: 'Custom Issue Update' }
+      description: { value: 'Performs custom issue update logic' }
+      function: customIssueUpdateFunction
+```
+
+### Function Implementation
+
+```javascript
+export const customIssueUpdateFunction = async (payload, context) => {
+  console.log('Automation action triggered:', JSON.stringify(payload, null, 2));
+  
+  // Extract information from the payload
+  const { issue } = payload;
+  const { id: issueId, key, fields } = issue;
+  
+  console.log(`Processing issue: ${key}`);
+  
+  try {
+    await performCustomUpdate(issue);
+    
+    return {
+      status: 'success',
+      message: `Updated issue ${key} successfully`,
+      data: { issueKey: key }
+    };
+  } catch (error) {
+    console.error('Error in automation action:', error);
+    throw error;
+  }
+};
+
+const performCustomUpdate = async (issue) => {
+  await api.asApp().requestJira(`/rest/api/3/issue/${issue.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      update: {
+        summary: [{ set: `Auto-updated: ${issue.fields.summary}` }]
+      }
+    })
+  });
+};
+```
+
+### Multiple Actions Configuration
+
+```yaml
+modules:
+  action:
+    - key: custom-status-update-action
+      name: { value: 'Update Issue Status' }
+      description: { value: 'Updates issue status based on conditions' }
+      function: updateStatusAction
+      
+    - key: custom-comment-add-action
+      name: { value: 'Add Comment with Template' }
+      description: { value: 'Adds a templated comment to the issue' }
+      function: addCommentAction
+```
+
+### Common Use Cases
+
+1. **Sync with External System** - Send issue data to external CRM
+2. **Send Email Notification** - Notify team members of important issues
+3. **Update Custom Fields** - Automatically set computed field values
+
+---
+
+## Event Filters with Jira Expressions
+
+Event filters enable selective event handling using Jira expressions.
+
+### Filter by Project
+
+```yaml
+modules:
+  trigger:
+    - key: project-specific-trigger
+      events:
+        - avi:jira:created:issue
+      filter: issue.fields.project.key == 'PROJ'
+      function: handleProjectIssues
+```
+
+### Filter by Issue Type
+
+```yaml
+modules:
+  trigger:
+    - key: bug-only-trigger
+      events:
+        - avi:jira:created:issue
+      filter: issue.fields.issuetype.name == 'Bug'
+      function: handleBugs
+```
+
+### Complex Filters
+
+```yaml
+modules:
+  trigger:
+    - key: complex-filter-trigger
+      events:
+        - avi:jira:created:issue
+      filter: |
+        (issue.fields.project.key == 'PROJ') 
+        && (issue.fields.issuetype.name in ['Bug', 'Task'])
+        && (issue.fields.priority.name in ['Highest', 'High'])
+      function: handleHighPriorityIssuesInProject
+```
+
+### Available Expression Functions
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `contains(text, substring)` | Check if string contains substring | `contains(issue.fields.summary, 'error')` |
+| `startsWith(text, prefix)` | Check if string starts with prefix | `startsWith(issue.fields.summary, '[BUG]')` |
+| `greaterThan(a, b)` | Check if a > b | `greaterThan( issue.fields.comment.commentsSize, 5)` |
+
+---
+
+## Dashboard Widgets
+
+Dashboard widgets display custom content on Jira dashboards.
+
+### Manifest Configuration
+
+```yaml
+modules:
+  dashboard-background-script:
+    - key: custom-stats-widget
+      name: { value: 'Custom Statistics' }
+      description: { value: 'Displays custom statistics on the dashboard' }
+      function: customStatsFunction
+      requiresContext: true
+```
+
+### Function Implementation
+
+```javascript
+export const customStatsFunction = async (payload, context) => {
+  try {
+    // Get context data if available
+    const { dashboard } = payload;
+    
+    // Fetch data for the widget
+    const statsData = await fetchStatistics(dashboard);
+    
+    return {
+      statusCode: 200,
+      body: {
+        title: 'My Statistics',
+        content: renderWidgetContent(statsData),
+        link: {
+          url: `/browse/${statsData.projectKey}`,
+          text: 'View all issues'
+        }
+      }
+    };
+  } catch (error) {
+    return {
+      statusCode: 500,
+      body: {
+        title: 'Statistics',
+        content: `<p>Error loading data: ${error.message}</p>`,
+        link: null
+      }
+    };
+  }
+};
+```
+
+### Common Use Cases
+
+1. **Project Health Dashboard** - Display project metrics and status
+2. **My Tasks Widget** - Show pending tasks for the current user
+3. **Team Activity Stats** - Display recent team activity
+
+---
+
+## Bitbucket Merge Checks
+
+Merge checks validate pull requests before merging.
+
+### Module Configuration
+
+```yaml
+modules:
+  bitbucket:mergeCheck:
+    - key: require-approvals-check
+      name: { value: 'Require Review Approvals' }
+      description: { value: 'Ensures pull request has required approvals' }
+      function: requireApprovalsFunction
+```
+
+### Function Implementation
+
+```javascript
+export const requireApprovalsFunction = async (payload, context) => {
+  // Extract information from the payload
+  const { pullRequest } = payload;
+  
+  try {
+    // Check if PR has required approvals
+    const hasRequiredApprovals = await checkApprovalStatus(pullRequest);
+    
+    if (hasRequiredApprovals) {
+      return {
+        status: 'success',
+        name: { value: 'Required Approvals' },
+        description: { value: 'All required approvals are in place' }
+      };
+    }
+    
+    return {
+      status: 'failure',
+      name: { value: 'Missing Approvals' },
+      description: { 
+        value: 'This PR needs at least 2 reviewer approvals before merging'
+      }
+    };
+  } catch (error) {
+    console.error('Merge check error:', error);
+    throw error;
+  }
+};
+```
+
+### Common Use Cases
+
+1. **Test Coverage Check** - Ensure minimum test coverage
+2. **Branch Naming Convention** - Enforce branch naming patterns
+3. **Pull Request Size Limit** - Limit PR size for code review efficiency
+
+---
+
+## Confluence Content Properties
+
+Content properties allow you to store structured data associated with pages and blog posts.
+
+### Storing Content Properties
+
+```javascript
+export const createContentProperty = async (contentId, propertyKey, value) => {
+  try {
+    await api.asApp().requestJira(`/wiki/rest/api/content/${contentId}/property/${propertyKey}`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        value: value
+      })
+    });
+    
+    return { status: 'success', propertyKey };
+  } catch (error) {
+    console.error('Error creating property:', error);
+    throw error;
+  }
+};
+```
+
+### Retrieving Content Properties
+
+```javascript
+export const getContentProperty = async (contentId, propertyKey) => {
+  try {
+    const response = await api.asApp().requestJira(
+      `/wiki/rest/api/content/${contentId}/property/${propertyKey}`
+    );
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        return null;
+      }
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const property = await response.json();
+    return property;
+  } catch (error) {
+    console.error('Error retrieving property:', error);
+    throw error;
+  }
+};
+```
+
+### Updating Content Properties
+
+```javascript
+export const updateContentProperty = async (contentId, propertyKey, newValue) => {
+  let existingProperty = await getContentProperty(contentId, propertyKey);
+  
+  if (!existingProperty) {
+    throw new Error(`Property "${propertyKey}" doesn't exist`);
+  }
+  
+  await api.asApp().requestJira(
+    `/wiki/rest/api/content/${contentId}/property/${propertyKey}`,
+    {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        value: newValue,
+        version: {
+          number: existingProperty.version.number + 1
+        }
+      })
+    }
+  );
+  
+  return { status: 'success', propertyKey };
+};
+```
+
+### Common Use Cases
+
+1. **Issue-Page Linking System** - Link Confluence pages to Jira issues
+2. **Custom Metadata Storage** - Store custom metadata with pages
+3. **Form Data Storage** - Collect and store form submissions on pages
+
+---
+
 ## Events & Payloads
 
 ### Validator/Condition Trigger Payload
@@ -249,6 +701,8 @@ Includes `changelog` array showing what changed:
   }]
 }
 ```
+
+---
 
 ## API Endpoints Reference
 
@@ -287,7 +741,16 @@ await api.asApp().requestJira(route`/rest/api/3/issue/${issueKey}?${params}`);
 | POST | `/rest/api/3/issue/{id}/transitions` | Execute transition |
 | GET | `/rest/api/3/project/{key}` | Get project details |
 | GET | `/rest/api/3/search` | Search issues with JQL |
-| GET | `/rest/api/3/user/bulk` | Get multiple users |
+
+### Confluence REST API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/wiki/rest/api/content/{id}` | Get page content |
+| PUT | `/wiki/rest/api/content/{id}` | Update page content |
+| POST | `/wiki/rest/api/content` | Create new page |
+| GET | `/wiki/rest/api/space` | List spaces |
+| DELETE | `/wiki/rest/api/content/{id}` | Delete page |
 
 ### Available Scopes
 
@@ -298,15 +761,7 @@ await api.asApp().requestJira(route`/rest/api/3/issue/${issueKey}?${params}`);
 | `read:workflow:jira` | Read workflow configurations |
 | `storage:app` | Access Forge KVS storage |
 
-### Additional Available Scopes
-
-| Scope | Description |
-|-------|-------------|
-| `read:project:jira` | Read project data |
-| `read:user:jira` | Read user information |
-| `write:project:jira` | Create/update projects |
-| `read:workflow-scheme:jira` | Read workflow schemes |
-| `read:issuetype:jira` | Read issue types |
+---
 
 ## Permissions & Scopes
 
@@ -326,13 +781,7 @@ permissions:
         - "api.openai.com"   # External API domains
 ```
 
-### Configuration Permissions
-
-```yaml
-app:
-  licensing:
-    enabled: true          # For license checking
-```
+---
 
 ## CLI Commands Reference
 
@@ -362,6 +811,8 @@ forge install --upgrade -e development
 forge tunnel
 ```
 
+---
+
 ## UI Configuration Bridge
 
 For workflow rules, use the Jira bridge for custom configuration:
@@ -370,7 +821,6 @@ For workflow rules, use the Jira bridge for custom configuration:
 import { workflowRules } from '@forge/jira-bridge';
 
 const onConfigureFn = async () => {
-  // Get values from UI form inputs
   const fieldId = document.getElementById('field-select').value;
   const prompt = document.getElementById('prompt-input').value;
   
@@ -384,55 +834,7 @@ const onConfigureFn = async () => {
 await workflowRules.onConfigure(onConfigureFn);
 ```
 
-### UI Modifications API
-
-Modify Jira UI elements programmatically:
-
-```javascript
-import { uiModificationsApi } from '@forge/jira-bridge';
-
-uiModificationsApi.onInit(
-  ({ api }) => {
-    // Get field by ID
-    const priority = api.getFieldById('priority');
-    
-    // Hide field
-    priority?.setVisible(false);
-    
-    // Change label
-    const summary = api.getFieldById('summary');
-    summary?.setName('Modified Label');
-    
-    // Get field value
-    const labels = api.getFieldById('labels');
-    const labelsData = labels?.getValue() || [];
-  },
-  () => ['priority', 'summary', 'labels']
-);
-```
-
-## Advanced Documentation
-
-See the `docs/` folder for detailed documentation on each topic:
-
-- **01-core-concepts.md** - Core Forge concepts and manifest structure
-- **02-workflow-validators.md** - Detailed validator documentation
-- **03-workflow-conditions.md** - Detailed condition documentation
-- **04-workflow-post-functions.md** - Detailed post function documentation
-- **05-events-payloads.md** - Event structures and payloads
-- **06-api-endpoints.md** - Complete API reference
-- **06-api-endpoints-enhanced.md** - Enhanced Jira REST API reference with comprehensive endpoints
-- **07-permissions-scopes.md** - All available scopes
-- **08-cli-commands.md** - CLI command reference
-
-## Additional API Resources
-
-The `forge-skill/api-endpoints/` directory contains additional detailed documentation:
-
-- **jira-rest-api.md** - Comprehensive Jira REST API endpoint reference
-- **bitbucket-rest-api.md** - Bitbucket Cloud REST API endpoints
-- **confluence-rest-api.md** - Confluence REST API endpoints
-- **forge-runtime-apis.md** - Forge runtime and resolver APIs
+---
 
 ## Best Practices for API Calls
 
@@ -441,85 +843,31 @@ The `forge-skill/api-endpoints/` directory contains additional detailed document
 3. **Batch operations** whenever possible - bulk endpoints reduce API call count
 4. **Handle rate limits** - Jira Cloud typically allows 5 requests per second
 5. **Paginate results** using `startAt` and `maxResults` parameters for large datasets
-6. **Use expand parameters** to minimize the number of API calls needed
 
-### Example: Bulk Issue Operations
+---
 
-```javascript
-// Search issues
-const searchResponse = await api.asApp().requestJira('/rest/api/3/search', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    jql: 'project = PROJ AND status != Done',
-    maxResults: 100
-  })
-});
+## Advanced Documentation
 
-const issues = await searchResponse.json();
+The `.cline/skills/atlassian-jira-forge-skill/docs/` directory contains detailed documentation on each topic:
 
-// Bulk update
-await api.asApp().requestJira('/rest/api/3/bulk/issues/fields', {
-  method: 'PUT',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    update: { fields: { summary: 'Updated' } },
-    issues: issues.issues.map(i => i.key)
-  })
-});
-```
+| Topic | File |
+|-------|------|
+| Core Concepts | `docs/01-core-concepts.md` |
+| Workflow Validators | `docs/02-workflow-validators.md` |
+| Workflow Conditions | `docs/03-workflow-conditions.md` |
+| Workflow Post Functions | `docs/04-workflow-post-functions.md` |
+| Events & Payloads | `docs/05-events-payloads.md` |
+| API Endpoints (Enhanced) | `docs/06-api-endpoints-enhanced.md` |
+| Permissions & Scopes | `docs/07-permissions-scopes.md` |
+| CLI Commands | `docs/08-cli-commands.md` |
+| Scheduled Triggers | `docs/09-scheduled-triggers.md` |
+| Automation Actions | `docs/10-automation-actions.md` |
+| Event Filters | `docs/11-event-filters.md` |
+| Dashboard Widgets | `docs/12-dashboard-widgets.md` |
+| Bitbucket Merge Checks | `docs/13-merge-checks.md` |
+| Confluence Content Properties | `docs/14-content-properties.md` |
 
-### Example: Error Handling
-
-```javascript
-try {
-  const response = await api.asApp().requestJira('/rest/api/3/issue', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields: { summary: 'Test' } })
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    console.error('API Error:', error);
-    
-    // Handle specific status codes
-    if (response.status === 401) {
-      throw new Error('Authentication failed');
-    } else if (response.status === 403) {
-      throw new Error('Insufficient permissions');
-    }
-  }
-
-  return await response.json();
-} catch (error) {
-  console.error('Request failed:', error);
-  throw error;
-}
-```
-
-### Example: Complex JQL Queries
-
-```javascript
-// Find issues assigned to me that are overdue
-const jql = `assignee = currentUser() AND duedate < startOfDay() AND status != Done`;
-
-// Find issues created this week with high priority
-const jql2 = `created >= startOfWeek() AND priority = High`;
-
-// Find unassigned issues in a project
-const jql3 = `project = PROJ AND assignee is EMPTY`;
-```
-
-## Common Use Cases
-
-| Use Case | Solution |
-|----------|----------|
-| AI Content Validation | Validate issue descriptions using AI |
-| Licensing Checks | Only show transitions if license is active |
-| Summary Enhancement | Automatically improve issue summaries |
-| Field Validation | Ensure required fields are populated |
-| Cross-System Sync | Update external systems on transition |
+---
 
 ## Troubleshooting
 
@@ -527,15 +875,17 @@ const jql3 = `project = PROJ AND assignee is EMPTY`;
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| "Function not found" | Verify function key matches in manifest and code | Check `function` references in manifest.yml |
-| "Permission denied" | Check scopes in manifest.yml | Add required scope to permissions.scopes |
-| "Expression evaluation failed" | Validate Jira expression syntax | Test expressions in workflow editor |
+| "Function not found" | Function key mismatch in manifest.yml | Check function references match |
+| "Permission denied" | Missing scopes in manifest.yml | Add required scope to permissions.scopes |
+| "Expression evaluation failed" | Invalid Jira expression syntax | Test expressions in workflow editor |
 
 ### Debugging
 
 1. Use `console.log()` for debugging
 2. View logs with `forge logs -n 50`
 3. Test locally with `forge tunnel`
+
+---
 
 ## Quick Comparison: Validators vs Conditions vs Post Functions
 
@@ -544,4 +894,15 @@ const jql3 = `project = PROJ AND assignee is EMPTY`;
 | **When it runs** | Before transition completes | Before UI renders | After transition completes |
 | **Purpose** | Validate data before completion | Hide/show transitions in UI | Execute logic after success |
 | **Failure behavior** | Transition blocked, error shown | Transition hidden from user | Error logged, workflow continues |
-| **Use case** | Ensure required fields are set | Control access based on roles | Send notifications, update related issues |
+
+---
+
+## Additional API Resources
+
+The `forge-skill/` directory contains additional detailed documentation:
+
+- **api-endpoints/jira-rest-api.md** - Comprehensive Jira REST API v3 reference
+- **api-endpoints/jira-rest-api-v2.md** - Jira REST API v2 endpoints (legacy)
+- **api-endpoints/confluence-rest-api.md** - Confluence REST API v3 reference
+- **api-endpoints/confluence-rest-api-v2.md** - Confluence REST API v2 endpoints (legacy)
+- **api-endpoints/bitbucket-rest-api.md** - Bitbucket Cloud REST API
