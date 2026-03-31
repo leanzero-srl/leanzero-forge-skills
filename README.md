@@ -13,20 +13,7 @@ A comprehensive documentation skill for building Atlassian Forge apps that exten
    cp -r atlassian-jira-forge-skill ~/.cline/skills/
    ```
 
-2. **Configure `.clinerc`:**
-   Create or edit `.clinerc` in your project root:
-   ```json
-   {
-     "skills": [
-       {
-         "name": "atlassian-jira-forge-skill",
-         "path": "/Users/mihaiperdum/.cline/skills/atlassian-jira-forge-skill"
-       }
-     ]
-   }
-   ```
-
-3. **Start using it:** The skill will activate automatically when working on Forge app development.
+2. **Start using it:** The skill will activate automatically when working on Forge app development.
 
 ## What's Included
 
