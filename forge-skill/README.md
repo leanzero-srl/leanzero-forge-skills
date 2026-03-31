@@ -92,9 +92,24 @@ forge-skill/
 | Product | Documentation |
 |---------|---------------|
 | Forge Runtime APIs | [api-endpoints/forge-runtime-apis.md](./api-endpoints/forge-runtime-apis.md) |
-| Jira REST API | [api-endpoints/jira-rest-api.md](./api-endpoints/jira-rest-api.md) |
-| Bitbucket REST API | [api-endpoints/bitbucket-rest-api.md](./api-endpoints/bitbucket-rest-api.md) |
-| Confluence REST API | [api-endpoints/confluence-rest-api.md](./api-endpoints/confluence-rest-api.md) |
+| Jira REST API v3 (recommended) | [api-endpoints/jira-rest-api.md](./api-endpoints/jira-rest-api.md) |
+| Jira REST API v2 (legacy) | [api-endpoints/jira-rest-api-v2.md](./api-endpoints/jira-rest-api-v2.md) |
+| Bitbucket REST API | [api-endpoints/bitbucket-rest-api.md](./api/endpoints/bitbucket-rest-api.md) |
+| Confluence REST API v3 (recommended) | [api-endpoints/confluence-rest-api.md](./api-endpoints/confluence-rest-api.md) |
+| Confluence REST API v2 (legacy) | [api-endpoints/confluence-rest-api-v2.md](./api/endpoints/confluence-rest-api-v2.md) |
+
+## Snippets & Code Examples
+
+This documentation includes code snippets for common patterns:
+
+| Category | File |
+|----------|------|
+| Scheduled Triggers | `snippets/scheduled-triggers.md` |
+| Automation Actions | `snippets/automation-actions.md` |
+| Dashboard Widgets | `snippets/dashboard-widgets.md` |
+| Bitbucket Merge Checks | `snippets/bitbucket-merge-checks.md` |
+| Jira Event Filters | `events-payloads/jira-event-filters.md` |
+| Confluence Content Properties | `snippets/confluence-content-properties.md` |
 
 ## Complete File Structure
 
@@ -134,11 +149,21 @@ forge-skill/
 └── jsm-modules/
     └── README.md
 │
-└── api-endpoints/                 # API endpoint documentation
-    ├── README.md                  # Overview of all endpoints
-    ├── forge-runtime-apis.md      # Forge platform APIs
-    ├── bitbucket-rest-api.md    # Bitbucket REST API reference
-    └── confluence-rest-api.md   # Confluence REST API reference
+├── snippets/                      # Code examples and patterns
+│   ├── README.md                  # Overview of all snippets
+│   ├── scheduled-triggers.md      # Scheduled trigger examples
+│   ├── automation-actions.md      # Automation action examples
+│   ├── dashboard-widgets.md       # Dashboard widget examples
+│   ├── bitbucket-merge-checks.md  # Merge check configuration
+│   └── confluence-content-properties.md  # Content property handling
+│
+├── api-endpoints/                 # API endpoint documentation
+│   ├── README.md                  # Overview of all endpoints
+│   ├── forge-runtime-apis.md      # Forge platform APIs
+│   ├── bitbucket-rest-api.md      # Bitbucket REST API reference
+│   ├── confluence-rest-api.md     # Confluence REST API reference
+│   ├── jira-rest-api-v2.md        # Jira REST API v2 endpoints (legacy)
+│   └── confluence-rest-api-v2.md  # Confluence REST API v2 endpoints (legacy)
 
 ## Core Concepts
 
@@ -174,3 +199,32 @@ Every function receives a `context` object with:
 Use git grep or search across files:
 ```bash
 grep -r "workflowValidator" forge-skill/
+```
+
+## New in This Update
+
+This update includes comprehensive documentation additions:
+
+### API Endpoints Documentation
+- **Jira REST API v2** - Comprehensive reference for legacy v2 endpoints with authentication, issue operations, workflow transitions, search/JQL examples, and error handling
+- **Confluence REST API v2** - Reference for Confluence content, space, comment, attachment operations
+
+### Code Snippets Collection
+- **Scheduled Triggers** - Full implementation patterns for `fiveMinute`, `hour`, `day`, and `week` intervals with common use cases (syncing, cleanup, reporting)
+- **Automation Actions** - Custom actions for Jira automation rules including CRM sync, email notifications, custom field updates
+- **Dashboard Widgets** - Custom widget examples using EAP dashboard-background-script module
+- **Bitbucket Merge Checks** - Validate pull requests with test coverage, branch naming, size limit checks
+
+### Event Filtering Documentation
+- **Jira Event Filters** - Complete guide to Jira expressions for filtering events by project, status, priority, labels, assignee, and custom fields
+
+### Confluence Content Properties
+- Full CRUD operations for content properties including JSON storage, issue-page linking, metadata management, form data handling
+
+---
+
+*Last updated: March 2026*
+
+## Related Resources
+- [Forge Developer Docs](https://developer.atlassian.com/cloud/forge/)
+- [Forge Examples Repository](https://github.com/atlassian-labs/forge-examples)
