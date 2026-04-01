@@ -1,10 +1,26 @@
-# Cline Skills
+# LeanZero Forge Skills
 
 A **skill** for [Cline](https://github.com/cline) is a collection of documentation, guides, and reference materials that provide specialized knowledge to help Cline (and human developers) work more effectively on specific types of projects. Skills are activated automatically when working in relevant directories or when the context suggests they should be used.
 
-## What is This Skill?
+## Available Skills
 
-This repository contains the **Atlassian Jira Forge Skill** - a comprehensive documentation suite for building Atlassian Forge apps that extend Jira, Confluence, Bitbucket, and Jira Service Management.
+This repository contains **two comprehensive skills** for building Atlassian Forge apps:
+
+### 1. Atlassian Jira Forge Skill
+A complete documentation suite for building Forge apps that extend Jira, including workflow validators, conditions, post-functions, and integrations with Jira REST APIs.
+
+- **Location**: `.cline/skills/atlassian-jira-forge-skill/`
+- **Use when**: Creating workflow validators, conditions, post-functions, custom UIs for workflow rules, or integrating with Jira REST APIs from a Forge app
+
+### 2. Atlassian Confluence Forge Skill
+A complete documentation suite for building Forge apps that extend Confluence Cloud, including page extensions, blog post extensions, space settings panels, dashboard gadgets, and integrations with Confluence REST API v2.
+
+- **Location**: `.cline/skills/atlassian-confluence-forge-skill/`
+- **Use when**: Building custom UIs for pages/blog posts, creating space configuration panels, handling Confluence webhooks, or integrating with Confluence REST API from a Forge app
+
+---
+
+## What is a Skill?
 
 ### Purpose
 
