@@ -1,0 +1,259 @@
+# Jira Forge Event Webhook Handler Template
+
+Copy this file and modify for your specific use case.
+
+## File: manifest.yml (add to modules section)
+
+```yaml
+modules:
+  trigger:
+    - key: issue-mutation-trigger      # REQUIRED: Unique identifier
+      function: 'issueHandler'         # REQUIRED: Function key reference
+      events:                          # REQUIRED: List of events to subscribe to
+        - avi:jira:created:issue       # Issue created event
+        - avi:jira:updated:issue       # Issue updated event
+        # - avi:jira:deleted:issue    # Issue deleted event
+
+# Function module definition (required for all Forge apps with functions)
+function:
+  - key: issueHandler
+    handler: index.onIssueEvent
+```
+
+## File: src/index.js
+
+```javascript
+import api, { route } from '@forge/api';
+
+/**
+ * Event webhook handler
+ * Processes Jira events as they occur
+ */
+export const onIssueEvent = async (event, context) => {
+  console.log('Event received:', event);
+  
+  // Event structure:
+  // - type: Event type (e.g., 'avi:jira:created:issue')
+  // - timestamp: When the event occurred
+  // - actor: User who triggered the event
+  // - issue: Issue data (depends on event type)
+  // - changes: For update events, contains changed fields
+  
+  const { type, issue } = event;
+  
+  try {
+    switch (type) {
+      case 'avi:jira:created:issue':
+        await handleIssueCreated(issue);
+        break;
+        
+      case 'avi:jira:updated:issue':
+        await handleIssueUpdated(issue, event.changes);
+        break;
+        
+      // Add more event handlers as needed
+        
+      default:
+        console.log('Unhandled event type:', type);
+    }
+    
+    return { status: 'success' };
+    
+  } catch (error) {
+    console.error('Event handler error:', error);
+    throw error; // Errors trigger automatic retries for event handlers
+  }
+};
+
+/**
+ * Handle issue created event
+ */
+async function handleIssueCreated(issue) {
+  console.log(`New issue created: ${issue.key}`);
+  
+  // Example: Add a welcome comment
+  await api.asApp().requestJira(
+    route`/rest/api/3/issue/${issue.key}/comment`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        body: {
+          type: 'doc',
+          version: 1,
+          content: [{
+            type: 'paragraph',
+            content: [{
+              type: 'text',
+              text: `Welcome! This issue has been automatically tracked.`
+            }]
+          }]
+        }
+      })
+    }
+  );
+}
+
+/**
+ * Handle issue updated event
+ */
+async function handleIssueUpdated(issue, changes) {
+  console.log(`Issue updated: ${issue.key}`);
+  console.log('Changes:', changes);
+  
+  // Example: Check for specific field changes
+  if (changes?.status) {
+    const oldStatus = changes.status.from;
+    const newStatus = changes.status.to;
+    
+    console.log(`Status changed from ${oldStatus} to ${newStatus}`);
+    
+    // Add logic for status transitions...
+  }
+  
+  // Example: Check for priority changes
+  if (changes?.priority) {
+    console.log('Priority was updated');
+    // Handle priority change...
+  }
+}
+```
+
+## File: src/eventFilters.js (Optional - for advanced filtering)
+
+Add additional filtering logic in your function:
+
+```javascript
+/**
+ * Filter events based on custom criteria
+ * Returns true if event should be processed
+ */
+export function shouldProcessEvent(event, configuration) {
+  const { type, issue, changes } = event;
+  
+  // Filter by project
+  if (configuration.projectKeys && !configuration.projectKeys.includes(issue.fields?.project?.key)) {
+    return false;
+  }
+  
+  // Filter by issue type
+  if (configuration.issueTypes && !configuration.issueTypes.includes(issue.fields?.issuetype?.name)) {
+    return false;
+  }
+  
+  // Filter by specific field changes
+  if (configuration.watchField && changes) {
+    const changedFields = Object.keys(changes);
+    if (!changedFields.includes(configuration.watchField)) {
+      return false;
+    }
+  }
+  
+  // Filter by status transitions
+  if (configuration.fromStatus && changes?.status) {
+    if (changes.status.from !== configuration.fromStatus) {
+      return false;
+    }
+  }
+  
+  if (configuration.toStatus && changes?.status) {
+    if (changes.status.to !== configuration.toStatus) {
+      return false;
+    }
+  }
+  
+  return true;
+}
+
+// Usage in your handler:
+export const onIssueEvent = async (event, context) => {
+  const config = await getConfiguration();
+  
+  if (!shouldProcessEvent(event, config)) {
+    console.log('Event filtered out');
+    return { status: 'filtered' };
+  }
+  
+  // Process event...
+};
+```
+
+## Permissions Required
+
+```yaml
+permissions:
+  scopes:
+    - read:jira-work        # View issue data
+    # - write:jira-work     # If modifying issues in handler
+```
+
+## Available Jira Events
+
+| Event Type | Description | When Triggered |
+|------------|-------------|----------------|
+| `avi:jira:created:issue` | Issue created | New issue is created |
+| `avi:jira:updated:issue` | Issue updated | Any field changes |
+| `avi:jira:deleted:issue` | Issue deleted | Issue is moved to trash |
+| `avi:jira:restored:issue` | Issue restored | Issue restored from trash |
+| `avi:jira:assigned:issue` | Issue assigned | Assignee changed |
+| `avi:jira:commented:issue` | Comment added | New comment created |
+
+## Event Payload Structure
+
+```javascript
+{
+  "type": "avi:jira:updated:issue",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "actor": {
+    "accountId": "5b10a2844c20165700ede21g",
+    "displayName": "John Doe"
+  },
+  "issue": {
+    "id": "10001",
+    "key": "PROJ-123",
+    "fields": {
+      "summary": "Issue summary",
+      "status": { "name": "In Progress" },
+      "assignee": { "displayName": "Jane Smith" }
+    }
+  },
+  "changes": [
+    {
+      "field": "status",
+      "from": "Open",
+      "to": "In Progress"
+    }
+  ]
+}
+```
+
+## Key Points About Event Handlers
+
+### Automatic Retries
+- Event handlers support **automatic retries** on failure
+- Scheduled triggers do NOT have this feature
+
+### Event Filtering Best Practices
+1. Subscribe only to events you need (reduce unnecessary invocations)
+2. Add additional filtering in your handler code
+3. Use configuration UI to let users customize filters
+
+### Common Use Cases
+1. **Sync to external systems** when issues change
+2. **Send notifications** via Slack/Teams on specific events
+3. **Auto-assign issues** based on created date or type
+4. **Validate data** after creation/update (use with post-functions instead)
+5. **Audit logging** for compliance requirements
+
+## Testing
+
+1. Deploy: `forge deploy`
+2. Install: `forge install --upgrade`
+3. Trigger events in Jira (create/update issues)
+4. View logs: `forge logs -n 50`
+
+---
+
+## References
+
+- [Atlassian Docs: Build a feedback integration app](https://developer.atlassian.com/platform/forge/build-a-feedback-integration-app)

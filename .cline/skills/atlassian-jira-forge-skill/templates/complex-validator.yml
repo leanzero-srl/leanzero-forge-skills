@@ -1,0 +1,562 @@
+# Jira Forge Complex Multi-Rule Validator Template
+
+Copy this file and modify for your specific use case.
+
+## File: manifest.yml (add to modules section)
+
+```yaml
+modules:
+  jira:workflowValidator:
+    - key: multi-rule-validator        # REQUIRED: Unique identifier
+      name: Multi-Rule Validator               # REQUIRED: Display name
+      description: Validates multiple rules based on configuration  # REQUIRED
+      function: validateMultipleRules          # Function handler
+      
+      projectTypes:                            # Optional: restrict by project type
+        - company-managed
+        - team-managed
+        
+      errorMessage: "Validation failed"        # Default error message
+      
+      create:                                  # Configuration UI for creation
+        resource: validator-config-ui
+      view:                                    # View UI (optional)
+        resource: validator-view-ui
+
+# Function module definition
+function:
+  - key: validateMultipleRules
+    handler: index.validateMultipleRules
+
+resources:
+  - key: validator-config-ui
+    path: static/config/build
+  - key: validator-view-ui
+    path: static/view/build
+```
+
+## File: src/index.js
+
+```javascript
+/**
+ * Complex Multi-Rule Validator
+ * Supports multiple validation rules configured by the user
+ */
+
+// Rule types supported by this validator
+const RULE_TYPES = {
+  REQUIRED_FIELD: 'requiredField',
+  MIN_LENGTH: 'minLength',
+  MAX_LENGTH: 'maxLength',
+  REGEX_PATTERN: 'regexPattern',
+  EQUALS_VALUE: 'equalsValue',
+  NOT_EQUALS_VALUE: 'notEqualsValue',
+  CONTAINS_TEXT: 'containsText',
+  STATUS_IS: 'statusIs',
+  STATUS_NOT: 'statusNot',
+  ASSIGNEE_EXISTS: 'assigneeExists'
+};
+
+/**
+ * Main validation handler
+ */
+export const validateMultipleRules = async (args) => {
+  const { issue, configuration } = args;
+  
+  try {
+    console.log('Validating issue:', issue.key);
+    console.log('Configuration rules:', configuration?.rules || []);
+    
+    // Get configured rules from validator settings
+    const rules = configuration?.rules || [];
+    
+    if (rules.length === 0) {
+      console.log('No validation rules configured');
+      return { result: true };
+    }
+    
+    // Validate all rules and collect failures
+    const failures = await validateAllRules(issue, rules);
+    
+    if (failures.length > 0) {
+      return { 
+        result: false, 
+        errorMessage: formatErrorMessage(failures) 
+      };
+    }
+    
+    console.log('Validation passed');
+    return { result: true };
+    
+  } catch (error) {
+    console.error('Validator error:', error);
+    return { 
+      result: false, 
+      errorMessage: `Error during validation: ${error.message}` 
+    };
+  }
+};
+
+/**
+ * Validate all rules against the issue
+ */
+async function validateAllRules(issue, rules) {
+  const failures = [];
+  
+  for (const rule of rules) {
+    if (!rule.enabled) continue; // Skip disabled rules
+    
+    const failure = await applyRule(rule, issue);
+    
+    if (failure) {
+      failures.push(failure);
+      
+      // Optional: fail fast on first error
+      // if (rule.failFast) return failures;
+    }
+  }
+  
+  return failures;
+}
+
+/**
+ * Apply a single validation rule
+ */
+async function applyRule(rule, issue) {
+  switch (rule.type) {
+    case RULE_TYPES.REQUIRED_FIELD:
+      return validateRequiredField(issue, rule);
+      
+    case RULE_TYPES.MIN_LENGTH:
+      return validateMinLength(issue, rule);
+      
+    case RULE_TYPES.MAX_LENGTH:
+      return validateMaxLength(issue, rule);
+      
+    case RULE_TYPES.REGEX_PATTERN:
+      return validateRegexPattern(issue, rule);
+      
+    case RULE_TYPES.EQUALS_VALUE:
+      return validateEqualsValue(issue, rule);
+      
+    case RULE_TYPES.CONTAINS_TEXT:
+      return validateContainsText(issue, rule);
+      
+    case RULE_TYPES.STATUS_IS:
+      return validateStatusIs(issue, rule);
+      
+    case RULE_TYPES.ASSIGNEE_EXISTS:
+      return validateAssigneeExists(issue, rule);
+      
+    default:
+      console.log('Unknown rule type:', rule.type);
+      return null; // Unknown rules don't fail validation
+  }
+}
+
+// --- Individual Rule Validators ---
+
+function validateRequiredField(issue, rule) {
+  const value = getFieldValue(issue, rule.fieldId);
+  
+  if (!value || (typeof value === 'string' && value.trim() === '')) {
+    return rule.errorMessage || `The ${rule.label || 'field'} is required`;
+  }
+  
+  return null;
+}
+
+function validateMinLength(issue, rule) {
+  const value = getFieldValue(issue, rule.fieldId);
+  
+  if (value && String(value).length < rule.minLength) {
+    return rule.errorMessage || 
+      `${rule.label || 'Field'} must be at least ${rule.minLength} characters`;
+  }
+  
+  return null;
+}
+
+function validateMaxLength(issue, rule) {
+  const value = getFieldValue(issue, rule.fieldId);
+  
+  if (value && String(value).length > rule.maxLength) {
+    return rule.errorMessage || 
+      `${rule.label || 'Field'} must be no more than ${rule.maxLength} characters`;
+  }
+  
+  return null;
+}
+
+function validateRegexPattern(issue, rule) {
+  const value = getFieldValue(issue, rule.fieldId);
+  
+  if (value && !new RegExp(rule.pattern).test(String(value))) {
+    return rule.errorMessage || 
+      `${rule.label || 'Field'} doesn't match required pattern`;
+  }
+  
+  return null;
+}
+
+function validateEqualsValue(issue, rule) {
+  const value = getFieldValue(issue, rule.fieldId);
+  
+  if (value != rule.expectedValue) {
+    return rule.errorMessage || 
+      `${rule.label || 'Field'} must equal "${rule.expectedValue}"`;
+  }
+  
+  return null;
+}
+
+function validateContainsText(issue, rule) {
+  const value = getFieldValue(issue, rule.fieldId);
+  
+  if (!value || !String(value).includes(rule.text)) {
+    return rule.errorMessage || 
+      `${rule.label || 'Field'} must contain "${rule.text}"`;
+  }
+  
+  return null;
+}
+
+function validateStatusIs(issue, rule) {
+  const status = issue.fields?.status?.name;
+  
+  if (status !== rule.expectedStatus) {
+    return rule.errorMessage || 
+      `Issue status must be "${rule.expectedStatus}"`;
+  }
+  
+  return null;
+}
+
+function validateAssigneeExists(issue, rule) {
+  const assignee = issue.fields?.assignee;
+  
+  if (!assignee) {
+    return rule.errorMessage || 'Issue must have an assignee';
+  }
+  
+  return null;
+}
+
+// --- Utility Functions ---
+
+/**
+ * Get field value from issue, handling nested fields
+ */
+function getFieldValue(issue, fieldId) {
+  if (!fieldId) return undefined;
+  
+  // Handle direct field access (e.g., 'summary', 'description')
+  if (!fieldId.includes('.')) {
+    return issue.fields?.[fieldId];
+  }
+  
+  // Handle nested field access (e.g., 'fields.status.name')
+  const parts = fieldId.split('.');
+  let value = issue.fields;
+  
+  for (const part of parts) {
+    if (!value) return undefined;
+    value = value[part];
+  }
+  
+  return value;
+}
+
+/**
+ * Format multiple failures into error message
+ */
+function formatErrorMessage(failures) {
+  if (failures.length === 1) {
+    return failures[0];
+  }
+  
+  return `Validation failed:\n- ${failures.join('\n- ')}`;
+}
+
+/**
+ * Get validation rule type labels for UI dropdowns
+ */
+export function getRuleTypeOptions() {
+  return [
+    { label: 'Required Field', value: RULE_TYPES.REQUIRED_FIELD },
+    { label: 'Minimum Length', value: RULE_TYPES.MIN_LENGTH },
+    { label: 'Maximum Length', value: RULE_TYPES.MAX_LENGTH },
+    { label: 'Regex Pattern', value: RULE_TYPES.REGEX_PATTERN },
+    { label: 'Equals Value', value: RULE_TYPES.EQUALS_VALUE },
+    { label: 'Contains Text', value: RULE_TYPES.CONTAINS_TEXT },
+    { label: 'Status Is', value: RULE_TYPES.STATUS_IS },
+    { label: 'Assignee Exists', value: RULE_TYPES.ASSIGNEE_EXISTS }
+  ];
+}
+```
+
+## File: src/Configure.js (Configuration UI)
+
+```javascript
+import React, { useState, useEffect } from 'react';
+import { Form, Select, FieldText, TextArea, ButtonGroup, Button, Label } from '@forge/bridge';
+import { getRuleTypeOptions } from './index';
+
+export const Configure = () => {
+  const [fields, setFields] = useState([]);
+  const [rules, setRules] = useState([]);
+  const [ruleType, setRuleType] = useState('');
+  const [selectedFieldId, setSelectedFieldId] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  
+  // Rule type specific options
+  const [minLength, setMinLength] = useState(10);
+  const [maxLength, setMaxLength] = useState(500);
+  const [pattern, setPattern] = useState('');
+  const [expectedValue, setExpectedValue] = useState('');
+
+  useEffect(() => {
+    fetchFields();
+  }, []);
+
+  // Fetch available fields from Jira
+  const fetchFields = async () => {
+    try {
+      const response = await bridge.requestJira('/rest/api/3/field');
+      const data = await response.json();
+      
+      setFields(data.map(f => ({
+        label: f.name,
+        value: f.id,
+        type: f.custom ? 'Custom' : 'System'
+      })));
+    } catch (error) {
+      console.error('Error fetching fields:', error);
+    }
+  };
+
+  // Add a new rule to the list
+  const addRule = () => {
+    if (!ruleType || !selectedFieldId) {
+      alert('Please select a rule type and field');
+      return;
+    }
+
+    const newRule = {
+      id: Date.now(),
+      type: ruleType,
+      fieldId: selectedFieldId,
+      label: fields.find(f => f.value === selectedFieldId)?.label || selectedFieldId,
+      enabled: true,
+      errorMessage: errorMessage || ''
+    };
+
+    // Add type-specific configuration
+    switch (ruleType) {
+      case 'minLength':
+        newRule.minLength = minLength;
+        break;
+      case 'maxLength':
+        newRule.maxLength = maxLength;
+        break;
+      case 'regexPattern':
+        newRule.pattern = pattern;
+        break;
+      case 'equalsValue':
+        newRule.expectedValue = expectedValue;
+        break;
+    }
+
+    setRules([...rules, newRule]);
+    
+    // Reset form
+    setRuleType('');
+    setSelectedFieldId('');
+    setErrorMessage('');
+  };
+
+  // Remove a rule from the list
+  const removeRule = (ruleId) => {
+    setRules(rules.filter(r => r.id !== ruleId));
+  };
+
+  // Toggle rule enabled state
+  const toggleRuleEnabled = (ruleId) => {
+    setRules(rules.map(r => 
+      r.id === ruleId ? { ...r, enabled: !r.enabled } : r
+    ));
+  };
+
+  return (
+    <Form>
+      <Label>Validation Rules Configuration</Label>
+      
+      {/* Rule Type Selection */}
+      <Select
+        label="Rule Type"
+        options={getRuleTypeOptions()}
+        value={ruleType}
+        onChange={(e) => setRuleType(e.target.value)}
+      />
+
+      {/* Field Selection */}
+      <Select
+        label="Field to Validate"
+        options={fields.map(f => ({ label: f.label, value: f.value }))}
+        value={selectedFieldId}
+        onChange={(e) => setSelectedFieldId(e.target.value)}
+      />
+
+      {/* Type-specific configuration */}
+      {ruleType === 'minLength' && (
+        <FieldText
+          type="number"
+          label="Minimum Length"
+          value={minLength}
+          onChange={(e) => setMinLength(Number(e.target.value))}
+        />
+      )}
+
+      {ruleType === 'maxLength' && (
+        <FieldText
+          type="number"
+          label="Maximum Length"
+          value={maxLength}
+          onChange={(e) => setMaxLength(Number(e.target.value))}
+        />
+      )}
+
+      {ruleType === 'regexPattern' && (
+        <FieldText
+          label="Regex Pattern"
+          placeholder="e.g., ^[A-Z]{3}-\d+$"
+          value={pattern}
+          onChange={(e) => setPattern(e.target.value)}
+        />
+      )}
+
+      {ruleType === 'equalsValue' && (
+        <FieldText
+          label="Expected Value"
+          value={expectedValue}
+          onChange={(e) => setExpectedValue(e.target.value)}
+        />
+      )}
+
+      {/* Custom Error Message */}
+      <TextArea
+        label="Custom Error Message (optional)"
+        placeholder="Leave empty for default message"
+        value={errorMessage}
+        onChange={(e) => setErrorMessage(e.target.value)}
+      />
+
+      <ButtonGroup>
+        <Button onClick={addRule}>Add Rule</Button>
+      </ButtonGroup>
+
+      {/* Configured Rules List */}
+      {rules.length > 0 && (
+        <>
+          <Label style={{ marginTop: '24px' }}>Configured Rules ({rules.length})</Label>
+          
+          {rules.map((rule, index) => (
+            <div key={rule.id} style={{
+              padding: '12px',
+              marginBottom: '8px',
+              backgroundColor: rule.enabled ? '#f5f5f5' : '#fafafa',
+              borderRadius: '4px',
+              opacity: rule.enabled ? 1 : 0.6
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>
+                  {index + 1}. {rule.label} - {getRuleTypeLabel(rule.type)}
+                </span>
+                <ButtonGroup>
+                  <button 
+                    onClick={() => toggleRuleEnabled(rule.id)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                  >
+                    {rule.enabled ? 'Disable' : 'Enable'}
+                  </button>
+                  <button 
+                    onClick={() => removeRule(rule.id)}
+                    style={{ background: '#ff4d4f', color: 'white', border: 'none', borderRadius: '3px', padding: '2px 8px', cursor: 'pointer' }}
+                  >
+                    Remove
+                  </button>
+                </ButtonGroup>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+    </Form>
+  );
+};
+
+function getRuleTypeLabel(type) {
+  const options = getRuleTypeOptions();
+  return options.find(o => o.value === type)?.label || type;
+}
+
+export const onSaveConfiguration = async () => {
+  return JSON.stringify({
+    rules: rules,
+    version: '1.0'
+  });
+};
+```
+
+## Permissions Required
+
+```yaml
+permissions:
+  scopes:
+    - manage:jira-configuration  # For workflow validators
+    - read:jira-work            # To access issue data
+```
+
+## Key Points About Complex Validators
+
+### Rule Types Available
+| Rule Type | Description | Use Case |
+|-----------|-------------|----------|
+| `requiredField` | Field must have a value | Ensure mandatory fields are filled |
+| `minLength` | Minimum character count | Enforce description length |
+| `maxLength` | Maximum character count | Prevent overly long text |
+| `regexPattern` | Match regex pattern | Validate ID formats, codes |
+| `equalsValue` | Exact match required | Enforce specific values |
+| `containsText` | Must contain substring | Require keywords |
+| `statusIs` | Status must be X | Gate on status transitions |
+| `assigneeExists` | Issue must be assigned | Ensure accountability |
+
+### Configuration Structure
+```json
+{
+  "rules": [
+    {
+      "id": 1234567890,
+      "type": "minLength",
+      "fieldId": "description",
+      "label": "Description",
+      "enabled": true,
+      "minLength": 50,
+      "errorMessage": "Description must be at least 50 characters"
+    }
+  ],
+  "version": "1.0"
+}
+```
+
+### Common Use Cases
+1. **Compliance validation** - Multiple rules for regulatory requirements
+2. **Data quality enforcement** - Ensure consistent data entry
+3. **Workflow gates** - Complex conditions before allowing transitions
+4. **Multi-field validation** - Inter-dependent field requirements
+
+---
+
+## References
+
+- [Atlassian Docs: Workflow Validators](https://developer.atlassian.com/platform/forge/manifest-reference/modules/jira-workflow-validator)
