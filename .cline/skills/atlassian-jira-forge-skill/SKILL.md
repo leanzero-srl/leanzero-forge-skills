@@ -243,9 +243,21 @@ The `docs/` directory contains detailed documentation:
 | Resolver Patterns | `16-resolver-patterns.md` |
 | UI Kit Components | `17-ui-kit-components.md` |
 
+### Custom UI Documentation (New)
+| Topic | File |
+|-------|------|
+| Complete Custom UI Guide | `21-complete-custom-ui-guide.md` |
+| Custom UI Troubleshooting | `18-custom-ui-troubleshooting.md` |
+| Rate Limit Handling | `19-rate-limit-handling.md` |
+| Performance Optimization | `20-performance-optimization.md` |
+
 ### New in This Version
 - `problem-patterns.md` - Common code patterns with examples
 - `when-to-use-which.md` - Decision guide for module selection
+- Custom UI complete guide with working React code examples
+- CSP error troubleshooting and fixes
+- Rate limit handling with exponential backoff implementations
+- Performance optimization patterns to reduce costs
 
 ### Templates
 
