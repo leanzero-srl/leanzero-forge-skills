@@ -141,6 +141,20 @@ See [Problem Patterns](docs/problem-patterns.md) for:
 - How to sync Jira issues with external systems
 - Handling rate limits and batching operations
 
+### Real-World Implementation Issues & Solutions
+
+**New!** See [Real-World Patterns](docs/24-real-world-patterns.md) for:
+
+- **CSP & Custom UI errors** - "Refused to load script" fixes, inline style workarounds
+- **Rate limiting (429)** - Exponential backoff implementations, batching strategies  
+- **Storage/KVS issues** - Orphan cleanup patterns, safe storage access with fallbacks
+- **Tunnel problems** - Manifest change handling, local dev auth issues
+- **Migration pitfalls** - Connect to Forge key mapping, webhook alternatives
+- **Performance optimization** - Caching patterns, attachment size budgets
+- **Third-party integrations** - OpenAI/Slack network restrictions, env var usage
+
+> This document aggregates real problems from Atlassian Community, GitHub issues, and production Forge apps with verified solutions. Structured for AI models to match user symptoms → solutions quickly.
+
 See [When to Use Which Module](docs/when-to-use-which.md) for choosing the right module type.
 
 ## Templates
@@ -251,6 +265,11 @@ The `docs/` directory contains detailed documentation:
 | Rate Limit Handling | `19-rate-limit-handling.md` |
 | Performance Optimization | `20-performance-optimization.md` |
 
+### Real-World Patterns (New)
+| Topic | File |
+|-------|------|
+| **Implementation Issues & Solutions** | **`24-real-world-patterns.md`** |
+
 ### Jira Service Management (New)
 | Topic | File |
 |-------|------|
@@ -259,6 +278,7 @@ The `docs/` directory contains detailed documentation:
 ### New in This Version
 - `problem-patterns.md` - Common code patterns with examples
 - `when-to-use-which.md` - Decision guide for module selection
+- **`24-real-world-patterns.md`** - Real-world issues & solutions from community/GitHub (CSP errors, rate limits, storage cleanup, tunnel fixes, migration pitfalls)
 - Custom UI complete guide with working React code examples
 - CSP error troubleshooting and fixes
 - Rate limit handling with exponential backoff implementations
