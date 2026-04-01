@@ -1,0 +1,512 @@
+# Bitbucket Merge Check Template
+
+## Overview
+This template demonstrates how to create a custom merge check for Bitbucket that validates pull requests before merging.
+
+## Basic Module Structure
+
+```yaml
+modules:
+  bitbucket:mergeCheck:
+    - key: my-merge-check
+      function: checkFunction
+      name: { value: 'My Merge Check' }
+      description: { value: 'Validates PR before merge' }
+      triggers:
+        - on-code-pushed
+
+function:
+  - key: checkFunction
+    handler: index.run
+
+permissions:
+  scopes:
+    - 'read:pullrequest:bitbucket'
+```
+
+## Complete Manifest with All Triggers
+
+```yaml
+modules:
+  bitbucket:mergeCheck:
+    - key: pr-title-validator
+      function: checkFunction
+      name: { value: 'PR Title Validator' }
+      description: { value: 'Checks that PR titles follow conventions' }
+      triggers:
+        - on-code-pushed
+        - on-merge
+
+function:
+  - key: checkFunction
+    handler: index.run
+
+permissions:
+  scopes:
+    - 'read:pullrequest:bitbucket'
+
+app:
+  id: ari:cloud:ecosystem::app/your-app-id
+```
+
+## Function Implementation
+
+### Basic Merge Check Handler
+
+```javascript
+// src/index.js - Merge Check Implementation
+export const checkFunction = async (event, context) => {
+  console.log('Merge check triggered:', JSON.stringify(event, null, 2));
+  
+  try {
+    // Extract pull request information
+    const workspaceUuid = event.workspace.uuid;
+    const repoUuid = event.repository.uuid;
+    const prId = event.pullrequest.id;
+    
+    // Perform validation checks
+    const result = await performValidation(workspaceUuid, repoUuid, prId);
+    
+    return result;
+  } catch (error) {
+    console.error('Merge check error:', error);
+    return {
+      success: false,
+      message: `Check failed with error: ${error.message}`
+    };
+  }
+};
+
+const performValidation = async (workspaceUuid, repoUuid, prId) => {
+  const api = require('@forge/api');
+  
+  // Fetch pull request details
+  const response = await api.asApp().requestBitbucket(
+    `/2.0/repositories/${workspaceUuid}/${repoUuid}/pullrequests/${prId}`
+  );
+  
+  const pr = await response.json();
+  
+  // Validate PR title (example check)
+  if (pr.title.includes('DRAFT')) {
+    return {
+      success: false,
+      message: 'PR title contains DRAFT - remove it before merging'
+    };
+  }
+  
+  // If all checks pass
+  return {
+    success: true,
+    message: 'All checks passed!'
+  };
+};
+```
+
+### PR Title Validation
+
+```javascript
+// src/index.js - PR Title Validation Logic
+export const checkFunction = async (event, context) => {
+  const workspaceUuid = event.workspace.uuid;
+  const repoUuid = event.repository.uuid;
+  const prId = event.pullrequest.id;
+  
+  // Fetch PR details
+  const response = await api.asApp().requestBitbucket(
+    `/2.0/repositories/${workspaceUuid}/${repoUuid}/pullrequests/${prId}`
+  );
+  
+  const pr = await response.json();
+  
+  // Validate title follows conventional format
+  const validPatterns = [
+    /^feat\(.+\): .+/,
+    /^fix\(.+\): .+/,
+    /^docs\(.+\): .+/,
+    /^refactor\(.+\): .+/
+  ];
+  
+  if (!validPatterns.some(pattern => pattern.test(pr.title))) {
+    return {
+      success: false,
+      message: `Title "${pr.title}" does not follow conventional format. Use: feat(scope): description, fix(scope): description, etc.`
+    };
+  }
+  
+  // Check title length
+  if (pr.title.length > 100) {
+    return {
+      success: false,
+      message: 'PR title is too long (max 100 characters)'
+    };
+  }
+  
+  return {
+    success: true,
+    message: `Title "${pr.title}" is valid`
+  };
+};
+```
+
+### Branch Protection Check
+
+```javascript
+// src/index.js - Branch Protection Validation
+export const checkFunction = async (event, context) => {
+  const workspaceUuid = event.workspace.uuid;
+  const repoUuid = event.repository.uuid;
+  const prId = event.pullrequest.id;
+  
+  // Fetch PR details
+  const response = await api.asApp().requestBitbucket(
+    `/2.0/repositories/${workspaceUuid}/${repoUuid}/pullrequests/${prId}`
+  );
+  
+  const pr = await response.json();
+  const targetBranch = pr.toRef.displayId;
+  
+  // Protected branches
+  const protectedBranches = ['main', 'master', 'develop'];
+  
+  if (protectedBranches.includes(targetBranch)) {
+    // Check for required approvals
+    const approvals = await getApprovals(workspaceUuid, repoUuid, prId);
+    
+    if (approvals.approved === false) {
+      return {
+        success: false,
+        message: `PR requires approval to merge into ${targetBranch}`
+      };
+    }
+  }
+  
+  // Check for associated issues
+  const hasIssueLink = await checkForIssueLink(pr.title, pr.description);
+  
+  if (!hasIssueLink) {
+    console.warn(`No issue linked in PR #${prId}`);
+  }
+  
+  return {
+    success: true,
+    message: 'All checks passed'
+  };
+};
+
+const getApprovals = async (workspaceUuid, repoUuid, prId) => {
+  const response = await api.asApp().requestBitbucket(
+    `/2.0/repositories/${workspaceUuid}/${repoUuid}/pullrequests/${prId}/participants`
+  );
+  
+  const participants = await response.json();
+  return participants.find(p => p.approved === true);
+};
+
+const checkForIssueLink = async (title, description) => {
+  // Check for issue patterns like PROJ-123 or #issue
+  const issuePattern = /[A-Z]+-\d+/;
+  
+  if (!issuePattern.test(title) && !issuePattern.test(description)) {
+    return false;
+  }
+  
+  return true;
+};
+```
+
+### Code Quality Validation
+
+```javascript
+// src/index.js - Code Quality Checks
+export const checkFunction = async (event, context) => {
+  const workspaceUuid = event.workspace.uuid;
+  const repoUuid = event.repository.uuid;
+  const prId = event.pullrequest.id;
+  
+  // Fetch PR details
+  const response = await api.asApp().requestBitbucket(
+    `/2.0/repositories/${workspaceUuid}/${repoUuid}/pullrequests/${prId}`
+  );
+  
+  const pr = await response.json();
+  const changes = pr.diff;
+  
+  // Check for debug statements
+  if (changes.includes('console.log') || changes.includes('debugger')) {
+    return {
+      success: false,
+      message: 'PR contains console.log or debugger statements'
+    };
+  }
+  
+  // Check for hardcoded secrets
+  const secretPatterns = ['password=', 'secret=', 'api_key='];
+  if (changes.match(new RegExp(secretPatterns.join('|'), 'i'))) {
+    return {
+      success: false,
+      message: 'Potential hardcoded secret detected in PR'
+    };
+  }
+  
+  // Check file types for merge conflicts
+  const changedFiles = pr.files || [];
+  const largeFiles = changedFiles.filter(f => f.size > 1024 * 1024); // 1MB
+  
+  if (largeFiles.length > 5) {
+    return {
+      success: false,
+      message: 'PR contains too many large files'
+    };
+  }
+  
+  return {
+    success: true,
+    message: 'Code quality checks passed'
+  };
+};
+```
+
+## Trigger Types
+
+| Trigger | Description |
+|---------|-------------|
+| `on-code-pushed` | Runs when new commits are pushed to PR |
+| `on-reviewer-status-changed` | Runs when reviewer status changes (Premium only) |
+| `on-merge` | Runs when user attempts to merge PR |
+
+## Event Payload Structure
+
+```javascript
+// Sample event payload for on-code-pushed trigger
+{
+  "workspace": {
+    "uuid": "{cc8e193d-7603-4dfd-8771-fcc8960aa0fb}"
+  },
+  "repository": {
+    "uuid": "{15a31549-1cff-45dc-9d0d-310114c5038b}"
+  },
+  "pullrequest": {
+    "id": 123
+  },
+  "trigger": {
+    "type": "on-code-pushed"
+  }
+}
+
+// For on-merge trigger, additional merge properties are included:
+{
+  "workspace": { ... },
+  "repository": { ... },
+  "pullrequest": { ... },
+  "trigger": {
+    "type": "on-merge"
+  },
+  "mergeProperties": {
+    "commitMessage": "Merged in testbranch (pull request #5)\n\ntesting PR\n\n",
+    "commitMessageTruncated": false,
+    "mergeStrategy": "merge_commit",
+    "closeSourceBranch": true
+  }
+}
+```
+
+## Required Permissions
+
+```yaml
+permissions:
+  scopes:
+    - 'read:pullrequest:bitbucket'  # Required for pull request data
+```
+
+For additional API access, add more scopes:
+
+```yaml
+permissions:
+  scopes:
+    - 'read:pullrequest:bitbucket'
+    - 'read:repository:bitbucket'     # For repository details
+    - 'write:repository:bitbucket'    # For writing comments
+```
+
+## Common Use Cases
+
+### 1. Prevent Merging to Protected Branches
+
+```yaml
+modules:
+  bitbucket:mergeCheck:
+    - key: branch-protection-check
+      function: checkFunction
+      name: { value: 'Branch Protection Check' }
+      triggers:
+        - on-merge
+
+function:
+  - key: checkFunction
+    handler: index.run
+
+permissions:
+  scopes:
+    - 'read:pullrequest:bitbucket'
+```
+
+```javascript
+// src/index.js
+export const checkFunction = async (event, context) => {
+  const targetBranch = event.pullrequest.toRef.displayId;
+  const protectedBranches = ['main', 'master', 'develop'];
+  
+  if (protectedBranches.includes(targetBranch)) {
+    return {
+      success: true,
+      message: `Merging into ${targetBranch} is allowed`
+    };
+  }
+  
+  // Non-protected branches - check if user is admin
+  const contextInfo = await bridge.getContext();
+  
+  if (contextInfo.accountType !== 'licensed') {
+    return {
+      success: false,
+      message: 'Only licensed users can merge to non-protected branches'
+    };
+  }
+  
+  return {
+    success: true,
+    message: 'Merge allowed'
+  };
+};
+```
+
+### 2. Require Minimum Lines Changed
+
+```javascript
+// src/index.js - Minimum Changes Validation
+export const checkFunction = async (event, context) => {
+  const workspaceUuid = event.workspace.uuid;
+  const repoUuid = event.repository.uuid;
+  const prId = event.pullrequest.id;
+  
+  // Fetch diff statistics
+  const response = await api.asApp().requestBitbucket(
+    `/2.0/repositories/${workspaceUuid}/${repoUuid}/pullrequests/${prId}/diffstat`
+  );
+  
+  const diffStats = await response.json();
+  const totalLines = diffStats.total_lines_added + diffStats.total_lines_removed;
+  
+  if (totalLines < 5) {
+    return {
+      success: false,
+      message: 'PR must have at least 5 lines changed'
+    };
+  }
+  
+  return {
+    success: true,
+    message: `Validated ${totalLines} lines changed`
+  };
+};
+```
+
+### 3. Enforce Code Review Approval
+
+```javascript
+// src/index.js - Approval Verification
+export const checkFunction = async (event, context) => {
+  const workspaceUuid = event.workspace.uuid;
+  const repoUuid = event.repository.uuid;
+  const prId = event.pullrequest.id;
+  
+  // Fetch participants list
+  const response = await api.asApp().requestBitbucket(
+    `/2.0/repositories/${workspaceUuid}/${repoUuid}/pullrequests/${prId}/participants`
+  );
+  
+  const participants = await response.json();
+  
+  // Check if PR has at least one approval
+  const approvedBy = participants.filter(p => p.approved === true);
+  
+  if (approvedBy.length < 1) {
+    return {
+      success: false,
+      message: 'PR requires at least one approval'
+    };
+  }
+  
+  return {
+    success: true,
+    message: `Approved by ${approvedBy.map(p => p.user.display_name).join(', ')}` 
+  };
+};
+```
+
+## Testing the Merge Check
+
+### Using Bitbucket CLI (if available)
+```bash
+# Deploy your app
+forge deploy
+
+# Install to workspace
+forge install --context bitbucket
+```
+
+### Manual Testing Steps
+1. Deploy and install the app to a Bitbucket workspace
+2. Enable custom merge checks in repository settings
+3. Create a test pull request
+4. Push code changes (triggers `on-code-pushed`)
+5. Attempt to merge (triggers `on-merge`)
+
+## Merge Check Result Format
+
+```javascript
+// Successful check
+{
+  "success": true,
+  "message": "All checks passed!"
+}
+
+// Failed check with message
+{
+  "success": false,
+  "message": "PR title contains DRAFT"
+}
+
+// Failed check without message (uses default)
+{
+  "success": false
+}
+```
+
+## UI in Bitbucket
+
+The merge check result appears in the PR UI:
+- ✅ **Success**: Checkmark icon, green color
+- ❌ **Failure**: X icon, red color
+- ℹ️ **Message**: Displayed below the status
+
+## Important Notes
+
+1. **Required Configuration**: Admin must enable custom merge checks in workspace settings
+2. **Multiple Checks**: Multiple apps can provide merge checks; all must pass if Required
+3. **Informational vs Required**: Check can be configured as informational only
+4. **Error Handling**: Exceptions result in failed check status
+
+## Troubleshooting
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| Check not running | Workspace feature disabled | Enable custom merge checks in workspace settings |
+| Permission denied | Missing scope | Add `read:pullrequest:bitbucket` to manifest |
+| Silent failure | Exception in code | Check Forge logs for stack trace |
+
+## Related Documentation
+
+- [Bitbucket Merge Checks Reference](https://developer.atlassian.com/platform/forge/manifest-reference/modules/bitbucket-merge-check/)
+- [Build a PR title validator tutorial](https://developer.atlassian.com/platform/forge/build-a-pull-request-title-validator-with-custom-merge-checks/)

@@ -1,0 +1,540 @@
+# Event Trigger Template with Filtering
+
+## Overview
+This template demonstrates how to use Forge triggers to listen for Atlassian app events and apply filtering logic.
+
+## Basic Trigger Structure
+
+```yaml
+modules:
+  trigger:
+    - key: issue-created-trigger
+      function: issueCreatedFunction
+      events:
+        - avi:jira:created:issue
+
+function:
+  - key: issueCreatedFunction
+    handler: index.run
+
+permissions:
+  scopes:
+    - 'read:jira-work'
+```
+
+## Trigger with Self-Event Filtering
+
+```yaml
+modules:
+  trigger:
+    - key: issue-updated-trigger
+      function: issueUpdatedFunction
+      events:
+        - avi:jira:updated:issue
+      filter:
+        ignoreSelf: true  # Ignore self-generated events
+
+function:
+  - key: issueUpdatedFunction
+    handler: index.run
+
+permissions:
+  scopes:
+    - 'read:jira-work'
+```
+
+## Trigger with Expression Filtering
+
+```yaml
+modules:
+  trigger:
+    - key: project-specific-trigger
+      function: projectSpecificTrigger
+      events:
+        - avi:jira:created:issue
+      filter:
+        expression: event.issue.fields?.project.key == 'PROJ'
+
+function:
+  - key: projectSpecificTrigger
+    handler: index.run
+
+permissions:
+  scopes:
+    - 'read:jira-work'
+```
+
+## Combined Filtering (ignoreSelf + Expression)
+
+```yaml
+modules:
+  trigger:
+    - key: complex-filter-trigger
+      function: complexFilterFunction
+      events:
+        - avi:jira:created:issue
+      filter:
+        ignoreSelf: true
+        expression: |
+          event.issue.fields?.project.key == 'PROJ' && 
+          event.issue.fields?.issuetype.name == 'Bug'
+
+function:
+  - key: complexFilterFunction
+    handler: index.run
+
+permissions:
+  scopes:
+    - 'read:jira-work'
+```
+
+## Error Handling with onError Configuration
+
+```yaml
+modules:
+  trigger:
+    - key: trigger-with-error-handling
+      function: mainFunction
+      events:
+        - avi:jira:created:issue
+      filter:
+        ignoreSelf: true
+        expression: event.issue.fields?.project.key == 'PROJ'
+        onError: RECEIVE_AND_LOG  # Also invoke the function with error details
+
+function:
+  - key: mainFunction
+    handler: index.run
+
+permissions:
+  scopes:
+    - 'read:jira-work'
+```
+
+## Function Implementation Examples
+
+### Basic Event Handler
+
+```javascript
+// src/index.js - Basic Trigger Handler
+export const issueCreatedFunction = async (event, context) => {
+  console.log('Issue created event received:', JSON.stringify(event, null, 2));
+  
+  try {
+    const issueKey = event.issue.key;
+    const projectKey = event.issue.fields.project.key;
+    
+    // Process the created issue
+    await processNewIssue(issueKey, projectKey);
+    
+    return { status: 'success' };
+  } catch (error) {
+    console.error('Error processing issue:', error);
+    throw error;
+  }
+};
+
+const processNewIssue = async (issueKey, projectKey) => {
+  // Example: Add a comment to new issues
+  const api = require('@forge/api');
+  
+  await api.asApp().requestJira(
+    `/rest/api/3/issue/${issueKey}/comment`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        body: {
+          type: 'doc',
+          version: 1,
+          content: [{
+            type: 'paragraph',
+            content: [{
+              type: 'text',
+              text: `New issue created in ${projectKey}: ${issueKey}`
+            }]
+          }]
+        }
+      })
+    }
+  );
+};
+```
+
+### Filter Expression Implementation
+
+```javascript
+// src/index.js - Trigger with Filtering Logic
+export const projectSpecificTrigger = async (event, context) => {
+  // Check if event should be processed based on filter expression
+  const projectKey = event.issue.fields?.project?.key;
+  
+  if (projectKey !== 'PROJ') {
+    console.log(`Skipping event for project: ${projectKey}`);
+    return { status: 'skipped' };
+  }
+  
+  console.log(`Processing issue in project PROJ: ${event.issue.key}`);
+  
+  // Process the issue
+  await processIssue(event.issue);
+  
+  return { status: 'processed' };
+};
+
+const processIssue = async (issue) => {
+  const api = require('@forge/api');
+  
+  // Example: Add a label to issues in specific project
+  await api.asApp().requestJira(
+    `/rest/api/3/issue/${issue.key}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        update: {
+          labels: [{
+            add: 'project-specific'
+          }]
+        }
+      })
+    }
+  );
+};
+```
+
+### Complex Filtering Logic
+
+```javascript
+// src/index.js - Complex Filter Implementation
+export const complexFilterFunction = async (event, context) => {
+  const issueType = event.issue.fields?.issuetype?.name;
+  const projectKey = event.issue.fields?.project?.key;
+  
+  // Apply complex filtering logic
+  const shouldProcess = 
+    projectKey === 'PROJ' && 
+    issueType === 'Bug';
+  
+  if (!shouldProcess) {
+    console.log(`Filter match: ${issueType} in ${projectKey}`);
+    return { status: 'filtered', reason: 'does not match criteria' };
+  }
+  
+  // Process matching issues
+  await processMatchingIssue(event.issue);
+  
+  return { status: 'matched', issueKey: event.issue.key };
+};
+
+const processMatchingIssue = async (issue) => {
+  console.log(`Processing bug in PROJ: ${issue.key}`);
+  // Your logic here
+};
+```
+
+### Error Handling with onError RECEIVE
+
+```javascript
+// src/index.js - Error Handling Implementation
+export const mainFunction = async (event, context) => {
+  try {
+    // Apply filter expression
+    if (!shouldProcessEvent(event)) {
+      console.log('Filter did not match');
+      return { status: 'filtered' };
+    }
+    
+    // Process event
+    await processEvent(event);
+    
+    return { status: 'success' };
+  } catch (error) {
+    // If onError is RECEIVE or RECEIVE_AND_LOG, error details are in event
+    if (event.errorDetails) {
+      console.error('Expression evaluation error:', error);
+    }
+    
+    throw error;
+  }
+};
+
+const shouldProcessEvent = (event) => {
+  try {
+    return event.issue.fields?.project?.key === 'PROJ';
+  } catch (e) {
+    return false;
+  }
+};
+
+const processEvent = async (event) => {
+  // Process the event
+};
+```
+
+## Available Trigger Events
+
+### Jira Events
+
+| Event | Description |
+|-------|-------------|
+| `avi:jira:created:issue` | Issue created |
+| `avi:jira:updated:issue` | Issue updated |
+| `avi:jira:deleted:issue` | Issue deleted |
+| `avi:jira:comment_created` | Comment added |
+| `avi:jira:comment_updated` | Comment updated |
+| `avi:jira:worklog_created` | Worklog created |
+| `avi:jira:worklog_updated` | Worklog updated |
+
+### Confluence Events
+
+| Event | Description |
+|-------|-------------|
+| `avi:confluence:created:page` | Page created |
+| `avi:confluence:updated:page` | Page updated |
+| `avi:confluence:created:blogpost` | Blog post created |
+
+## Event Payload Structure
+
+```javascript
+// Sample event payload for avi:jira:created:issue
+{
+  "issue": {
+    "id": "12345",
+    "key": "PROJ-123",
+    "fields": {
+      "summary": "Issue summary",
+      "description": "Issue description",
+      "project": {
+        "key": "PROJ",
+        "name": "Project Name"
+      },
+      "issuetype": {
+        "id": "10001",
+        "name": "Task"
+      },
+      "reporter": {
+        "accountId": "5b10a2844c201e33d7658e7c"
+      },
+      "assignee": null,
+      "status": {
+        "id": "10000",
+        "name": "To Do"
+      }
+    }
+  },
+  "atlassianId": "5b10a2844c201e33d7658e7c",
+  "associatedUsers": []
+}
+```
+
+## Context Object
+
+```javascript
+// Context object available in trigger functions
+{
+  "accountId": "user-account-id",
+  "accountType": "licensed|unlicensed|customer|anonymous",
+  "cloudId": "cloud-id-from-atlassian",
+  "installContext": "{\"cloudId\":\"...\",\"product\":\"jira\"}",
+  "principal": {
+    "accountId": "user-account-id"
+  },
+  "license": undefined, // Only present for paid apps in production
+  "installation": {
+    "id": "installation-ari",
+    "contexts": ["context-aris"]
+  }
+}
+```
+
+## Common Use Cases
+
+### 1. Auto-assign Issues Based on Label
+
+```yaml
+modules:
+  trigger:
+    - key: auto-assign-trigger
+      function: autoAssignFunction
+      events:
+        - avi:jira:created:issue
+      filter:
+        ignoreSelf: true
+        expression: event.issue.fields?.labels?.some(l => l === 'support')
+
+function:
+  - key: autoAssignFunction
+    handler: index.run
+
+permissions:
+  scopes:
+    - 'read:jira-work'
+    - 'write:jira-work'
+```
+
+```javascript
+// src/index.js - Auto-assign logic
+export const autoAssignFunction = async (event, context) => {
+  const labels = event.issue.fields?.labels || [];
+  
+  if (!labels.includes('support')) {
+    return { status: 'no-label' };
+  }
+  
+  // Assign to support team member
+  await api.asApp().requestJira(
+    `/rest/api/3/issue/${event.issue.key}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fields: {
+          assignee: {
+            accountId: 'support-team-account-id'
+          }
+        }
+      })
+    }
+  );
+  
+  return { status: 'assigned', issueKey: event.issue.key };
+};
+```
+
+### 2. Validate Issue on Creation
+
+```yaml
+modules:
+  trigger:
+    - key: validation-trigger
+      function: validateFunction
+      events:
+        - avi:jira:created:issue
+      filter:
+        ignoreSelf: true
+        expression: event.issue.fields?.issuetype.name == 'Bug'
+
+function:
+  - key: validateFunction
+    handler: index.run
+
+permissions:
+  scopes:
+    - 'read:jira-work'
+```
+
+```javascript
+// src/index.js - Validation logic
+export const validateFunction = async (event, context) => {
+  const issueKey = event.issue.key;
+  const description = event.issue.fields?.description || '';
+  
+  // Validate that description has minimum length
+  if (description.length < 10) {
+    console.log(`Short description on ${issueKey}, adding warning`);
+    
+    await api.asApp().requestJira(
+      `/rest/api/3/issue/${issueKey}/comment`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          body: {
+            type: 'doc',
+            version: 1,
+            content: [{
+              type: 'panel',
+              content: [{
+                type: 'text',
+                text: 'Warning: Description appears to be very short.'
+              }],
+              style: 'warning'
+            }]
+          }
+        })
+      }
+    );
+  }
+  
+  return { status: 'validated', issueKey };
+};
+```
+
+### 3. Sync Issue Data to External System
+
+```yaml
+modules:
+  trigger:
+    - key: sync-trigger
+      function: syncFunction
+      events:
+        - avi:jira:created:issue
+      filter:
+        ignoreSelf: true
+        expression: event.issue.fields?.project.key in ['PROJ1', 'PROJ2']
+
+function:
+  - key: syncFunction
+    handler: index.run
+
+permissions:
+  scopes:
+    - 'read:jira-work'
+```
+
+```javascript
+// src/index.js - External sync logic
+export const syncFunction = async (event, context) => {
+  const { issue } = event;
+  
+  // Prepare data for external system
+  const syncData = {
+    issueKey: issue.key,
+    summary: issue.fields.summary,
+    description: issue.fields.description,
+    projectKey: issue.fields.project.key,
+    createdAt: issue.created
+  };
+  
+  try {
+    // Send to external API
+    await api.asApp().requestExternal(
+      'https://external-system.com/api/issues',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(syncData)
+      }
+    );
+    
+    console.log(`Synced issue ${issue.key} to external system`);
+  } catch (error) {
+    console.error('Failed to sync issue:', error);
+    throw error;
+  }
+  
+  return { status: 'synced', issueKey: issue.key };
+};
+```
+
+## Troubleshooting
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| Trigger not firing | Event type mismatch | Verify event name matches Atlassian documentation |
+| Filter expression error | Syntax error in expression | Use simple expressions first, test incrementally |
+| Function timeout | Long-running operations | Optimize logic or use scheduled trigger instead |
+
+## Important Notes
+
+1. **Event Delivery**: Triggers may have up to 3-minute delay
+2. **Rate Limits**: Follow platform invocation limits
+3. **Testing**: Use tunneling for real-time testing of triggers
+4. **Logging**: Always log events for debugging purposes
+5. **Error Handling**: Re-throw errors to indicate failure
+
+## Related Documentation
+
+- [Forge Triggers Reference](https://developer.atlassian.com/platform/forge/manifest-reference/modules/trigger/)
+- [Automate Jira using triggers](https://developer.atlassian.com/platform/forge/automate-jira-using-triggers/)

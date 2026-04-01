@@ -1,0 +1,135 @@
+# Jira Workflow Validator Template
+
+Copy this file and modify for your specific use case.
+
+## File: manifest.yml (add to modules section)
+
+```yaml
+modules:
+  jira:workflowValidator:
+    - key: my-validator               # REQUIRED: Unique identifier
+      name: My Validator              # REQUIRED: Display name
+      description: Validates issue fields # REQUIRED: Description
+      
+      function: validateMyFields      # Optional: Function handler (or use expression)
+      # expression: issue.summary != null  # OR: Use Jira expression instead of function
+      
+      errorMessage: "Validation failed" # Error message shown to user
+      
+      projectTypes:
+        - company-managed
+        - team-managed
+        
+      create:
+        resource: validator-config-ui   # Required for configuration UI
+      
+      edit:
+        resource: validator-edit-ui     # Optional: Edit UI (if needed)
+        
+      view:
+        resource: validator-view-ui     # Optional: View UI (if needed)
+```
+
+## File: src/index.js
+
+```javascript
+export const validateMyFields = async (args) => {
+  const { issue, configuration } = args;
+  
+  // Issue object contains all issue data
+  console.log('Validating issue:', issue.key);
+  console.log('Field values:', issue.fields);
+  
+  // Configuration contains user's saved settings
+  const validationRules = configuration.validationRules || [];
+  const fieldName = configuration.fieldName || 'description';
+  
+  try {
+    // Your validation logic here
+    const fieldValue = issue.fields[fieldName];
+    
+    if (!fieldValue || fieldValue === '') {
+      return { 
+        result: false, 
+        errorMessage: `${fieldName} is required` 
+      };
+    }
+    
+    // Add more validation rules as needed
+    
+    // Return success to allow transition
+    return { result: true };
+    
+  } catch (error) {
+    console.error('Validation error:', error);
+    
+    return { 
+      result: false, 
+      errorMessage: `Error during validation: ${error.message}` 
+    };
+  }
+};
+```
+
+## File: src/Configure.js (Optional - for custom configuration UI)
+
+```javascript
+import React from 'react';
+import { Form, FieldText, Select } from '@forge/bridge';
+
+export const Configure = () => {
+  const [fieldName, setFieldName] = React.useState('');
+  const [minLength, setMinLength] = React.useState(10);
+  
+  // Return configuration when user clicks Save
+  return (
+    <Form>
+      <FieldText
+        label="Field to Validate"
+        value={fieldName}
+        onChange={(e) => setFieldName(e.target.value)}
+      />
+      
+      <FieldText
+        type="number"
+        label="Minimum Length"
+        value={minLength}
+        onChange={(e) => setMinLength(Number(e.target.value))}
+      />
+    </Form>
+  );
+};
+
+// Save configuration function
+export const onSaveConfiguration = async () => {
+  const config = {
+    fieldName: document.getElementById('field-name').value,
+    minLength: parseInt(document.getElementById('min-length').value),
+    enabled: true
+  };
+  
+  return JSON.stringify(config);
+};
+```
+
+## Permissions Required
+
+```yaml
+permissions:
+  scopes:
+    - read:jira-work        # View issue data
+    - read:workflow:jira    # Access workflow info
+```
+
+## Testing
+
+1. Deploy: `forge deploy`
+2. Install: `forge install --upgrade -e development`
+3. Test in Jira workflow editor
+
+## Key Points
+
+- **Function name** must match the function reference in manifest.yml
+- **Return format**: `{ result: true }` to allow, `{ result: false, errorMessage: "..." }` to block
+- Use `configuration` object to access user's saved settings
+- Always handle errors gracefully

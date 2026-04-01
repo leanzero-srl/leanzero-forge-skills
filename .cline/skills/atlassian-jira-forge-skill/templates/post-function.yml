@@ -1,0 +1,256 @@
+# Jira Workflow Post Function Template
+
+Copy this file and modify for your specific use case.
+
+## File: manifest.yml (add to modules section)
+
+```yaml
+modules:
+  jira:workflowPostFunction:
+    - key: my-post-function           # REQUIRED: Unique identifier
+      name: My Post Function          # REQUIRED: Display name
+      description: Executes after transition  # REQUIRED: Description
+      
+      function: executeMyPostFunc     # Function handler
+      
+      projectTypes:
+        - company-managed
+        - team-managed
+        
+      create:
+        resource: postfunction-config-ui  # Required for configuration UI
+```
+
+## File: src/index.js
+
+```javascript
+import api, { route } from '@forge/api';
+
+export const executeMyPostFunc = async (args) => {
+  const { issue, configuration, changelog } = args;
+  
+  console.log('Executing post function for issue:', issue.key);
+  console.log('Changes made:', changelog);
+  
+  // Configuration contains user's saved settings
+  const customFieldId = configuration.customFieldId || 'customfield_10001';
+  const updateSummary = configuration.updateSummary || false;
+  
+  try {
+    // Get current timestamp
+    const now = new Date().toISOString();
+    
+    // Example 1: Update a custom field with current timestamp
+    if (customFieldId) {
+      await api.asApp().requestJira(route`/rest/api/3/issue/${issue.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          update: {
+            [customFieldId]: [{ set: now }]
+          }
+        })
+      });
+      
+      console.log(`Updated ${customFieldId} with timestamp`);
+    }
+    
+    // Example 2: Update summary with workflow info
+    if (updateSummary) {
+      await api.asApp().requestJira(route`/rest/api/3/issue/${issue.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          update: {
+            summary: [{
+              set: `${issue.fields.summary} [Processed: ${now}]`
+            }]
+          }
+        })
+      });
+    }
+    
+    // Return success to continue workflow
+    return { result: true };
+    
+  } catch (error) {
+    console.error('Post function error:', error);
+    
+    // Log error but don't block workflow
+    return { 
+      result: false, 
+      warnings: [`Post function completed with errors: ${error.message}`] 
+    };
+  }
+};
+```
+
+## File: src/Configure.js (Optional - for custom configuration UI)
+
+```javascript
+import React from 'react';
+import { Form, Select, Checkbox } from '@forge/bridge';
+
+export const Configure = () => {
+  const [customFieldId, setCustomFieldId] = React.useState('');
+  const [updateSummary, setUpdateSummary] = React.useState(false);
+  
+  // Sample custom fields - replace with your actual fields
+  const customFields = [
+    { label: 'Last Updated (Date)', value: 'updated' },
+    { label: 'My Custom Field', value: 'customfield_10001' }
+  ];
+  
+  return (
+    <Form>
+      <Select
+        label="Field to Update"
+        options={customFields}
+        value={customFieldId}
+        onChange={(e) => setCustomFieldId(e.target.value)}
+      />
+      
+      <Checkbox
+        label="Update Issue Summary"
+        checked={updateSummary}
+        onChange={(e) => setUpdateSummary(e.target.checked)}
+      />
+    </Form>
+  );
+};
+
+// Save configuration function
+export const onSaveConfiguration = async () => {
+  const config = {
+    customFieldId: document.getElementById('custom-field').value,
+    updateSummary: document.getElementById('update-summary').checked,
+    enabled: true
+  };
+  
+  return JSON.stringify(config);
+};
+```
+
+## Permissions Required
+
+```yaml
+permissions:
+  scopes:
+    - read:jira-work        # View issue data
+    - write:jira-work       # Update issues (required for post functions)
+    - read:workflow:jira    # Access workflow info
+```
+
+## Common Use Cases
+
+### Create Subtask After Transition
+
+```javascript
+export const createSubtask = async (args) => {
+  const { issue, configuration } = args;
+  
+  try {
+    // Create subtask
+    await api.asApp().requestJira(route`/rest/api/3/issue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fields: {
+          project: { key: issue.fields.project.key },
+          summary: `Subtask for ${issue.key}`,
+          issuetype: { name: 'Subtask' },
+          parent: { id: issue.id }
+        }
+      })
+    });
+    
+    return { result: true };
+  } catch (error) {
+    console.error('Error creating subtask:', error);
+    return { result: false, warnings: [error.message] };
+  }
+};
+```
+
+### Send Notification to Slack
+
+```javascript
+import api, { route } from '@forge/api';
+
+export const sendSlackNotification = async (args) => {
+  const { issue, configuration } = args;
+  
+  try {
+    // Get webhook URL from configuration
+    const webhookUrl = configuration.slackWebhook;
+    
+    // Build message payload
+    const payload = {
+      text: `Issue ${issue.key} updated to ${issue.fields.status.name}`,
+      attachments: [{
+        color: '#4CAF50',
+        fields: [
+          { title: 'Summary', value: issue.fields.summary, short: true },
+          { title: 'Assignee', value: issue.fields.assignee?.displayName || 'Unassigned', short: true }
+        ]
+      }]
+    };
+    
+    await api.asApp().requestJira(route`${webhookUrl}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    return { result: true };
+  } catch (error) {
+    console.error('Slack notification error:', error);
+    return { result: false, warnings: [error.message] };
+  }
+};
+```
+
+### Update Related Issues
+
+```javascript
+export const updateRelatedIssues = async (args) => {
+  const { issue, configuration } = args;
+  
+  try {
+    // Find related issues (example: via link)
+    const response = await api.asApp().requestJira(
+      route`/rest/api/3/issue/${issue.key}/relatedIssueKeys`
+    );
+    
+    const data = await response.json();
+    
+    // Update each related issue
+    for (const linkedIssue of data.issues) {
+      await api.asApp().requestJira(route`/rest/api/3/issue/${linkedIssue.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          update: {
+            summary: [{
+              set: `[Relates to ${issue.key}] ${linkedIssue.fields.summary}`
+            }]
+          }
+        })
+      });
+    }
+    
+    return { result: true };
+  } catch (error) {
+    console.error('Related issue update error:', error);
+    return { result: false, warnings: [error.message] };
+  }
+};
+```
+
+## Key Points
+
+- **Return format**: `{ result: true }` to continue, `{ result: false, warnings: [...] }` to log but continue
+- Post functions run AFTER the transition completes successfully
+- Use `changelog` object to see what changed during the transition
+- Handle errors gracefully - post functions shouldn't block workflow
+- Use `api.asApp()` for workflow context (no user session)

@@ -1,0 +1,292 @@
+# JIRA UI Modifications (UIM) Template
+
+## Overview
+This template demonstrates how to use Forge's UI modifications module to dynamically modify fields in Jira's Global Issue Create, Issue View, and Issue Transition views.
+
+## Module Structure
+
+```yaml
+modules:
+  jira:uiModifications:
+    - key: ui-modifications-app
+      title: Example UI Modifications App
+      description: { value: 'Dynamically modifies issue fields based on project configuration' }
+      resource: uiModificationsApp
+      resolver:
+        function: uiResolver
+
+resources:
+  - key: uiModificationsApp
+    path: static/ui-modifications/dist
+
+permissions:
+  scopes:
+    - 'read:jira-user'
+    - 'read:jira-work'
+    - 'manage:jira-configuration'
+```
+
+## Admin Page for Configuration
+
+To manage UI modifications, include an admin page in your manifest:
+
+```yaml
+modules:
+  jira:uiModifications:
+    - key: ui-modifications-app
+      title: Example UI Modifications App
+      description: { value: 'Dynamically modifies issue fields' }
+      resource: uiModificationsApp
+      resolver:
+        function: uiResolver
+
+  jira:adminPage:
+    - key: uim-configuration-page
+      function: configFunction
+      title: { value: 'UI Modifications Configuration' }
+
+resources:
+  - key: uiModificationsApp
+    path: static/ui-modifications/dist
+  - key: adminResource
+    path: static/admin/build
+
+permissions:
+  scopes:
+    - 'read:jira-user'
+    - 'read:jira-work'
+    - 'manage:jira-configuration'
+```
+
+## Function Implementation
+
+```javascript
+// src/uidynamic.js - UI Modifications Resolver
+import { bridge, uiModificationsApi } from '@forge/bridge';
+
+export const uiResolver = async () => {
+  // Initialize the UIM module
+  uiModificationsApi.onInit(
+    ({ api, uiModifications }) => {
+      // Get context information
+      const context = await bridge.getContext();
+      
+      // Iterate through configured UI modifications
+      uiModifications.forEach((uim) => {
+        const customData = JSON.parse(uim.data || '{}');
+        
+        // Apply field modifications based on configuration
+        if (customData.hidePriority) {
+          const priorityField = api.getFieldById('priority');
+          priorityField?.setVisible(false);
+        }
+        
+        if (customData.modifyLabelsDescription) {
+          const labelsField = api.getFieldById('labels');
+          labelsField?.setDescription(
+            `Selected: ${labelsField ? '0' : 'N/A'} labels`
+          );
+        }
+      });
+    },
+    // Fields to monitor for changes
+    ['priority', 'summary', 'assignee']
+  );
+};
+
+export const configFunction = async (event, context) => {
+  // Configuration function for admin page
+  return {
+    projectKey: event.project?.key,
+    issueType: event.issueType?.name
+  };
+};
+```
+
+## REST API Calls for Managing UIM
+
+```javascript
+// src/admin.js - Admin Page Logic for UIM Management
+import api, { route } from '@forge/api';
+
+export const createUIM = async (projectId, issueTypeId) => {
+  try {
+    const response = await api.asApp().requestJira(route`/rest/api/3/uiModifications`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: 'Custom Field Modifier',
+        data: JSON.stringify({
+          hidePriority: true,
+          modifyLabelsDescription: true
+        }),
+        contexts: [
+          {
+            projectId,
+            issueTypeId,
+            viewType: 'GIC' // Global Issue Create
+          },
+          {
+            projectId,
+            issueTypeId,
+            viewType: 'IssueView'
+          }
+        ]
+      })
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.error('Failed to create UI modification:', error);
+    throw error;
+  }
+};
+
+export const listUIM = async () => {
+  try {
+    const response = await api.asApp().requestJira(route`/rest/api/3/uiModifications`);
+    return await response.json();
+  } catch (error) {
+    console.error('Failed to list UI modifications:', error);
+    throw error;
+  }
+};
+
+export const updateUIM = async (uimId, updates) => {
+  try {
+    const response = await api.asApp().requestJira(
+      route`/rest/api/3/uiModifications/${uimId}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      }
+    );
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Failed to update UI modification:', error);
+    throw error;
+  }
+};
+
+export const deleteUIM = async (uimId) => {
+  try {
+    await api.asApp().requestJira(
+      route`/rest/api/3/uiModifications/${uimId}`,
+      { method: 'DELETE' }
+    );
+  } catch (error) {
+    console.error('Failed to delete UI modification:', error);
+    throw error;
+  }
+};
+```
+
+## Available Field APIs
+
+```javascript
+// Field modification methods available via api.getFieldById()
+
+// Visibility control
+const field = api.getFieldById('fieldId');
+field?.setVisible(false);   // Hide the field
+field?.setVisible(true);    // Show the field
+
+// Label and description
+field?.setName('New Label');         // Change field label
+field?.setDescription('Help text');  // Add description
+field?.setRequired(true);           // Make required
+
+// Value manipulation (for supported fields)
+const value = await field.getValue();   // Get current value
+await field.setValue(newValue);        // Set new value
+
+// Screen tab control
+const tabs = api.getScreenTabs();
+tabs.forEach(tab => {
+  tab.setVisible(false); // Hide entire tab
+});
+```
+
+## Context Information
+
+```javascript
+import { bridge } from '@forge/bridge';
+
+export const getContextInfo = async () => {
+  const context = await bridge.getContext();
+  
+  return {
+    extension: context.extension,
+    project: context.extension?.project,      // Project information
+    issueType: context.extension?.issueType,  // Issue type information
+    viewType: context.extension?.viewType     // 'GIC', 'IssueView', or 'IssueTransition'
+  };
+};
+```
+
+## Common Use Cases
+
+### 1. Hide Priority Field for Specific Projects
+
+```javascript
+uiModificationsApi.onInit(({ api }) => {
+  const project = getContextInfo().project;
+  
+  if (project?.key === 'HIDDEN_PROJECT') {
+    const priorityField = api.getFieldById('priority');
+    priorityField?.setVisible(false);
+  }
+}, ['priority']);
+```
+
+### 2. Modify Summary Field for Specific Issue Types
+
+```javascript
+uiModificationsApi.onInit(({ api }) => {
+  const issueType = getContextInfo().issueType;
+  
+  if (issueType?.name === 'Bug') {
+    const summaryField = api.getFieldById('summary');
+    summaryField?.setName('Bug Title');
+    summaryField?.setDescription('Enter the bug description clearly');
+  }
+}, ['summary']);
+```
+
+### 3. Hide Screen Tabs
+
+```javascript
+uiModificationsApi.onInit(({ api }) => {
+  const tabs = api.getScreenTabs();
+  
+  // Hide the last tab (often "More Details")
+  if (tabs.length > 0) {
+    tabs.at(-1).setVisible(false);
+  }
+}, []);
+```
+
+## Important Notes
+
+1. **Performance**: UIM runs on the client-side in an invisible iframe
+2. **Execution Timing**: All modifications are applied after `onInit` completes
+3. **Async Support**: Return a Promise from `onInit` for async operations
+4. **Field Monitoring**: Only list fields you need to monitor in the dependency array
+5. **Context Matching**: UIM only runs when project + issueType + viewType match
+
+## Common Errors and Solutions
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| "UIM not loading" | Incorrect manifest resource path | Verify static resources are built correctly |
+| "Permission denied" | Missing OAuth scopes | Add required scopes to manifest |
+| "Field not found" | Using wrong field ID | Use browser devtools to inspect field IDs |
+
+## Related Documentation
+
+- [Forge UI Modifications Reference](https://developer.atlassian.com/platform/forge/manifest-reference/modules/jira-ui-modifications/)
+- [Understanding UIM](https://developer.atlassian.com/platform/forge/understanding-ui-modifications/)
