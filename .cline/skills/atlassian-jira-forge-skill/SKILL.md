@@ -251,6 +251,11 @@ The `docs/` directory contains detailed documentation:
 | Rate Limit Handling | `19-rate-limit-handling.md` |
 | Performance Optimization | `20-performance-optimization.md` |
 
+### Jira Service Management (New)
+| Topic | File |
+|-------|------|
+| JSM Extensions Guide | `22-jira-service-management.md` |
+
 ### New in This Version
 - `problem-patterns.md` - Common code patterns with examples
 - `when-to-use-which.md` - Decision guide for module selection
@@ -258,6 +263,7 @@ The `docs/` directory contains detailed documentation:
 - CSP error troubleshooting and fixes
 - Rate limit handling with exponential backoff implementations
 - Performance optimization patterns to reduce costs
+- JSM extensions: custom request types, SLA automation, portal widgets
 
 ### Templates
 
