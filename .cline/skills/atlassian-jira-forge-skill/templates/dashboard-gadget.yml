@@ -1,0 +1,466 @@
+# JIRA Dashboard Gadget Template
+
+## Overview
+This template demonstrates how to create a Forge dashboard gadget that displays data from Jira or external sources.
+
+## Basic Module Structure
+
+```yaml
+modules:
+  jira:dashboardGadget:
+    - key: my-dashboard-gadget
+      title: { value: 'My Project Stats' }
+      description: { value: 'Displays project statistics on dashboard' }
+      thumbnail: resource: gadget-icon
+      resource: gadgetMain
+      resolver:
+        function: gadgetResolver
+
+resources:
+  - key: gadgetMain
+    path: static/gadget/build
+  - key: gadget-icon
+    path: static/icons/icon.png
+
+permissions:
+  scopes:
+    - 'read:jira-work'
+```
+
+## Native UI Kit Dashboard Gadget (Recommended)
+
+```yaml
+modules:
+  jira:dashboardGadget:
+    - key: stats-gadget
+      title: { value: 'Project Statistics' }
+      description: { value: 'Shows project metrics' }
+      thumbnail: resource: icon-resource
+      render: native
+      resolver:
+        function: resolver
+      edit:
+        resource: edit-resource
+        render: native
+
+function:
+  - key: resolver
+    handler: index.handler
+
+resources:
+  - key: icon-resource
+    path: static/icon.png
+  - key: edit-resource
+    path: static/edit/build
+
+permissions:
+  scopes:
+    - 'read:jira-work'
+```
+
+## Resolver Implementation
+
+```javascript
+// src/index.js - Dashboard Gadget Resolver
+import Resolver from '@forge/resolver';
+
+const resolver = new Resolver();
+
+// Define functions that can be called from Custom UI
+resolver.define('getGadgetData', async (req) => {
+  const { cloudId, projectKey } = req.payload;
+  
+  try {
+    // Fetch data from Jira API
+    const jiraResponse = await api.asApp().requestJira(
+      `/rest/api/3/search?jql=project=${projectKey}&maxResults=0`,
+      { method: 'GET' }
+    );
+    
+    return await jiraResponse.json();
+  } catch (error) {
+    console.error('Failed to fetch gadget data:', error);
+    throw error;
+  }
+});
+
+resolver.define('getConfiguration', async (req) => {
+  // Get gadget configuration from stored preferences
+  const context = req.context;
+  
+  return {
+    refreshInterval: context.gadgetConfiguration.refreshInterval || 15,
+    showDetails: context.gadgetConfiguration.showDetails !== false
+  };
+});
+
+export const handler = resolver.getDefinitions();
+```
+
+## Dashboard Gadget Frontend (Custom UI)
+
+```javascript
+// static/gadget/src/App.js - Custom UI Component
+import React, { useState, useEffect } from 'react';
+import { invoke } from '@forge/bridge';
+import { Text, Stack, Card, Spinner, Button } from '@forge/ui';
+
+function App() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const result = await invoke('getGadgetData', { 
+        projectKey: 'PROJECT' 
+      });
+      setData(result);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <Stack align="center" space="medium">
+          <Spinner />
+          <Text>Loading statistics...</Text>
+        </Stack>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <Text>Error: {error}</Text>
+        <Button onClick={fetchData}>Retry</Button>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <h3>Project Statistics</h3>
+      <p>Total Issues: {data?.total || 'N/A'}</p>
+      
+      {/* More data rendering here */}
+    </Card>
+  );
+}
+
+export default App;
+```
+
+## Dashboard Gadget with UI Kit
+
+```javascript
+// static/frontend/index.jsx - UI Kit Implementation
+import React, { useEffect, useState } from 'react';
+import ForgeReconciler, {
+  Text, useProductContext, Spinner, Stack, Card, Heading
+} from '@forge/react';
+import { invoke } from '@forge/bridge';
+
+const View = () => {
+  const [data, setData] = useState(null);
+  const context = useProductContext();
+  
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const result = await invoke('getGadgetData', { 
+        gadgetId: context.extension.gadget.id
+      });
+      setData(result);
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+    }
+  };
+
+  if (!data) {
+    return (
+      <Stack align="center" space="medium">
+        <Spinner />
+        <Text>Loading...</Text>
+      </Stack>
+    );
+  }
+
+  return (
+    <Card>
+      <Heading level={3}>Project Statistics</Heading>
+      <p>Total Issues: {data.total}</p>
+      <p>Assigned to You: {data.assignedToMe || 0}</p>
+    </Card>
+  );
+};
+
+const App = () => {
+  const context = useProductContext();
+  
+  if (!context) {
+    return <Text>Loading...</Text>;
+  }
+
+  return <View />;
+};
+
+ForgeReconciler.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+```
+
+## Edit View for Configuration
+
+```javascript
+// static/edit/index.jsx - Configuration UI
+import React, { useEffect, useState } from 'react';
+import ForgeReconciler, {
+  Text, useProductContext, Form, Button, FormSection, 
+  Label, RequiredAsterisk, Textfield, Stack, Heading
+} from '@forge/react';
+
+const Edit = () => {
+  const [formData, setFormData] = useState({
+    refreshInterval: '15',
+    showDetails: true,
+    displayMode: 'summary'
+  });
+
+  useEffect(() => {
+    // Load existing configuration if available
+    loadConfiguration();
+  }, []);
+
+  const loadConfiguration = async () => {
+    try {
+      const config = await invoke('getConfiguration');
+      setFormData(config);
+    } catch (error) {
+      console.error('Failed to load config:', error);
+    }
+  };
+
+  const handleSubmit = () => {
+    // Submit configuration back to gadget
+    view.submit(formData);
+  };
+
+  return (
+    <Form onSubmit={handleSubmit}>
+      <Heading level={2}>Gadget Configuration</Heading>
+      
+      <FormSection>
+        <Label labelFor="refreshInterval">
+          Refresh Interval (minutes)
+          <RequiredAsterisk />
+        </Label>
+        <Textfield
+          name="refreshInterval"
+          value={formData.refreshInterval}
+          onChange={(e) => setFormData({ ...formData, refreshInterval: e.target.value })}
+        />
+      </FormSection>
+
+      <FormSection>
+        <Label labelFor="displayMode">Display Mode</Label>
+        <select
+          value={formData.displayMode}
+          onChange={(e) => setFormData({ ...formData, displayMode: e.target.value })}
+        >
+          <option value="summary">Summary Only</option>
+          <option value="detailed">Detailed View</option>
+        </select>
+      </FormSection>
+
+      <Button type="submit" appearance="primary">
+        Save Configuration
+      </Button>
+    </Form>
+  );
+};
+
+const App = () => {
+  const context = useProductContext();
+  
+  if (!context) return null;
+  return <Edit />;
+};
+
+ForgeReconciler.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+```
+
+## Custom Refresh Logic
+
+```javascript
+// static/gadget/src/RefreshHandler.js - Override Default Refresh
+import React, { useEffect } from 'react';
+import { events } from '@forge/bridge';
+import { invoke } from '@forge/bridge';
+
+function RefreshHandler() {
+  useEffect(() => {
+    const unsubscribe = events.on('JIRA_DASHBOARD_GADGET_REFRESH', (payload) => {
+      // payload.origin: 'dashboard' or 'gadget'
+      // payload.gadgetId: ID of gadget that triggered refresh
+      
+      if (payload.origin === 'dashboard') {
+        // Dashboard-wide refresh
+        fetchData();
+      }
+    });
+
+    return () => {
+      unsubscribe.then(({ unsubscribe }) => unsubscribe());
+    };
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      await invoke('getGadgetData', { forceRefresh: true });
+    } catch (error) {
+      console.error('Failed to refresh:', error);
+    }
+  };
+
+  return null; // This component just handles events
+}
+
+export default RefreshHandler;
+```
+
+## Manifest with Custom Refresh
+
+```yaml
+modules:
+  jira:dashboardGadget:
+    - key: my-dashboard-gadget
+      title: { value: 'My Dashboard Gadget' }
+      description: { value: 'Custom refresh gadget example' }
+      thumbnail: resource: icon-resource
+      resource: main-resource
+      resolver:
+        function: resolver
+      edit:
+        resource: edit-resource
+        render: native
+      refreshable: false  # Disable default refresh
+
+resources:
+  - key: main-resource
+    path: static/gadget/build
+  - key: edit-resource
+    path: static/edit/build
+  - key: icon-resource
+    path: static/icon.png
+
+function:
+  - key: resolver
+    handler: index.handler
+
+permissions:
+  scopes:
+    - 'read:jira-work'
+```
+
+## Dashboard Context Information
+
+```javascript
+import { view } from '@forge/bridge';
+
+export const getDashboardContext = async () => {
+  const context = await view.getContext();
+  
+  return {
+    gadgetId: context.extension.gadget.id,
+    dashboardId: context.extension.dashboard.id,
+    type: context.extension.type, // 'gadget'
+    location: context.extension.location
+  };
+};
+```
+
+## Common Use Cases
+
+### 1. Issue Count Gadget
+
+```javascript
+resolver.define('getIssueCounts', async (req) => {
+  const { projectKey, issueTypes } = req.payload;
+  
+  const jqlParts = [`project=${projectKey}`];
+  if (issueTypes && issueTypes.length > 0) {
+    jqlParts.push(`issuetype in (${issueTypes.join(',')})`);
+  }
+  
+  const response = await api.asApp().requestJira(
+    `/rest/api/3/search?jql=${encodeURIComponent(jqlParts.join(' AND '))}&maxResults=0`,
+    { method: 'GET' }
+  );
+  
+  return await response.json();
+});
+```
+
+### 2. Recent Activity Gadget
+
+```javascript
+resolver.define('getRecentActivity', async (req) => {
+  const { projectKey, maxResults = 10 } = req.payload;
+  
+  const response = await api.asApp().requestJira(
+    `/rest/api/3/search?jql=project=${projectKey} ORDER BY updated DESC&maxResults=${maxResults}&fields=key,summary,updated,assignee`,
+    { method: 'GET' }
+  );
+  
+  return await response.json();
+});
+```
+
+### 3. Personal Statistics Gadget
+
+```javascript
+resolver.define('getPersonalStats', async (req) => {
+  const context = req.context;
+  const accountId = context.accountId;
+  
+  // Get issues assigned to current user
+  const response = await api.asApp().requestJira(
+    `/rest/api/3/search?jql=assignee=${accountId}&maxResults=0`,
+    { method: 'GET' }
+  );
+  
+  return await response.json();
+});
+```
+
+## Important Notes
+
+1. **Dashboard Context**: Gadgets run in the context of a dashboard, access via `view.getContext()`
+2. **Refresh Behavior**: Override default refresh using `JIRA_DASHBOARD_GADGET_REFRESH` event
+3. **Configuration Storage**: Use Forge Storage for persistent gadget preferences
+4. **Error Handling**: Always handle errors gracefully and show user-friendly messages
+
+## Related Documentation
+
+- [Forge Dashboard Gadget Reference](https://developer.atlassian.com/platform/forge/manifest-reference/modules/jira-dashboard-gadget/)
