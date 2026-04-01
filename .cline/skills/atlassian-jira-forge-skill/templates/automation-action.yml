@@ -1,0 +1,240 @@
+# Jira Forge Automation Action Template
+
+Copy this file and modify for your specific use case.
+
+## File: manifest.yml (add to modules section)
+
+```yaml
+modules:
+  action:
+    - key: my-automation-action     # REQUIRED: Unique identifier
+      function: 'myActionFunction'  # REQUIRED: Function key reference
+      name: My Automation Action             # REQUIRED: Display name shown in automation rules
+      actionVerb: CREATE                     # Optional: VERB or CREATE (default)
+      description: |                         # REQUIRED: Description for automation rule picker
+        This action performs a custom operation on issues
+      config:
+        render: native                       # REQUIRED: 'native' or 'custom'
+      inputs:                                # Optional: Action input fields
+        targetFieldId:
+          title: Target Field                # Label shown in configuration
+          type: string                       # Type: string, number, boolean, select, multiSelect
+          required: true                     # Whether user must provide a value
+          description: Select the field to update
+        notificationMessage:
+          title: Notification Message
+          type: string
+          required: false
+          description: Message to add to issue comments
+
+# Function module definition (required for all Forge apps with functions)
+function:
+  - key: myActionFunction
+    handler: index.myAutomationAction
+```
+
+## File: src/index.js
+
+```javascript
+import api, { route } from '@forge/api';
+
+/**
+ * Automation action handler
+ * Executed when user adds this action to an automation rule
+ */
+export const myAutomationAction = async (payload, context) => {
+  console.log('Automation action triggered:', payload);
+  
+  // Payload structure:
+  // - issue: The issue that triggered the action
+  // - inputs: User-provided input values from automation rule configuration
+  // - config: Action configuration values
+  
+  const { issue, inputs } = payload;
+  
+  try {
+    console.log(`Processing action for issue: ${issue.key}`);
+    console.log('Input values:', inputs);
+    
+    // Access the target field value configured by user
+    const targetFieldId = inputs.targetFieldId;
+    const notificationMessage = inputs.notificationMessage;
+    
+    // Example: Add a comment to the issue
+    if (notificationMessage) {
+      await api.asApp().requestJira(
+        route`/rest/api/3/issue/${issue.key}/comment`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            body: {
+              type: 'doc',
+              version: 1,
+              content: [{
+                type: 'paragraph',
+                content: [{
+                  type: 'text',
+                  text: notificationMessage
+                }]
+              }]
+            }
+          })
+        }
+      );
+      console.log(`Added comment to ${issue.key}`);
+    }
+    
+    // Example: Update a field based on input
+    if (targetFieldId) {
+      await api.asApp().requestJira(
+        route`/rest/api/3/issue/${issue.key}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              [targetFieldId]: "Updated value"
+            }
+          })
+        }
+      );
+      console.log(`Updated field on ${issue.key}`);
+    }
+    
+    return { 
+      status: 'success',
+      message: `Action completed for issue ${issue.key}`
+    };
+    
+  } catch (error) {
+    console.error('Automation action error:', error);
+    throw error; // Errors will be shown in automation rule execution
+  }
+};
+```
+
+## File: src/CustomActionUI.jsx (Optional - for render: custom)
+
+If you use `render: 'custom'`, provide a React component for the configuration UI:
+
+```javascript
+import React, { useState, useEffect } from 'react';
+import { Form, Select, FieldText, Label, TextArea } from '@forge/bridge';
+
+export const CustomActionUI = () => {
+  const [fields, setFields] = useState([]);
+  const [selectedFieldId, setSelectedFieldId] = useState('');
+  const [notificationMessage, setNotificationMessage] = useState('');
+  
+  useEffect(() => {
+    fetchCustomFields();
+  }, []);
+  
+  const fetchCustomFields = async () => {
+    try {
+      // Get all custom fields from Jira
+      const response = await bridge.requestJira('/rest/api/3/field');
+      const data = await response.json();
+      
+      setFields(data.filter(f => f.custom).map(f => ({
+        label: f.name,
+        value: f.id
+      })));
+    } catch (error) {
+      console.error('Error fetching fields:', error);
+    }
+  };
+
+  return (
+    <Form>
+      <Label>Action Configuration</Label>
+      
+      <Select
+        label="Target Field"
+        options={fields}
+        value={selectedFieldId}
+        onChange={(e) => setSelectedFieldId(e.target.value)}
+      />
+      
+      <TextArea
+        label="Notification Message (optional)"
+        value={notificationMessage}
+        onChange={(e) => setNotificationMessage(e.target.value)}
+      />
+    </Form>
+  );
+};
+
+// Save configuration
+export const onSaveConfiguration = async () => {
+  return JSON.stringify({
+    targetFieldId: selectedFieldId,
+    notificationMessage: notificationMessage
+  });
+};
+```
+
+## Permissions Required
+
+```yaml
+permissions:
+  scopes:
+    - read:jira-work        # View issue data
+    - write:jira-work       # Modify issues and add comments
+```
+
+## Key Points About Automation Actions
+
+### Action Types
+| actionVerb | Description | Use Case |
+|------------|-------------|----------|
+| `CREATE`   | Creates new items (default) | Create tickets, send notifications |
+| `VERB`     | Performs an action | Update fields, trigger workflows |
+
+### Input Types Available
+- **string**: Single line text input
+- **number**: Numeric input
+- **boolean**: Checkbox toggle
+- **select**: Dropdown with predefined options
+- **multiSelect**: Multi-select dropdown
+
+### Common Use Cases
+1. **Bulk field updates** on issues matching automation criteria
+2. **Send notifications** to external systems (Slack, email)
+3. **Create related issues** automatically
+4. **Sync data** between Jira and external tools
+5. **Add comments** with custom formatting
+
+### Action Input Example (select type)
+
+```yaml
+inputs:
+  priority:
+    title: Priority Level
+    type: select
+    required: false
+    defaultValue: Medium
+    options:
+      - label: Low
+        value: low
+      - label: Medium
+        value: medium
+      - label: High
+        value: high
+```
+
+## Testing
+
+1. Deploy: `forge deploy`
+2. Install: `forge install --upgrade`
+3. In Jira Automation:
+   - Create a new rule
+   - Add an action → "Apps" → Your Action name
+   - Configure inputs and test
+
+---
+
+## References
+
+- [Atlassian Docs: Automation Actions](https://developer.atlassian.com/platform/forge/manifest-reference/modules/automation-action)

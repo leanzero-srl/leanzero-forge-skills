@@ -1,0 +1,171 @@
+# Jira Forge Scheduled Trigger Template
+
+Copy this file and modify for your specific use case.
+
+## File: manifest.yml (add to modules section)
+
+```yaml
+modules:
+  scheduledTrigger:
+    - key: my-scheduled-trigger        # REQUIRED: Unique identifier
+      function: 'my-handler-function'  # REQUIRED: Function key reference
+      interval: hour                   # REQUIRED: fiveMinute, hour, day, or week
+      
+# Function module definition (required for all Forge apps with functions)
+function:
+  - key: my-handler-function
+    handler: index.myHandler
+
+# Optional: More frequent triggers (minimum is fiveMinute)
+# modules:
+#   scheduledTrigger:
+#     - key: jira-five-minute-trigger
+#       function: 'your-function-key'
+#       interval: fiveMinute
+```
+
+## File: src/index.js
+
+```javascript
+import api, { route } from '@forge/api';
+
+/**
+ * Scheduled trigger handler
+ * Runs at configured intervals without user context
+ */
+export const myHandler = async (event, context) => {
+  console.log('Scheduled trigger fired:', event);
+  
+  try {
+    // Access Jira API using @forge/api
+    const response = await api.asApp().requestJira(
+      route`/rest/api/3/search`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jql: 'updated >= startOfPeriod()',
+          fields: ['summary', 'status', 'assignee'],
+          maxResults: 50
+        })
+      }
+    );
+    
+    const data = await response.json();
+    console.log(`Found ${data.issues?.length || 0} issues`);
+    
+    // Process results as needed
+    return { 
+      status: 'success', 
+      processedCount: data.issues?.length || 0 
+    };
+    
+  } catch (error) {
+    console.error('Scheduled trigger error:', error);
+    throw error; // Errors don't auto-retry in scheduled triggers
+  }
+};
+
+// Example: Process issues in batches to avoid rate limits
+async function processIssuesInBatch(issues, batchSize = 50) {
+  for (let i = 0; i < issues.length; i += batchSize) {
+    const batch = issues.slice(i, i + batchSize);
+    console.log(`Processing batch ${i / batchSize + 1}`);
+    
+    // Process batch...
+  }
+}
+```
+
+## Permissions Required
+
+```yaml
+permissions:
+  scopes:
+    - read:jira-work        # View issue data (adjust based on your needs)
+    # - write:jira-work     # If modifying issues
+    # - storage:app         # If using app storage
+```
+
+## Key Points About Scheduled Triggers
+
+### Intervals Available
+| Interval | Description |
+|----------|-------------|
+| `fiveMinute` | Shortest available interval |
+| `hour` | Every hour |
+| `day` | Daily |
+| `week` | Weekly |
+
+### Important Limitations
+- **Maximum 5 scheduled triggers** per app
+- Triggers start approximately **5 minutes after deployment**
+- **Changes reset trigger times** - modifying triggers will reset their schedule
+- Functions run **without user context** (no current user available)
+- Errors do **NOT support automatic retries** - handle errors in your code
+
+### Common Use Cases
+1. **Sync data** with external systems
+2. **Cleanup tasks** (archiving old issues, removing stale data)
+3. **Batch processing** large numbers of issues
+4. **Generate reports** and send notifications
+5. **Health checks** for integration status
+
+## Testing
+
+1. Deploy: `forge deploy`
+2. Wait ~5 minutes for trigger to start
+3. View logs: `forge logs -n 50`
+
+## Example: Sync External System
+
+```javascript
+// Using KVS to track last sync time
+import { kvs } from '@forge/kvs';
+
+const LAST_SYNC_KEY = 'last-sync-timestamp';
+
+export const syncHandler = async (event, context) => {
+  // Get last sync time
+  const lastSync = await kvs.get(LAST_SYNC_KEY);
+  const sinceTimestamp = JSON.parse(lastSync) || Date.now() - (24 * 60 * 60 * 1000);
+  
+  try {
+    // Fetch issues updated since last sync
+    const response = await api.asApp().requestJira(
+      route`/rest/api/3/search`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jql: `updated >= "${new Date(sinceTimestamp).toISOString()}"`,
+          fields: ['summary', 'status'],
+          maxResults: 100
+        })
+      }
+    );
+    
+    const data = await response.json();
+    
+    // Sync with external system...
+    for (const issue of data.issues) {
+      // Sync individual issue
+    }
+    
+    // Update last sync timestamp
+    await kvs.set(LAST_SYNC_KEY, JSON.stringify(Date.now()));
+    
+    return { status: 'success', syncedCount: data.issues.length };
+    
+  } catch (error) {
+    console.error('Sync error:', error);
+    throw error;
+  }
+};
+```
+
+---
+
+## References
+
+- [Atlassian Docs: Add a scheduled trigger](https://developer.atlassian.com/platform/forge/add-scheduled-trigger)

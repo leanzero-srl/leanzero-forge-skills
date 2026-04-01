@@ -161,13 +161,43 @@ See [When to Use Which Module](docs/when-to-use-which.md) for choosing the right
 
 Copy-paste templates are available in `templates/`:
 
+### Workflow Modules
 | Template | Description |
 |----------|-------------|
 | `validator.yml` | Workflow validator boilerplate with configuration UI example |
 | `condition.yml` | Workflow condition boilerplate for visibility control |
 | `post-function.yml` | Post function boilerplate for post-transition logic |
+| `complex-validator.yml` | Multi-rule validator with dynamic configuration UI |
 
-See templates directory for complete, ready-to-use code examples.
+### Triggers & Events
+| Template | Description |
+|----------|-------------|
+| `scheduled-trigger.yml` | Scheduled trigger (hourly, daily, weekly) for background tasks |
+| `webhook-handler.yml` | Event-based handler for Jira events (created, updated, deleted) |
+| `trigger-with-filter.yml` | Trigger with advanced event filtering |
+
+### Automation & Actions
+| Template | Description |
+|----------|-------------|
+| `automation-action.yml` | Custom automation action with configurable inputs |
+| `bulk-operation.yml` | Bulk issue operations with rate limiting and batching |
+
+### Storage & Configuration
+| Template | Description |
+|----------|-------------|
+| `storage-kvs-example.yml` | Key-value storage patterns for configuration and state |
+
+### UI Components
+| Template | Description |
+|----------|-------------|
+| `ui-modifications.yml` | Custom UI modifications with React components |
+| `dashboard-gadget.yml` | Dashboard widget template |
+
+### Integrations
+| Template | Description |
+|----------|-------------|
+| `bitbucket-merge-check.yml` | Bitbucket merge check for pull request validation |
+
 
 ---
 
@@ -287,10 +317,14 @@ The `docs/` directory contains detailed documentation:
 
 ### Templates
 
-Copy-paste templates available in `templates/`:
-- `validator.yml` - Workflow validator boilerplate
-- `condition.yml` - Workflow condition boilerplate
-- `post-function.yml` - Post function boilerplate
+All templates include:
+- YAML manifest configuration with detailed comments
+- JavaScript function handlers with working examples
+- React UI components (where applicable)
+- Required permissions/scopes section
+- Testing instructions
+
+See `templates/` directory for complete, ready-to-use code.
 
 ---
 

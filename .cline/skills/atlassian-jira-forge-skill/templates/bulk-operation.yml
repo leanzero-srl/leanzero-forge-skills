@@ -1,0 +1,439 @@
+# Jira Forge Bulk Operations Template
+
+Copy this file and modify for your specific use case.
+
+## File: manifest.yml (add to modules section)
+
+```yaml
+# Scheduled trigger for bulk operations
+modules:
+  scheduledTrigger:
+    - key: bulk-update-trigger     # REQUIRED: Unique identifier
+      function: 'bulkUpdateHandler' # REQUIRED: Function key reference
+      interval: hour                # Run hourly, daily, or weekly
+      
+# Function module definition
+function:
+  - key: bulkUpdateHandler
+    handler: index.bulkUpdateIssues
+
+permissions:
+  scopes:
+    - read:jira-work        # View issues
+    - write:jira-work       # Update issues
+```
+
+## File: src/index.js
+
+```javascript
+import api, { route } from '@forge/api';
+
+/**
+ * Bulk operations handler
+ * Demonstrates patterns for processing large numbers of issues efficiently
+ */
+
+// Rate limiting configuration
+const RATE_LIMIT = {
+  MAX_REQUESTS_PER_SECOND: 5,
+  BATCH_SIZE: 50,        // Jira's bulk endpoint limit
+  REQUEST_TIMEOUT: 30000 // 30 second timeout
+};
+
+// Request tracking for rate limiting
+let requestTimestamps = [];
+
+/**
+ * Main bulk update handler
+ */
+export const bulkUpdateHandler = async (event, context) => {
+  console.log('Starting bulk operation');
+  
+  try {
+    // Step 1: Fetch issues matching criteria
+    const issues = await fetchIssuesForBatch();
+    
+    if (!issues || issues.length === 0) {
+      console.log('No issues to process');
+      return { status: 'success', processedCount: 0 };
+    }
+    
+    console.log(`Found ${issues.length} issues to process`);
+    
+    // Step 2: Process in batches
+    const results = await processInBatches(issues, RATE_LIMIT.BATCH_SIZE);
+    
+    return { 
+      status: 'success', 
+      processedCount: results.successful,
+      failedCount: results.failed
+    };
+    
+  } catch (error) {
+    console.error('Bulk operation error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Fetch issues matching search criteria
+ */
+async function fetchIssuesForBatch() {
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  
+  try {
+    const response = await rateLimitedRequest(
+      '/rest/api/3/search',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jql: `updated >= "${oneHourAgo}" AND status != Done`,
+          fields: ['summary', 'status', 'assignee', 'priority'],
+          maxResults: 100,
+          startAt: 0
+        })
+      }
+    );
+    
+    const data = await response.json();
+    return data.issues || [];
+    
+  } catch (error) {
+    console.error('Error fetching issues:', error);
+    throw error;
+  }
+}
+
+/**
+ * Process issues in batches to avoid rate limits and timeouts
+ */
+async function processInBatches(issues, batchSize) {
+  const results = { successful: 0, failed: 0 };
+  
+  for (let i = 0; i < issues.length; i += batchSize) {
+    const batch = issues.slice(i, i + batchSize);
+    const batchNumber = Math.floor(i / batchSize) + 1;
+    
+    console.log(`Processing batch ${batchNumber} of ${Math.ceil(issues.length / batchSize)}`);
+    
+    for (const issue of batch) {
+      try {
+        await processIssue(issue);
+        results.successful++;
+        console.log(`Successfully processed ${issue.key}`);
+      } catch (error) {
+        results.failed++;
+        console.error(`Failed to process ${issue.key}:`, error.message);
+        
+        // Continue with next issue instead of failing entire batch
+      }
+      
+      // Small delay between individual requests
+      await sleep(200);
+    }
+    
+    // Longer delay between batches
+    if (i + batchSize < issues.length) {
+      console.log('Waiting between batches...');
+      await sleep(1000);
+    }
+  }
+  
+  return results;
+}
+
+/**
+ * Process a single issue
+ */
+async function processIssue(issue) {
+  // Example: Update priority based on status
+  const updateData = buildUpdatePayload(issue);
+  
+  if (!updateData) {
+    console.log(`No update needed for ${issue.key}`);
+    return;
+  }
+  
+  await rateLimitedRequest(
+    `/rest/api/3/issue/${issue.id}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: updateData })
+    }
+  );
+}
+
+/**
+ * Build update payload based on issue data
+ */
+function buildUpdatePayload(issue) {
+  const updates = {};
+  
+  // Example business logic: adjust priority for high-priority unresolved issues
+  if (issue.fields.priority?.name === 'High' && 
+      issue.fields.status?.name !== 'Done') {
+    // Add comment to track the update
+    return {
+      comment: {
+        add: {
+          body: {
+            type: 'doc',
+            version: 1,
+            content: [{
+              type: 'paragraph',
+              content: [{
+                type: 'text',
+                text: '[Automated] Priority review scheduled'
+              }]
+            }]
+          }
+        }
+      }
+    };
+  }
+  
+  return null; // No update needed
+}
+
+/**
+ * Rate-limited API request helper
+ */
+async function rateLimitedRequest(endpoint, options = {}) {
+  const now = Date.now();
+  
+  // Remove old timestamps (older than 1 second)
+  requestTimestamps = requestTimestamps.filter(ts => now - ts < 1000);
+  
+  // Wait if we've reached the limit
+  while (requestTimestamps.length >= RATE_LIMIT.MAX_REQUESTS_PER_SECOND) {
+    const oldestRequest = Math.min(...requestTimestamps);
+    const waitTime = 1000 - (now - oldestRequest);
+    
+    console.log(`Rate limit approaching, waiting ${waitTime}ms`);
+    await sleep(waitTime);
+  }
+  
+  // Record this request
+  requestTimestamps.push(now);
+  
+  try {
+    const response = await api.asApp().requestJira(
+      route`${endpoint}`,
+      options
+    );
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+    }
+    
+    return response;
+    
+  } catch (error) {
+    console.error(`Request failed for ${endpoint}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Sleep helper
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ============================================
+// Alternative: Bulk Create Issues Template
+// ============================================
+
+export const bulkCreateHandler = async (event, context) => {
+  console.log('Starting bulk issue creation');
+  
+  try {
+    // Example: Create issues from a list
+    const issuesToCreate = [
+      { summary: 'Task 1', projectKey: 'PROJ' },
+      { summary: 'Task 2', projectKey: 'PROJ' },
+      // ... more issues
+    ];
+    
+    const results = await createIssuesInBatch(issuesToCreate);
+    
+    return { 
+      status: 'success', 
+      createdCount: results.created,
+      failedCount: results.failed
+    };
+    
+  } catch (error) {
+    console.error('Bulk creation error:', error);
+    throw error;
+  }
+};
+
+async function createIssuesInBatch(issuesToCreate) {
+  const batchSize = 50; // Jira bulk limit
+  const results = { created: 0, failed: 0 };
+  
+  for (let i = 0; i < issuesToCreate.length; i += batchSize) {
+    const batch = issuesToCreate.slice(i, i + batchSize);
+    
+    try {
+      const response = await rateLimitedRequest(
+        '/rest/api/3/issue/bulk',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            issueUpdates: batch.map(issue => ({
+              fields: {
+                summary: issue.summary,
+                description: issue.description || '',
+                issuetype: { name: issue.issueType || 'Task' },
+                project: { key: issue.projectKey }
+              }
+            }))
+          })
+        }
+      );
+      
+      results.created += batch.length;
+      console.log(`Created ${batch.length} issues in batch`);
+      
+    } catch (error) {
+      console.error('Batch creation error:', error);
+      results.failed += batch.length;
+    }
+  }
+  
+  return results;
+}
+
+// ============================================
+// Alternative: Bulk Status Transition Template
+// ============================================
+
+export const bulkTransitionHandler = async (event, context) => {
+  console.log('Starting bulk status transition');
+  
+  try {
+    // Find issues ready for transition
+    const jql = 'status = "In Progress" AND assignee was User() -30d';
+    const response = await rateLimitedRequest(
+      '/rest/api/3/search',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jql,
+          fields: ['id', 'key', 'status'],
+          maxResults: 100
+        })
+      }
+    );
+    
+    const data = await response.json();
+    const issues = data.issues || [];
+    
+    console.log(`Found ${issues.length} issues to transition`);
+    
+    // Transition each issue to "Done"
+    let successCount = 0;
+    
+    for (const issue of issues) {
+      try {
+        await rateLimitedRequest(
+          `/rest/api/3/issue/${issue.id}/transitions`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              transition: { id: '71' } // Replace with actual transition ID
+            })
+          }
+        );
+        successCount++;
+      } catch (error) {
+        console.error(`Failed to transition ${issue.key}:`, error);
+      }
+    }
+    
+    return { 
+      status: 'success', 
+      transitionedCount: successCount,
+      failedCount: issues.length - successCount
+    };
+    
+  } catch (error) {
+    console.error('Bulk transition error:', error);
+    throw error;
+  }
+};
+```
+
+## Permissions Required
+
+```yaml
+permissions:
+  scopes:
+    - read:jira-work        # Query and view issues
+    - write:jira-work       # Update issues, add comments, transition
+    # - admin:jira-project  # If managing project-level settings
+```
+
+## Key Points About Bulk Operations
+
+### Best Practices
+
+| Practice | Why It Matters |
+|----------|----------------|
+| **Process in batches** | Avoid timeouts and rate limits |
+| **Rate limit requests** | Stay within Jira's API limits (5 req/sec default) |
+| **Handle individual failures gracefully** | One failure shouldn't stop the entire batch |
+| **Log extensively** | Debug issues and track progress |
+| **Use bulk endpoints when available** | More efficient than individual calls |
+
+### Available Bulk Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/rest/api/3/issue/bulk` | POST | Create multiple issues at once (max 50) |
+| `/rest/api/3/issue/{id}/transitions` | POST | Transition an issue |
+
+### Common Use Cases
+
+1. **Automated cleanup** - Archive old or stale issues
+2. **Bulk field updates** - Apply changes across many issues
+3. **Status transitions** - Move issues through workflow automatically
+4. **Data migration** - Import and process external data in batches
+5. **Report generation** - Collect data from many issues for reporting
+
+### Error Handling Strategy
+
+```javascript
+try {
+  await processIssue(issue);
+} catch (error) {
+  // Log error but continue with next issue
+  console.error(`Failed ${issue.key}:`, error.message);
+  
+  // Optionally: store failed items for retry
+  const failures = await kvs.get('failed_items') || [];
+  failures.push({ key: issue.key, error: error.message });
+  await kvs.set('failed_items', JSON.stringify(failures));
+}
+```
+
+### Testing Bulk Operations
+
+1. **Start small** - Test with 1-2 issues first
+2. **Use dry-run mode** - Log what would happen without making changes
+3. **Monitor logs** - Watch `forge logs` during execution
+4. **Check rate limits** - Look for 429 errors in output
+
+---
+
+## References
+
+- [Atlassian Docs: Bulk Issue Creation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-operations/#api-rest-api-3-issue-bulk-post)

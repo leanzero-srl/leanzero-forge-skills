@@ -1,0 +1,367 @@
+# Jira Forge Storage (KVS) Template
+
+Copy this file and modify for your specific use case.
+
+## File: manifest.yml
+
+```yaml
+# Function module definition (required for all Forge apps using storage)
+function:
+  - key: storageHandler
+    handler: index.storageHandler
+
+permissions:
+  scopes:
+    - storage:app         # Required for app storage access
+    # - read:jira-work   # If accessing Jira data
+```
+
+## File: src/index.js
+
+```javascript
+import api, { route } from '@forge/api';
+import { kvs } from '@forge/kvs';
+
+/**
+ * Storage handler with KVS (Key-Value Storage)
+ * Demonstrates common storage patterns for Forge apps
+ */
+
+// Configuration keys used in storage
+const CONFIG_KEYS = {
+  API_KEY: 'api_key',
+  WEBHOOK_URL: 'webhook_url',
+  LAST_SYNC_TIME: 'last_sync_time',
+  SETTINGS: 'settings'
+};
+
+/**
+ * Store a configuration value
+ * @param {string} key - Storage key
+ * @param {*} value - Value to store (will be stringified)
+ */
+export async function setConfig(key, value) {
+  try {
+    await kvs.set(key, JSON.stringify(value));
+    console.log(`Stored config: ${key}`);
+  } catch (error) {
+    console.error(`Error storing ${key}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Get a configuration value
+ * @param {string} key - Storage key
+ * @returns {*|null} Parsed value or null if not found
+ */
+export async function getConfig(key) {
+  try {
+    const value = await kvs.get(key);
+    return value ? JSON.parse(value) : null;
+  } catch (error) {
+    console.error(`Error reading ${key}:`, error);
+    return null; // Return null instead of throwing for optional configs
+  }
+}
+
+/**
+ * Delete a configuration value
+ * @param {string} key - Storage key
+ */
+export async function deleteConfig(key) {
+  try {
+    await kvs.delete(key);
+    console.log(`Deleted config: ${key}`);
+  } catch (error) {
+    console.error(`Error deleting ${key}:`, error);
+  }
+}
+
+/**
+ * List all storage keys (for debugging/admin purposes)
+ * Note: Only returns keys the app has access to
+ */
+export async function listStorageKeys() {
+  try {
+    const keys = await kvs.list();
+    return keys;
+  } catch (error) {
+    console.error('Error listing storage keys:', error);
+    return [];
+  }
+}
+
+/**
+ * Example: Store and retrieve sync timestamp
+ */
+export async function handleSync(event, context) {
+  const LAST_SYNC_KEY = CONFIG_KEYS.LAST_SYNC_TIME;
+  
+  try {
+    // Get last sync time
+    const lastSyncRaw = await kvs.get(LAST_SYNC_KEY);
+    const lastSyncTime = lastSyncRaw ? JSON.parse(lastSyncRaw) : Date.now() - (24 * 60 * 60 * 1000);
+    
+    console.log(`Last sync was at: ${new Date(lastSyncTime).toISOString()}`);
+    
+    // Fetch data since last sync
+    const response = await api.asApp().requestJira(
+      route`/rest/api/3/search`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jql: `updated >= "${new Date(lastSyncTime).toISOString()}"`,
+          fields: ['summary', 'status'],
+          maxResults: 100
+        })
+      }
+    );
+    
+    const data = await response.json();
+    
+    // Process changes...
+    console.log(`Found ${data.issues?.length || 0} updated issues`);
+    
+    // Update last sync time
+    await kvs.set(LAST_SYNC_KEY, JSON.stringify(Date.now()));
+    
+    return { 
+      status: 'success', 
+      processedCount: data.issues?.length || 0 
+    };
+    
+  } catch (error) {
+    console.error('Sync error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Example: Store configuration with fallback
+ */
+export async function getSettingWithFallback(key, defaultValue) {
+  try {
+    const value = await kvs.get(key);
+    return value ? JSON.parse(value) : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
+
+/**
+ * Example: Cleanup orphan storage entries
+ * Call this periodically to remove unused data
+ */
+export async function cleanupOrphanEntries() {
+  const validKeys = [CONFIG_KEYS.API_KEY, CONFIG_KEYS.WEBHOOK_URL, CONFIG_KEYS.SETTINGS];
+  
+  try {
+    const allKeys = await kvs.list();
+    let cleanedCount = 0;
+    
+    for (const key of allKeys) {
+      if (!validKeys.includes(key)) {
+        await kvs.delete(key);
+        cleanedCount++;
+        console.log(`Cleaned up orphan key: ${key}`);
+      }
+    }
+    
+    return { cleanedCount };
+  } catch (error) {
+    console.error('Cleanup error:', error);
+    throw error;
+  }
+}
+
+// Main handler for demo purposes
+export const storageHandler = async (event, context) => {
+  const action = event?.action || 'list';
+  
+  switch (action) {
+    case 'get':
+      return { value: await getConfig(event.key) };
+    
+    case 'set':
+      await setConfig(event.key, event.value);
+      return { status: 'stored' };
+    
+    case 'delete':
+      await deleteConfig(event.key);
+      return { status: 'deleted' };
+    
+    case 'list':
+      return { keys: await listStorageKeys() };
+    
+    default:
+      throw new Error(`Unknown action: ${action}`);
+  }
+};
+```
+
+## File: src/Configure.js (Configuration UI Example)
+
+```javascript
+import React, { useState, useEffect } from 'react';
+import { Form, FieldText, TextArea, ButtonGroup, Button } from '@forge/bridge';
+import { setConfig, getConfig, listStorageKeys } from './index';
+
+export const Configure = () => {
+  const [apiKey, setApiKey] = useState('');
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [saveStatus, setSaveStatus] = useState(null);
+
+  useEffect(() => {
+    loadConfiguration();
+  }, []);
+
+  const loadConfiguration = async () => {
+    try {
+      const storedApiKey = await getConfig('api_key');
+      const storedWebhookUrl = await getConfig('webhook_url');
+      
+      if (storedApiKey) setApiKey(storedApiKey);
+      if (storedWebhookUrl) setWebhookUrl(storedWebhookUrl);
+    } catch (error) {
+      console.error('Error loading config:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      await setConfig('api_key', apiKey);
+      await setConfig('webhook_url', webhookUrl);
+      
+      setSaveStatus({ type: 'success', message: 'Configuration saved!' });
+    } catch (error) {
+      setSaveStatus({ type: 'error', message: error.message });
+    }
+  };
+
+  if (isLoading) return <div>Loading configuration...</div>;
+
+  return (
+    <Form>
+      {saveStatus && (
+        <div style={{ 
+          padding: '10px', 
+          marginBottom: '16px',
+          backgroundColor: saveStatus.type === 'success' ? '#e7f7ef' : '#fce8e6',
+          borderRadius: '4px'
+        }}>
+          {saveStatus.message}
+        </div>
+      )}
+
+      <FieldText
+        label="API Key"
+        value={apiKey}
+        onChange={(e) => setApiKey(e.target.value)}
+        description="Enter your external API key"
+      />
+
+      <FieldText
+        label="Webhook URL"
+        value={webhookUrl}
+        onChange={(e) => setWebhookUrl(e.target.value)}
+        description="URL to receive webhooks"
+      />
+
+      <ButtonGroup>
+        <Button onClick={handleSave}>Save Configuration</Button>
+      </ButtonGroup>
+    </Form>
+  );
+};
+
+export const onSaveConfiguration = async () => {
+  await setConfig('api_key', apiKey);
+  await setConfig('webhook_url', webhookUrl);
+  
+  return JSON.stringify({ 
+    api_key: apiKey, 
+    webhook_url: webhookUrl 
+  });
+};
+```
+
+## Permissions Required
+
+```yaml
+permissions:
+  scopes:
+    - storage:app         # Required for all KVS operations
+```
+
+## Key Points About Forge Storage (KVS)
+
+### Storage Limits
+| Resource | Limit |
+|----------|-------|
+| **Total storage per app** | 10 MB |
+| **Maximum key size** | 400 bytes |
+| **Maximum value size** | 1 MB |
+| **List operations** | Returns up to 1000 keys |
+
+### Common Patterns
+
+#### 1. Configuration Storage
+Store user settings, API keys (encrypted), webhook URLs:
+```javascript
+await kvs.set('config.api_key', JSON.stringify(apiKey));
+const apiKey = await kvs.get('config.api_key');
+```
+
+#### 2. State Tracking
+Track last sync time, processing state, counters:
+```javascript
+await kvs.set('sync:last_run', Date.now().toString());
+```
+
+#### 3. Cache External Data
+Cache API responses to reduce rate limit issues:
+```javascript
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getCachedData(key, fetchFn) {
+  const cached = await kvs.get(`cache:${key}`);
+  
+  if (cached) {
+    const { data, timestamp } = JSON.parse(cached);
+    if (Date.now() - timestamp < CACHE_TTL) {
+      return data; // Return cached data
+    }
+  }
+  
+  const freshData = await fetchFn();
+  await kvs.set(`cache:${key}`, JSON.stringify({ 
+    data: freshData, 
+    timestamp: Date.now() 
+  }));
+  
+  return freshData;
+}
+```
+
+### Important Notes
+- **No automatic expiration** - implement your own TTL logic if needed
+- **Keys are app-scoped** - each app has isolated storage
+- **List operations** may be paginated for large key sets
+- **Store strings only** - serialize objects with `JSON.stringify()`
+- **Handle errors gracefully** - KVS operations can fail
+
+### Cleanup Best Practices
+1. Clean up orphan entries when configuration changes
+2. Implement periodic cleanup scheduled triggers
+3. Delete old cache entries based on TTL
+
+---
+
+## References
+
+- [Atlassian Docs: Forge Storage API](https://developer.atlassian.com/platform/forge/storage/)
