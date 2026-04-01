@@ -24,49 +24,99 @@ A complete documentation suite for building Forge apps that extend Confluence Cl
 
 ### Purpose
 
-The skill provides:
-- **Context-aware guidance**: When Cline detects Forge development work (e.g., working with `manifest.yml`), it activates this skill to provide relevant documentation
-- **Module-specific references**: Complete documentation for workflow validators, conditions, post-functions, and other module types
-- **API endpoint documentation**: Comprehensive reference for Jira REST API (v3), Confluence REST API, and Bitbucket REST API
+Skills provide:
+- **Context-aware guidance**: When Cline detects Forge development work (e.g., working with `manifest.yml`), it activates the relevant skill to provide relevant documentation
+- **Module-specific references**: Complete documentation for all module types
+- **API endpoint documentation**: Comprehensive reference for Jira REST API (v3) and Confluence REST API (v2)
 - **Best practices**: Proven patterns for Forge app development including resolver patterns, bridge API usage, and UI development
 
 ### How Skills Work in Cline
 
-1. **Automatic Activation**: Skills are activated based on file context (e.g., working with `manifest.yml` triggers this skill)
+1. **Automatic Activation**: Skills are activated based on file context (e.g., working with `manifest.yml` triggers the relevant skill)
 2. **Context Integration**: The skill's documentation is integrated into the AI's knowledge base for the current session
 3. **Persistent Access**: Once activated, the skill remains active for related tasks in that session
 4. **Skill Definition**: Skills are defined in a `SKILL.md` file with metadata (name, description) that Cline uses to identify when to activate
 
+---
+
 ## Installation
 
-To install this skill (or any other) on your system:
+To install both skills on your system:
 
 ```bash
 # Create the skills directory if it doesn't exist
 mkdir -p ~/.cline/skills
 
-# Copy the skill into place
+# Copy both skills into place
 cp -r atlassian-jira-forge-skill ~/.cline/skills/
+cp -r atlassian-confluence-forge-skill ~/.cline/skills/
+
+# Or copy all skills at once (from the repo root)
+cp -r .cline/skills/* ~/.cline/skills/
 ```
 
-Cline automatically detects skills in `~/.cline/skills/` and activates them when appropriate.
+Cline automatically detects skills in `~/.cline/skills/` and activates them when appropriate based on file context.
 
-## Structure of This Skill
+---
 
-This skill is organized by functionality for Jira Forge development:
+## Atlassian Jira Forge Skill
+
+### Quick Start
+
+```yaml
+# manifest.yml - Basic Forge app for Jira
+modules:
+  jira:workflowValidator:
+    - key: my-validator
+      name: My Validator
+      description: Validates issue fields
+      function: validateFields
+      
+  scheduledTrigger:
+    - key: daily-task
+      cron: "0 0 * * *"
+      function: runDailyTask
+      
+  resource:
+    - key: config-ui
+      path: src/config-ui.jsx
+```
+
+### Documentation Index
+
+| File | Description |
+|------|-------------|
+| `SKILL.md` | Main entry point with trigger description for Cline |
+| `docs/01-core-concepts.md` | Core Forge concepts, manifest structure |
+| `docs/02-workflow-validators.md` | Complete validator documentation with examples |
+| `docs/03-workflow-conditions.md` | Complete condition documentation |
+| `docs/04-workflow-post-functions.md` | Complete post-function documentation |
+| `docs/05-events-payloads.md` | Event structures and payloads reference |
+| `docs/06-api-endpoints-enhanced.md` | Enhanced Jira REST API v3 reference |
+| `docs/07-permissions-scopes.md` | Permissions and scopes reference |
+| `docs/08-cli-commands.md` | Forge CLI commands reference |
+| `docs/09-scheduled-triggers.md` | Scheduled trigger modules |
+| `docs/10-automation-actions.md` | Jira automation action modules |
+| `docs/11-event-filters.md` | Event filters with Jira expressions |
+| `docs/12-dashboard-widgets.md` | Dashboard widget modules |
+| `docs/13-merge-checks.md` | Bitbucket merge check modules |
+| `docs/15-bridge-api-reference.md` | Bridge API for frontend-backend communication |
+| `docs/16-resolver-patterns.md` | Resolver pattern implementation guide |
+| `docs/17-ui-kit-components.md` | UI Kit components reference |
+| `docs/18-custom-ui-advanced.md` | Advanced Custom UI development guide |
+
+### Structure
 
 ```
 .cline/skills/atlassian-jira-forge-skill/
 ├── SKILL.md                           # Skill metadata and main documentation
-├── docs/                              # Documentation files (01-18)
+├── docs/                              # Documentation files (01-24)
 │   ├── 01-core-concepts.md           # Core Forge concepts, manifest structure
-│   ├── 02-ui-modifications.md        # UI modification modules
 │   ├── 02-workflow-validators.md     # Workflow validator documentation
 │   ├── 03-workflow-conditions.md     # Workflow condition documentation
 │   ├── 04-workflow-post-functions.md # Workflow post function documentation
 │   ├── 05-events-payloads.md         # Event structures and payloads reference
 │   ├── 06-api-endpoints-enhanced.md  # Enhanced Jira REST API reference
-│   ├── 06-api-endpoints.md           # API endpoints (original)
 │   ├── 07-permissions-scopes.md      # Permissions and scopes reference
 │   ├── 08-cli-commands.md            # CLI commands reference
 │   ├── 09-scheduled-triggers.md      # Scheduled trigger modules
@@ -78,82 +128,27 @@ This skill is organized by functionality for Jira Forge development:
 │   ├── 15-bridge-api-reference.md    # Bridge API for frontend-backend communication
 │   ├── 16-resolver-patterns.md       # Resolver pattern implementation guide
 │   ├── 17-ui-kit-components.md       # UI Kit components reference
-│   └── 18-custom-ui-advanced.md      # Advanced Custom UI development guide
+│   ├── 18-custom-ui-advanced.md      # Advanced Custom UI development guide
+│   ├── 20-performance-optimization.md
+│   ├── 21-complete-custom-ui-guide.md
+│   ├── 22-jira-service-management.md
+│   ├── 23-real-world-patterns.md     # Real-world patterns with code examples
+│   └── 24-advanced-topics.md         # Advanced topics and best practices
 ├── api-endpoints/                     # External API reference files (not included)
-└── events-payloads/                   # External event payload files (not included)
+├── events-payloads/                   # External event payload files (not included)
+└── templates/                         # YAML manifest templates
+    ├── condition.yml                  # Workflow condition template
+    ├── post-function.yml              # Workflow post function template
+    ├── trigger-with-filter.yml        # Trigger with filter template
+    ├── ui-modifications.yml           # UI modifications template
+    ├── scheduled-trigger.yml          # Scheduled trigger template
+    ├── dashboard-gadget.yml           # Dashboard gadget template
+    ├── validator.yml                  # Validator template
+    └── bitbucket-merge-check.yml      # Bitbucket merge check template
 ```
 
-## What's Included
+### Module Types
 
-### Core Documentation
-| File | Description |
-|------|-------------|
-| `SKILL.md` | Main instructions and quick reference guide for Cline |
-| `docs/01-core-concepts.md` | Core Forge concepts, manifest structure, context object |
-
-### Jira Workflow Modules
-| File | Description |
-|------|-------------|
-| `docs/02-workflow-validators.md` | Complete workflow validator documentation with examples |
-| `docs/03-workflow-conditions.md` | Complete workflow condition documentation |
-| `docs/04-workflow-post-functions.md` | Complete workflow post function documentation |
-
-### Events & Payloads
-| File | Description |
-|------|-------------|
-| `docs/05-events-payloads.md` | Event structures and payloads reference |
-| `events-payloads/jira-events.md` | Jira issue, comment, workflow events (external) |
-| `events-payloads/bitbucket-events.md` | Bitbucket repository, PR events (external) |
-| `events-payloads/confluence-events.md` | Confluence page, space events (external) |
-
-### API Endpoints
-| File | Description |
-|------|-------------|
-| `docs/06-api-endpoints-enhanced.md` | **Enhanced** Jira REST API reference with comprehensive endpoints |
-| `api-endpoints/jira-rest-api.md` | Comprehensive Jira Cloud REST API v3 reference (external) |
-| `api-endpoints/bitbucket-rest-api.md` | Bitbucket Cloud REST API v2.0 reference (external) |
-| `api-endpoints/confluence-rest-api.md` | Confluence Cloud REST API v2 reference (external) |
-
-### Permissions & CLI
-| File | Description |
-|------|-------------|
-| `docs/07-permissions-scopes.md` | Permissions and scopes reference |
-| `docs/08-cli-commands.md` | CLI commands reference |
-
-### Advanced Features
-| File | Description |
-|------|-------------|
-| `docs/09-scheduled-triggers.md` | Scheduled trigger modules for recurring tasks |
-| `docs/10-automation-actions.md` | Jira automation action modules |
-| `docs/11-event-filters.md` | Event filters with Jira expressions |
-| `docs/12-dashboard-widgets.md` | Dashboard widget modules |
-| `docs/13-merge-checks.md` | Bitbucket merge check modules |
-| `docs/14-content-properties.md` | Confluence content property modules |
-
-### Custom UI Development
-| File | Description |
-|------|-------------|
-| `docs/15-bridge-api-reference.md` | Bridge API for frontend-backend communication |
-| `docs/16-resolver-patterns.md` | Resolver pattern implementation guide |
-| `docs/17-ui-kit-components.md` | UI Kit components reference ( Buttons, Forms, Layout, etc.) |
-| `docs/18-custom-ui-advanced.md` | Advanced Custom UI development guide |
-
-## When to Use This Skill
-
-This skill activates automatically when working on:
-- Creating **workflow validators** - validate issue fields before transition completes
-- Creating **workflow conditions** - control visibility of transitions
-- Creating **workflow post-functions** - execute logic after transition
-- Building custom UIs for workflow rule configuration
-- Making Jira REST API calls from a Forge app
-- Setting up scheduled triggers for recurring tasks
-- Creating automation actions in Jira rules
-- Developing dashboard widgets
-- Implementing Bitbucket merge checks
-
-## Complete Module Types Reference
-
-### Jira Modules
 | Module Type | Documentation |
 |-------------|---------------|
 | `jira:workflowValidator` | [Workflow Validators](./docs/02-workflow-validators.md) |
@@ -161,20 +156,6 @@ This skill activates automatically when working on:
 | `jira:workflowPostFunction` | [Workflow Post Functions](./docs/04-workflow-post-functions.md) |
 | `scheduledTrigger` | [Scheduled Triggers](./docs/09-scheduled-triggers.md) |
 | `action` | [Automation Actions](./docs/10-automation-actions.md) |
-
-### Confluence Modules
-| Module Type | Documentation |
-|-------------|---------------|
-| `confluence:macro` | Macro Module (external) |
-| `confluence:fullPage` | Full Page Module (external) |
-| `contentProperty` | Content Property Module (external) |
-
-### Bitbucket Modules
-| Module Type | Documentation |
-|-------------|---------------|
-| `bitbucket:mergeCheck` | [Merge Check Module](./docs/13-merge-checks.md) |
-
-## API Reference Summary
 
 ### Jira REST API (Comprehensive)
 
@@ -220,23 +201,174 @@ The skill includes extensive documentation for Jira Cloud REST API v3 endpoints:
 - Upload attachments to issues
 - Manage audit logs for system activity
 
-### Bitbucket REST API (v2.0)
-- Repository operations (CRUD, branch protection)
-- Pull request management (create, review, merge, comments)
-- Commit history and diff operations
-- Pipeline execution and management
-- Webhook configuration
+---
 
-### Confluence REST API (v2)
-- Content operations (pages, blogs, comments)
-- Space management
-- Attachment handling
-- Label management
-- Permission controls
+## Atlassian Confluence Forge Skill
 
-### Forge Runtime APIs
+### Quick Start
 
-The skill documents these critical Forge runtime libraries:
+```yaml
+# manifest.yml - Basic Forge app for Confluence
+modules:
+  confluence:pageCustomUi:
+    - key: my-page-extension
+      resource: main
+      icon: icon.png
+      title: My Extension Title
+      
+  webhook:
+    - destination: page-webhook
+      event: confluence:page:created
+      
+  scheduledTrigger:
+    - key: daily-sync
+      cron: "0 2 * * *"
+      function: runDailySync
+      
+  resource:
+    - key: main
+      path: src/page-custom-ui.jsx
+```
+
+### Documentation Index
+
+| File | Description |
+|------|-------------|
+| `SKILL.md` | Main entry point with trigger description for Cline |
+| `docs/01-core-concepts.md` | Core Forge concepts, manifest structure |
+| `docs/02-page-custom-ui.md` | Page extensions implementation guide |
+| `docs/03-space-settings.md` | Space configuration panels |
+| `docs/04-blogpost-custom-ui.md` | Blog post extensions guide |
+| `docs/05-dashboard-widgets.md` | Dashboard gadgets/widgets implementation |
+| `docs/06-content-properties.md` | Content properties storage patterns |
+| `docs/07-webhooks-events.md` | Webhook events (page created/updated/deleted) |
+| `docs/08-api-endpoints.md` | Confluence REST API v2 reference |
+| `docs/problem-patterns.md` | Common implementation patterns with code examples |
+| `docs/when-to-use-which.md` | Decision tree for module selection |
+
+### Structure
+
+```
+.cline/skills/atlassian-confluence-forge-skill/
+├── SKILL.md                           # Skill metadata and main documentation
+├── docs/                              # Documentation files
+│   ├── 01-core-concepts.md           # Core Forge concepts, manifest structure
+│   ├── 02-page-custom-ui.md          # Page extensions implementation guide
+│   ├── 03-space-settings.md          # Space configuration panels
+│   ├── 04-blogpost-custom-ui.md      # Blog post extensions guide
+│   ├── 05-dashboard-widgets.md       # Dashboard gadgets/widgets implementation
+│   ├── 06-content-properties.md      # Content properties storage patterns
+│   ├── 07-webhooks-events.md         # Webhook events and payloads
+│   └── 08-api-endpoints.md           # Confluence REST API v2 reference
+├── templates/                         # YAML manifest templates
+│   ├── content-property-storage.yml  # Content property CRUD operations
+│   ├── dashboard-gadget.yml          # Dashboard widget template
+│   ├── page-custom-ui.yml            # Page extension configuration
+│   ├── scheduled-trigger.yml         # Scheduled background tasks
+│   ├── space-settings.yml            # Space settings panel configuration
+│   └── webhook-handler.yml           # Webhook event handler template
+└── when-to-use-which.md              # Decision tree for module selection
+```
+
+### Module Types
+
+| Module Type | Documentation |
+|-------------|---------------|
+| `confluence:pageCustomUi` | [Page Extensions](./docs/02-page-custom-ui.md) |
+| `confluence:spaceSettings` | [Space Settings Panels](./docs/03-space-settings.md) |
+| `confluence:blogPostCustomUi` | [Blog Post Extensions](./docs/04-blogpost-custom-ui.md) |
+| `dashboardGadget` | [Dashboard Gadgets](./docs/05-dashboard-widgets.md) |
+
+### Confluence REST API v2
+
+The skill includes comprehensive documentation for Confluence Cloud REST API v2:
+
+#### Page Operations
+- Get, create, update, delete pages
+- Content properties storage
+- Attachments management
+- Comments handling
+
+#### Blog Post Operations
+- Get, create, update blog posts
+- Content properties for blog posts
+
+#### Space Operations
+- List and get spaces
+- Space properties management
+
+#### Webhook Events
+- `confluence:page:created` - Page creation events
+- `confluence:page:updated` - Page update events
+- `confluence:page:deleted` - Page deletion events
+
+---
+
+## Comparison: Jira vs Confluence Forge
+
+| Feature | Jira Forge | Confluence Forge |
+|---------|------------|------------------|
+| **Primary Use Case** | Workflow automation, issue management | Content extensions, knowledge base apps |
+| **Custom UI Locations** | Workflow rules (validators, conditions) | Pages, Blog Posts, Space Settings |
+| **Storage Pattern** | Issue properties | Content Properties (per content type) |
+| **Event System** | Workflow transitions | Page/blogpost created/updated/deleted |
+| **API Version** | REST API v3 | REST API v2 |
+| **Common Patterns** | Validators, conditions, post-functions | Page extensions, space settings panels |
+
+---
+
+## When to Use Which Skill
+
+### Jira Forge Skill
+Use this skill when:
+- Creating **workflow validators** - validate issue fields before transition completes
+- Creating **workflow conditions** - control visibility of transitions
+- Creating **workflow post-functions** - execute logic after transition
+- Building custom UIs for workflow rule configuration
+- Making Jira REST API calls from a Forge app
+- Setting up scheduled triggers for recurring tasks
+- Creating automation actions in Jira rules
+- Developing dashboard widgets
+
+### Confluence Forge Skill
+Use this skill when:
+- Adding custom UI to **Confluence pages** (page extensions)
+- Building **space configuration panels** (admin-level settings)
+- Creating **blog post extensions**
+- Developing **dashboard gadgets**
+- Handling Confluence **webhooks** (page created/updated/deleted)
+- Using Confluence REST API v2 from a Forge app
+- Storing app data with content using Content Properties
+
+---
+
+## Quick Reference
+
+### Jira Tasks
+| Task | Module Type / API |
+|------|-------------------|
+| Validate fields before transition | `jira:workflowValidator` |
+| Control transition visibility | `jira:workflowCondition` |
+| Execute logic after transition | `jira:workflowPostFunction` |
+| Schedule recurring tasks | `scheduledTrigger` |
+| Create automation actions | `action` |
+| Jira REST API calls | `/rest/api/3/*` |
+
+### Confluence Tasks
+| Task | Module Type / API |
+|------|-------------------|
+| Add UI to pages | `confluence:pageCustomUi` |
+| Space configuration | `confluence:spaceSettings` |
+| Blog post extensions | `confluence:blogPostCustomUi` |
+| Dashboard gadgets | `dashboardGadget` |
+| Webhook handlers | `webhook` |
+| Confluence REST API | `/wiki/api/v2/*` |
+
+---
+
+## Forge Runtime APIs
+
+The skills document these critical Forge runtime libraries:
 
 | Library | Purpose |
 |---------|---------|
@@ -246,114 +378,7 @@ The skill documents these critical Forge runtime libraries:
 | `@forge/kvs` | Key-value storage for persistence |
 | `@forge/bridge` | Frontend navigation and context access |
 
-## Quick Reference
-
-| Task | Module Type / API |
-|------|-------------------|
-| Validate fields before transition | `jira:workflowValidator` |
-| Control transition visibility | `jira:workflowCondition` |
-| Execute logic after transition | `jira:workflowPostFunction` |
-| Schedule recurring tasks | `scheduledTrigger` |
-| Create automation actions | `action` |
-| Custom UI development | @forge/bridge, @forge/resolver |
-| Create Jira issues | Jira REST API `/rest/api/3/issue` |
-| Search issues with JQL | Jira REST API `/rest/api/3/search` |
-
-## Cline Skill Architecture
-
-### Skill Activation Process
-
-1. **File Detection**: When Cline detects files like `manifest.yml`, it identifies Forge-related work
-2. **Skill Matching**: Cline checks for skills that match the project context
-3. **Documentation Loading**: The skill's documentation from `SKILL.md` and related files is loaded
-4. **Context Integration**: Cline uses this documentation to guide responses and suggestions
-
-### Skill Files Explained
-
-| File | Purpose |
-|------|---------|
-| `SKILL.md` | Contains skill metadata (name, description) and core documentation that defines when/why the skill should be used |
-| `docs/*.md` | Detailed technical documentation for each module type |
-| `api-endpoints/*.md` | Comprehensive API endpoint references (optional, can reference external sources) |
-
-### Best Practices for Cline Skills
-
-1. **Clear Activation Triggers**: Document what file patterns or project types activate the skill
-2. **Module-Specific Documentation**: Provide detailed documentation for each module type
-3. **Code Examples**: Include working code examples for common use cases
-4. **Error Handling**: Document common errors and their solutions
-5. **Quick Reference Tables**: Use tables for quick lookup of options and configurations
-
-## Skill Configuration
-
-The skill is defined in `SKILL.md` with:
-
-```yaml
 ---
-name: atlassian-jira-forge-skill
-description: Atlassian Jira Forge app development. Use when creating workflow validators, conditions, post-functions, custom UIs for workflow rules, or integrating with Jira REST APIs from a Forge app.
----
-```
-
-### Metadata Fields
-
-| Field | Description |
-|-------|-------------|
-| `name` | Unique identifier for the skill (used internally by Cline) |
-| `description` | Human-readable description that explains when this skill should be activated |
-
-## Example: Workflow Validator Implementation
-
-A complete example from the documentation:
-
-```yaml
-# manifest.yml
-modules:
-  jira:workflowValidator:
-    - key: ai-content-validator
-      name: AI Content Validator
-      description: Validates issue content using AI
-      function: validateContent
-      
-      create:
-        resource: config-ui
-```
-
-```javascript
-// src/index.js
-export const validateContent = async (args) => {
-  const { issue, configuration } = args;
-  
-  // Configuration contains user's settings
-  const fieldId = configuration.fieldId || 'description';
-  
-  // Validate and return result
-  if (isValid) {
-    return { result: true };  // Allow transition
-  } else {
-    return { 
-      result: false, 
-      errorMessage: "Validation failed" 
-    };
-  }
-};
-```
-
-## Event Filters with Jira Expressions
-
-Event filters enable selective event handling using Jira expressions:
-
-```yaml
-modules:
-  trigger:
-    - key: project-specific-trigger
-      events:
-        - avi:jira:created:issue
-      filter: issue.fields.project.key == 'PROJ'
-      function: handleProjectIssues
-```
-
-Available expression functions include `contains()`, `startsWith()`, `greaterThan()`, and more.
 
 ## Best Practices
 
@@ -369,6 +394,8 @@ Available expression functions include `contains()`, `startsWith()`, `greaterTha
 2. Use the Bridge API for secure backend communication
 3. Handle errors gracefully in components
 4. Test across different screen sizes
+
+---
 
 ## Troubleshooting
 
@@ -388,6 +415,8 @@ forge tunnel        # Local testing with live environment
 forge lint          # Check manifest/code for issues
 ```
 
+---
+
 ## Additional Resources
 
 The skill references external documentation in the following directories (not included):
@@ -400,3 +429,9 @@ The skill references external documentation in the following directories (not in
 For more information about Cline skills:
 - [Cline GitHub Repository](https://github.com/cline)
 - [Cline Skills Documentation](https://github.com/cline/tree/main/skills)
+
+---
+
+## License
+
+Copyright © 2026 LeanZero SRL. All rights reserved.
