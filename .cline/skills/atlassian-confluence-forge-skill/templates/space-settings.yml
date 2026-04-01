@@ -1,0 +1,292 @@
+# Space Settings Panel Template for Confluence Forge Apps
+# 
+# This template provides a complete space settings panel configuration
+# that allows administrators to configure app settings at the space level.
+
+app:
+  id: ari:cloud:ecosystem::app/{your-app-id}
+  name: {Your App Name}
+
+permissions:
+  scopes:
+    - read:confluence-content:*
+    - write:confluence-content:*
+  scoped:
+    - spaces:${SPACE_ID}
+
+modules:
+  confluence:spaceSettings:
+    - key: {settings-key}
+      title: {Settings Panel Title}
+      resource: main
+      icon: settings-icon.png
+
+  resource:
+    - key: main
+      path: src/space-settings.jsx
+
+# Example React Component Structure (src/space-settings.jsx):
+#
+# import React, { useEffect, useState } from 'react';
+# import { api, routeHandlers } from '@forge/bridge';
+# import { Button } from '@atlaskit/button';
+# import { TextField } from '@atlaskit/textfield';
+# import { Checkbox } from '@atlaskit/checkbox';
+#
+# export default function SpaceSettings() {
+#   const [spaceKey, setSpaceKey] = useState(null);
+#   const [settings, setSettings] = useState({
+#     enabled: false,
+#     syncEnabled: false,
+#     externalSystemUrl: '',
+#     apiKey: ''
+#   });
+#   const [saving, setSaving] = useState(false);
+#   const [message, setMessage] = useState(null);
+#
+#   useEffect(() => {
+#     // Extract space key from route
+#     const route = routeHandlers.getCurrentRoute();
+#     // Route format: /spaces/{spaceKey}/admin/settings
+#     const match = route.path.match(/\/spaces\/([^/]+)\/admin/);
+#     if (match) {
+#       setSpaceKey(match[1]);
+#     }
+#   }, []);
+#
+#   useEffect(() => {
+#     async function loadSettings() {
+#       if (!spaceKey) return;
+#       
+#       try {
+#         const token = await AP.context.getToken();
+#         
+#         // Load settings from space property or your backend
+#         const response = await api.fetch({
+#           url: `/api/space-settings?spaceKey=${spaceKey}`,
+#           headers: { Authorization: `Bearer ${token}` }
+#         });
+#         
+#         if (response.ok) {
+#           const data = await response.json();
+#           setSettings(data);
+#         }
+#       } catch (error) {
+#         console.error('Failed to load settings:', error);
+#       }
+#     }
+#
+#     loadSettings();
+#   }, [spaceKey]);
+#
+#   const handleSave = async () => {
+#     setSaving(true);
+#     setMessage(null);
+#     
+#     try {
+#       const token = await AP.context.getToken();
+#       
+#       const response = await api.fetch({
+#         url: `/api/space-settings?spaceKey=${spaceKey}`,
+#         method: 'PUT',
+#         headers: { 
+#           Authorization: `Bearer ${token}`,
+#           'Content-Type': 'application/json'
+#         },
+#         body: JSON.stringify(settings)
+#       });
+#       
+#       if (response.ok) {
+#         setMessage({ type: 'success', text: 'Settings saved successfully!' });
+#       } else {
+#         setMessage({ type: 'error', text: 'Failed to save settings' });
+#       }
+#     } catch (error) {
+#       console.error('Failed to save settings:', error);
+#       setMessage({ type: 'error', text: error.message });
+#     } finally {
+#       setSaving(false);
+#     }
+#   };
+#
+#   if (!spaceKey) {
+#     return <div>Loading...</div>;
+#   }
+#
+#   return (
+#     <div className="space-settings">
+#       <h2>{Settings Panel Title}</h2>
+#       
+#       {message && (
+#         <div className={`message ${message.type}`}>
+#           {message.text}
+#         </div>
+#       )}
+#       
+#       <div className="setting-group">
+#         <label>
+#           <input
+#             type="checkbox"
+#             checked={settings.enabled}
+#             onChange={(e) => setSettings({ ...settings, enabled: e.target.checked })}
+#           />
+#           Enable app for this space
+#         </label>
+#       </div>
+#       
+#       {settings.enabled && (
+#         <>
+#           <div className="setting-group">
+#             <TextField
+#               label="External System URL"
+#               value={settings.externalSystemUrl}
+#               onChange={(e) => setSettings({ ...settings, externalSystemUrl: e.target.value })}
+#               placeholder="https://example.com/api"
+#             />
+#           </div>
+#           
+#           <div className="setting-group">
+#             <TextField
+#               label="API Key"
+#               type="password"
+#               value={settings.apiKey}
+#               onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
+#               placeholder="Enter API key"
+#             />
+#           </div>
+#           
+#           <div className="setting-group">
+#             <label>
+#               <input
+#                 type="checkbox"
+#                 checked={settings.syncEnabled}
+#                 onChange={(e) => setSettings({ ...settings, syncEnabled: e.target.checked })}
+#               />
+#               Enable automatic synchronization
+#             </label>
+#           </div>
+#         </>
+#       )}
+#       
+#       <div className="setting-actions">
+#         <Button onClick={handleSave} disabled={saving}>
+#           {saving ? 'Saving...' : 'Save Settings'}
+#         </Button>
+#       </div>
+#     </div>
+#   );
+# }
+
+# Space Properties vs Content Properties:
+# 
+# Space-level settings can be stored in several ways:
+# 
+# 1. Backend Database - Store settings keyed by spaceKey
+#    Pros: Clean separation, easy to query across spaces
+#    Cons: Requires backend infrastructure
+#
+# 2. Content Property on a dedicated config page per space
+#    Pros: Uses Confluence storage, no backend needed
+#    Cons: More complex to implement
+#
+# 3. Space property (if available in your Confluence version)
+#    Pros: Native space-level storage
+#    Cons: Limited availability
+#
+# Example: Storing space settings using content properties on a config page
+#
+# async function getSpaceSettings(spaceKey, token) {
+#   // Find or use a dedicated configuration page in the space
+#   const searchResponse = await api.fetch({
+#     url: `/wiki/api/v2/search?cql=space=${spaceKey}%20AND%20title="App+Configuration"`,
+#     headers: { Authorization: `Bearer ${token}` }
+#   });
+#   
+#   const searchData = await searchResponse.json();
+#   
+#   if (!searchData.results || searchData.results.length === 0) {
+#     return null; // No settings page exists yet
+#   }
+#   
+#   const configPageId = searchData.results[0].id;
+#   
+#   // Get the settings property from the config page
+#   const propsResponse = await api.fetch({
+#     url: `/wiki/api/v2/pages/${configPageId}/properties/myapp:spaceSettings`,
+#     headers: { Authorization: `Bearer ${token}` }
+#   });
+#   
+#   if (propsResponse.status === 404) return null;
+#   
+#   const propsData = await propsResponse.json();
+#   return propsData.value;
+# }
+#
+# async function setSpaceSettings(spaceKey, settings, token) {
+#   // Similar approach - find/create config page and store property
+#   const configPageId = await getOrCreateConfigPage(spaceKey, token);
+#   
+#   await api.fetch({
+#     url: `/wiki/api/v2/pages/${configPageId}/properties/myapp:spaceSettings`,
+#     method: 'PUT',
+#     headers: { 
+#       Authorization: `Bearer ${token}`,
+#       'Content-Type': 'application/json'
+#     },
+#     body: JSON.stringify({ value: settings })
+#   });
+# }
+
+# Common Space Settings Use Cases:
+# 1. Enable/disable app features for specific spaces
+# 2. Configure space-level API keys or credentials
+# 3. Set space-specific sync preferences
+# 4. Define space-level permissions and access control
+# 5. Customize behavior per space (e.g., different external systems)
+
+# Styling Example:
+#
+# <style>
+# .space-settings {
+#   padding: 20px;
+#   max-width: 600px;
+# }
+# 
+# .space-settings h2 {
+#   margin-top: 0;
+#   color: #172b4d;
+# }
+# 
+# .setting-group {
+#   margin-bottom: 20px;
+# }
+# 
+# .setting-actions {
+#   margin-top: 30px;
+#   padding-top: 20px;
+#   border-top: 1px solid #e1e3e6;
+# }
+# 
+# .message {
+#   padding: 10px;
+#   margin-bottom: 20px;
+#   border-radius: 4px;
+# }
+# 
+# .message.success {
+#   background-color: #d4edda;
+#   color: #155724;
+# }
+# 
+# .message.error {
+#   background-color: #f8d7da;
+#   color: #721c24;
+# }
+# </style>
+
+# Testing Your Space Settings Panel:
+# 1. Deploy the app: forge deploy
+# 2. Install the app in your Confluence instance
+# 3. Navigate to a space: /spaces/{spaceKey}/view
+# 4. Click "Space settings" or "More settings"
+# 5. Your panel should appear in the settings menu

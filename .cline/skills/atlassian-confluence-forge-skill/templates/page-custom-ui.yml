@@ -1,0 +1,59 @@
+# Page Custom UI Module Template
+# Add custom React components to Confluence pages
+# Location: https://developer.atlassian.com/cloud/confluence/modules/confluence-page-custom-ui/
+
+modules:
+  confluence:pageCustomUi:
+    - key: {{APP_KEY}}-page-extension
+      resource: main
+      icon: icon.png
+      title: {{EXTENSION_TITLE}}
+      location: confluence-page-custom-ui-top
+
+  # Optional: Add a button in the page menu (if supported)
+  # confluence:pageMenu:
+  #   - key: {{APP_KEY}}-menu-item
+  #     resource: menu
+  #     title: Open {{EXTENSION_TITLE}}
+      
+  resources:
+    - key: main
+      path: src/page-custom-ui.jsx
+      
+    # Optional icon for the extension
+    # - key: icon
+    #   path: static/icon.png
+
+---
+# Example manifest configuration with permissions:
+
+# app:
+#   id: ari:cloud:ecosystem::app/{{APP_ID}}
+#   name: {{APP_NAME}}
+#   description: Adds custom UI to Confluence pages
+# 
+# permissions:
+#   scopes:
+#     - read:confluence-content:*
+#     # For modifying content:
+#     # - write:confluence-content:*
+#   scoped:
+#     - spaces:${SPACE_ID}
+#     - sites:${SITE_URL}
+---
+
+# Usage Example:
+# 1. Replace {{APP_KEY}} with your app's unique key
+# 2. Replace {{EXTENSION_TITLE}} with display title
+# 3. Create src/page-custom-ui.jsx with your React component
+# 4. Deploy: forge deploy --verbose
+# 5. Register in Confluence: forge register
+
+# Common location values:
+# - confluence-page-custom-ui-top (default)
+# - confluence-page-custom-ui-bottom
+
+# Notes:
+# - The extension renders in an iframe within the page
+# - Use AP.context.getToken() to authenticate API calls
+# - Extract page ID from routeHandlers.getCurrentRoute()

@@ -1,0 +1,82 @@
+# Content Property Storage Pattern Template
+# Store app data tied to pages, blog posts, or spaces
+# Documentation: https://developer.atlassian.com/cloud/confluence/rest/v2/
+
+# Content Properties API endpoints:
+# - GET  /wiki/api/v2/pages/{id}/properties/{key}
+# - PUT  /wiki/api/v2/pages/{id}/properties/{key}  
+# - DELETE /wiki/api/v2/pages/{id}/properties/{key}
+# - GET  /wiki/api/v2/pages/{id}/properties
+
+---
+# Helper functions for content property operations:
+
+# import { api } from '@forge/bridge';
+
+# // Save a property to a page
+# async function savePageProperty(pageId, key, value, token) {
+#   const response = await api.fetch({
+#     url: `/wiki/api/v2/pages/${pageId}/properties/${key}`,
+#     method: 'PUT',
+#     headers: { 
+#       Authorization: `Bearer ${token}`,
+#       'Content-Type': 'application/json'
+#     },
+#     body: JSON.stringify({ value })
+#   });
+#   return response.ok;
+# }
+
+# // Get a property from a page
+# async function getPageProperty(pageId, key, token) {
+#   const response = await api.fetch({
+#     url: `/wiki/api/v2/pages/${pageId}/properties/${key}`,
+#     headers: { Authorization: `Bearer ${token}` }
+#   });
+#   return response.ok ? response.json() : null;
+# }
+
+# // Delete a property from a page
+# async function deletePageProperty(pageId, key, token) {
+#   const response = await api.fetch({
+#     url: `/wiki/api/v2/pages/${pageId}/properties/${key}`,
+#     method: 'DELETE',
+#     headers: { Authorization: `Bearer ${token}` }
+#   });
+#   return response.ok;
+# }
+
+# // Get all properties for a page
+# async function getPageProperties(pageId, token) {
+#   const response = await api.fetch({
+#     url: `/wiki/api/v2/pages/${pageId}/properties`,
+#     headers: { Authorization: `Bearer ${token}` }
+#   });
+#   return response.ok ? response.json() : [];
+# }
+
+# // Same patterns apply to blog posts and spaces:
+# // - /wiki/api/v2/blogposts/{id}/properties/{key}
+# // - /wiki/api/v2/spaces/{id}/properties/{key}
+---
+
+# Common Property Keys by Use Case:
+
+# Sync/Integration:
+# - 'app-sync-status'        # Last sync timestamp and status
+# - 'app-external-id'        # External system reference ID  
+# - 'app-sync-history'       # Array of recent sync operations
+
+# Configuration:
+# - 'app-page-config'        # Page-specific configuration overrides
+# - 'app-feature-toggles'    # Feature flags for this page
+
+# State Tracking:
+# - 'app-processing-state'   # Current processing state (pending, in-progress, complete)
+# - 'app-metadata'           # Custom metadata stored with the page
+
+# Notes:
+# - Properties are key-value pairs stored with content
+# - Each property key must be unique per content item
+# - Property values can be any JSON-serializable type
+# - Use space properties for app-wide configuration

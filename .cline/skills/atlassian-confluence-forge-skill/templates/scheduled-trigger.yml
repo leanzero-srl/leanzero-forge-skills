@@ -1,0 +1,81 @@
+# Scheduled Trigger Template for Confluence Background Tasks
+# Run periodic background jobs (sync, cleanup, reconciliation)
+# Documentation: https://developer.atlassian.com/cloud/forge/modules/function-scheduled/
+
+modules:
+  function.scheduled:
+    - key: sync-scheduler
+      resource: scheduler
+      # Cron syntax: minute hour day-of-month month day-of-week
+      schedule: '0 */6 * * *'     # Every 6 hours
+      
+    - key: cleanup-scheduler  
+      resource: cleanup-handler
+      schedule: '0 0 * * 0'        # Weekly (Sunday at midnight)
+
+  resources:
+    - key: scheduler
+      path: src/scheduled/sync.js
+    - key: cleanup-handler
+      path: src/scheduled/cleanup.js
+      
+---
+# Example scheduler implementation (src/scheduled/sync.js):
+
+# import { api } from '@forge/bridge';
+
+# export default async function handler() {
+#   console.log('Starting scheduled sync...');
+  
+#   const token = await AP.context.getToken();
+#   const lastSyncTime = await getLastSyncTimestamp(token);
+  
+#   // Find pages modified since last sync
+#   const response = await api.fetch({
+#     url: `/wiki/api/v2/search?cql=type=page%20AND%20lastModified>${lastSyncTime}`,
+#     headers: { Authorization: `Bearer ${token}` }
+#   });
+
+#   if (response.ok) {
+#     const data = await response.json();
+#     console.log(`Found ${data.results.length} pages to sync`);
+    
+#     for (const page of data.results) {
+#       await syncPage(page, token);
+#     }
+#   }
+  
+#   await setLastSyncTimestamp(token);
+#   console.log('Scheduled sync completed');
+# }
+
+# async function getLastSyncTimestamp(token) {
+#   // Retrieve from storage or return default
+#   return '2024-01-01T00:00:00.000Z';
+# }
+
+# async function setLastSyncTimestamp(token) {
+#   // Store current timestamp
+# }
+---
+
+# Cron Syntax Reference:
+# *    *    *    *    *
+# -    -    -    -    -
+# |    |    |    |    |
+# |    |    |    |    +----- day of week (0-6) (Sunday=0)
+# |    |    |    +---------- month (1-12)
+# |    |    +--------------- day of month (1-31)
+# |    +-------------------- hour (0-23)
+# +------------------------- minute (0-59)
+
+# Common schedules:
+# - Every 15 minutes: '*/15 * * * *'
+# - Every hour:       '0 * * * *'
+# - Daily at midnight:'0 0 * * *'
+# - Weekly:           '0 0 * * 0'
+
+# Notes:
+# - Minimum schedule interval is 6 hours for free tier
+# - Premium tier allows more frequent schedules
+# - Combine with webhooks for hybrid real-time + reconciliation approach

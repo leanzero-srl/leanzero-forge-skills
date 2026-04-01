@@ -1,0 +1,169 @@
+# Dashboard Gadget Template for Confluence Forge Apps
+# 
+# This template provides a complete dashboard gadget configuration
+# that can be customized for your specific use case.
+
+app:
+  id: ari:cloud:ecosystem::app/{your-app-id}
+  name: {Your App Name}
+
+permissions:
+  scopes:
+    - read:confluence-content:*
+    # Add write scope if gadget needs to modify content
+    # - write:confluence-content:*
+  scoped:
+    - spaces:${SPACE_ID}
+
+modules:
+  confluence:dashboardGadget:
+    - key: {gadget-key}
+      title: {Gadget Title}
+      description: {Brief description of what this gadget does}
+      resource: main
+      icon: dashboard-icon.png
+      width: 300
+      height: 400
+      resizable: true
+      # Optional: Add configuration dialog
+      # configurationResource: config
+
+  resource:
+    - key: main
+      path: src/dashboard-gadget.jsx
+    # Uncomment if using configuration dialog
+    # - key: config
+    #   path: src/dashboard-gadget-config.jsx
+
+# Example React Component Structure (src/dashboard-gadget.jsx):
+#
+# import React, { useEffect, useState } from 'react';
+# import { api } from '@forge/bridge';
+#
+# export default function DashboardGadget() {
+#   const [data, setData] = useState(null);
+#   const [loading, setLoading] = useState(true);
+#
+#   useEffect(() => {
+#     async function loadData() {
+#       try {
+#         const token = await AP.context.getToken();
+#         
+#         // Fetch data for your gadget
+#         const response = await api.fetch({
+#           url: '/wiki/api/v2/search?cql=order%20by%20lastmodified&limit=10',
+#           headers: { Authorization: `Bearer ${token}` }
+#         });
+#         
+#         if (response.ok) {
+#           const result = await response.json();
+#           setData(result);
+#         }
+#       } catch (error) {
+#         console.error('Failed to load gadget data:', error);
+#       } finally {
+#         setLoading(false);
+#       }
+#     }
+#
+#     loadData();
+#     
+#     // Optional: Refresh data periodically
+#     const interval = setInterval(loadData, 60000); // Every minute
+#     return () => clearInterval(interval);
+#   }, []);
+#
+#   if (loading) {
+#     return <div className="gadget-loading">Loading...</div>;
+#   }
+#
+#   if (!data || data.results?.length === 0) {
+#     return <div className="gadget-empty">No data available</div>;
+#   }
+#
+#   return (
+#     <div className="dashboard-gadget">
+#       <h3>{Gadget Title}</h3>
+#       <ul>
+#         {data.results.map(item => (
+#           <li key={item.id}>
+#             <a href={`/pages/viewpage.action?pageId=${item.id}`}>
+#               {item.title}
+#             </a>
+#           </li>
+#         ))}
+#       </ul>
+#     </div>
+#   );
+# }
+
+# Example Configuration Dialog (src/dashboard-gadget-config.jsx):
+#
+# import React, { useState } from 'react';
+# import { Button } from '@atlaskit/button';
+# import { TextField } from '@atlaskit/textfield';
+#
+# export default function GadgetConfig() {
+#   const [config, setConfig] = useState({
+#     spaceKey: '',
+#     limit: 10,
+#     sortBy: 'lastmodified'
+#   });
+#
+#   const handleSave = () => {
+#     window.parent.postMessage({
+#       type: 'CONFIGURE',
+#       config: JSON.stringify(config)
+#     }, '*');
+#   };
+#
+#   return (
+#     <div className="gadget-config">
+#       <h3>Configure Gadget</h3>
+#       
+#       <TextField
+#         label="Space Key"
+#         value={config.spaceKey}
+#         onChange={(e) => setConfig({ ...config, spaceKey: e.target.value })}
+#       />
+#       
+#       <TextField
+#         label="Items to display"
+#         type="number"
+#         value={config.limit}
+#         onChange={(e) => setConfig({ ...config, limit: parseInt(e.target.value) })}
+#       />
+#       
+#       <select 
+#         value={config.sortBy}
+#         onChange={(e) => setConfig({ ...config, sortBy: e.target.value })}
+#       >
+#         <option value="lastmodified">Last Modified</option>
+#         <option value="created">Created Date</option>
+#         <option value="title">Title</option>
+#       </select>
+#       
+#       <Button onClick={handleSave}>Save</Button>
+#     </div>
+#   );
+# }
+
+# Common Gadget Use Cases:
+# 1. Recent Activity Feed - Show recently updated pages/blog posts
+# 2. Statistics Dashboard - Display counts and metrics
+# 3. Quick Actions - Buttons for common tasks
+# 4. External Integration - Show data from Jira, GitHub, etc.
+# 5. Search Widget - Quick search functionality
+# 6. Announcements - Display important messages
+
+# Styling Tips:
+# - Gadgets render in an iframe, so include all CSS inline or via import
+# - Use @atlaskit components for consistent styling with Confluence
+# - Keep gadgets lightweight and fast-loading
+# - Consider responsive design if resizable is enabled
+
+# Performance Best Practices:
+# - Cache data and refresh periodically instead of on every render
+# - Limit the amount of data fetched (use pagination if needed)
+# - Use efficient queries with CQL filters
+# - Implement loading states for better UX

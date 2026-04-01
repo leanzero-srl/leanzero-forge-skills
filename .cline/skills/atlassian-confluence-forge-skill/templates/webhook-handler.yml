@@ -1,0 +1,69 @@
+# Webhook Handler Template for Confluence Events
+# Handle real-time events from Confluence (page created/updated/deleted)
+# Documentation: https://developer.atlassian.com/cloud/confluence/modules/webhook/
+
+modules:
+  webhook:
+    - key: page-created-handler
+      destination: page-created-endpoint
+      
+    # Optionally handle multiple event types in same handler
+    - key: page-updated-handler
+      destination: page-updated-endpoint
+
+    # With filtering to only trigger on specific conditions
+    - key: filtered-page-handler
+      destination: page-created-endpoint
+      filter: |
+        data.space.key == "PROJ" && 
+        !contains(data.content.labels, 'skip-sync')
+
+  resources:
+    - key: webhook-handler
+      path: src/webhooks/handler.js
+      
+---
+# Example handler implementation (src/webhooks/handler.js):
+
+# export default async function handler(req, res) {
+#   const { event, data } = req.body;
+#   
+#   try {
+#     switch (event) {
+#       case 'confluence:page:created':
+#         await handlePageCreated(data);
+#         break;
+#       case 'confluence:page:updated':
+#         await handlePageUpdated(data);
+#         break;
+#       default:
+#         console.log(`Unhandled event: ${event}`);
+#     }
+#     res.status(200).json({ success: true });
+#   } catch (error) {
+#     res.status(500).json({ error: error.message });
+#   }
+# }
+---
+
+# Available Events:
+# - confluence:page:created
+# - confluence:page:updated  
+# - confluence:page:deleted
+# - confluence:blogpost:created
+# - confluence:blogpost:updated
+# - confluence:blogpost:deleted
+# - confluence:space:created
+# - confluence:space:updated
+
+# Filter Expression Syntax:
+# - data.space.key == "KEY"
+# - contains(data.content.labels, 'label-name')
+# - data.content.version.number > 5
+# - AND: &&
+# - OR: ||
+
+# Notes:
+# - Webhooks trigger immediately when events occur
+# - Combine with scheduled triggers for reconciliation of missed events
+# - Implement retry logic and rate limiting in handlers
