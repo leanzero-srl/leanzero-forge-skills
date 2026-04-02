@@ -1,0 +1,595 @@
+# Page Hierarchy Navigation Template
+# Navigate parent-child relationships between Confluence pages
+# Documentation: https://developer.atlassian.com/cloud/confluence/rest/api-group-page/
+
+modules:
+  # Add navigation to page header or sidebar
+  confluence:pageBanner:
+    - key: {{APP_KEY}}-hierarchy-nav
+      resource: main
+      title: "Page Hierarchy"
+      
+  resources:
+    - key: main
+      path: src/hierarchy.jsx
+
+permissions:
+  scopes:
+    - read:confluence-content.summary
+
+---
+# Page Hierarchy API Operations
+
+## Get Parent Page
+
+```javascript
+// src/utils/hierarchy.js
+import { route } from '@forge/api';
+import { requestConfluence } from '@forge/bridge';
+
+export async function getParentPage(pageId) {
+  try {
+    const response = await requestConfluence(
+      route`/wiki/api/v2/pages/${pageId}?expand=ancestors`
+    );
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    
+    // Ancestors array contains parent at index 0
+    if (data.ancestors && data.ancestors.length > 0) {
+      return data.ancestors[data.ancestors.length - 1]; // Direct parent
+    }
+    
+    return null; // No parent (root page)
+  } catch (error) {
+    console.error('Error getting parent:', error);
+    throw error;
+  }
+}
+
+// Usage
+const parent = await getParentPage(pageId);
+if (parent) {
+  console.log(`Parent: ${parent.title}`);
+}
+```
+
+## Get Children Pages
+
+```javascript
+export async function getChildrenPages(parentId, options = {}) {
+  const { start = 0, limit = 25 } = options;
+
+  try {
+    // Use CQL to find children of this page
+    const response = await requestConfluence(
+      route`/wiki/api/v2/search?cql=type=page%20AND%20parent=${parentId}&start=${start}&limit=${limit}`
+    );
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    
+    return {
+      children: data.results || [],
+      total: data.total,
+      start: data.start,
+      limit: data.limit
+    };
+  } catch (error) {
+    console.error('Error getting children:', error);
+    throw error;
+  }
+}
+
+// Usage - Get direct children
+const result = await getChildrenPages(pageId);
+console.log(`${result.children.length} children found`);
+```
+
+## Get Sibling Pages
+
+```javascript
+export async function getSiblingPages(pageId) {
+  try {
+    // First get the parent to find siblings
+    const parentResponse = await requestConfluence(
+      route`/wiki/api/v2/pages/${pageId}?expand=ancestors`
+    );
+
+    if (!parentResponse.ok) return [];
+
+    const pageData = await parentResponse.json();
+    
+    if (!pageData.ancestors || pageData.ancestors.length === 0) {
+      // This is a root page - get all pages in same space
+      const spaceKey = AP.context.getSpaceKey();
+      
+      const response = await requestConfluence(
+        route`/wiki/api/v2/search?cql=type=page%20AND%20space="${spaceKey}"%20AND%20id!=${pageId}&limit=100`
+      );
+
+      if (!response.ok) return [];
+
+      const data = await response.json();
+      return data.results || [];
+    }
+
+    // Get children of the parent (which includes current page)
+    const parentId = pageData.ancestors[pageData.ancestors.length - 1].id;
+    
+    const childrenResponse = await requestConfluence(
+      route`/wiki/api/v2/search?cql=type=page%20AND%20parent=${parentId}`
+    );
+
+    if (!childrenResponse.ok) return [];
+
+    const childrenData = await childrenResponse.json();
+    
+    // Filter out current page
+    return (childrenData.results || []).filter(c => c.id !== pageId);
+  } catch (error) {
+    console.error('Error getting siblings:', error);
+    throw error;
+  }
+}
+
+// Usage
+const siblings = await getSiblingPages(pageId);
+```
+
+## Get Ancestor Pages (Breadcrumbs)
+
+```javascript
+export async function getAncestors(pageId) {
+  try {
+    const response = await requestConfluence(
+      route`/wiki/api/v2/pages/${pageId}?expand=ancestors`
+    );
+
+    if (!response.ok) return [];
+
+    const data = await response.json();
+    
+    // Ancestors are ordered from oldest to newest
+    return data.ancestors || [];
+  } catch (error) {
+    console.error('Error getting ancestors:', error);
+    throw error;
+  }
+}
+
+// Usage in React component:
+function Breadcrumbs({ pageId }) {
+  const [ancestors, setAncestors] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadBreadcrumbs() {
+      try {
+        const ancestorsData = await getAncestors(pageId);
+        
+        // Add current page to the end
+        const response = await requestConfluence(
+          route`/wiki/api/v2/pages/${pageId}?expand=title`
+        );
+        
+        if (response.ok) {
+          const currentPage = await response.json();
+          setAncestors([...ancestorsData, currentPage]);
+        }
+      } catch (error) {
+        console.error('Failed to load breadcrumbs:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadBreadcrumbs();
+  }, [pageId]);
+
+  if (loading) return <span>Loading...</span>;
+
+  return (
+    <nav style={{ marginBottom: '16px' }}>
+      <ol style={{ display: 'flex', gap: '8px', fontSize: '14px' }}>
+        {ancestors.map((ancestor, index) => (
+          <li key={index} style={{ listStyle: 'none' }}>
+            <a href={`/wiki/spaces/${ancestor.spaceKey}/pages/${ancestor.id}`}>
+              {ancestor.title}
+            </a>
+            {index < ancestors.length - 1 && <span>/</span>}
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+```
+
+## Get Descendants (All Nested Pages)
+
+```javascript
+export async function getAllDescendants(parentId, options = {}) {
+  const { limit = 50 } = options;
+  
+  const allDescendants = [];
+  let cursor = null;
+
+  do {
+    // Use search with recursive CQL
+    const response = await requestConfluence(
+      route`/wiki/api/v2/search?cql=type=page%20AND%20parent=${parentId}&limit=${limit}`
+    );
+
+    if (!response.ok) break;
+
+    const data = await response.json();
+    
+    allDescendants.push(...(data.results || []));
+    
+    // Continue until no more results
+    if (data.results.length < limit) {
+      break;
+    }
+  } while (true);
+
+  return allDescendants;
+}
+
+// Usage - Get all pages in a section
+const allPages = await getAllDescendants(sectionPageId);
+console.log(`${allPages.length} pages in this section`);
+```
+
+---
+# Hierarchy Navigation UI Component
+
+```jsx
+// src/components/HierarchyNav.jsx
+import React, { useState, useEffect } from 'react';
+import { route } from '@forge/api';
+import { requestConfluence } from '@forge/bridge';
+
+export default function HierarchyNav({ pageId }) {
+  const [ancestors, setAncestors] = useState([]);
+  const [children, setChildren] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadHierarchy() {
+      try {
+        // Load ancestors (breadcrumbs)
+        const ancestorResponse = await requestConfluence(
+          route`/wiki/api/v2/pages/${pageId}?expand=ancestors`
+        );
+
+        if (ancestorResponse.ok) {
+          const ancestorData = await ancestorResponse.json();
+          setAncestors(ancestorData.ancestors || []);
+        }
+
+        // Load children
+        const childrenResponse = await requestConfluence(
+          route`/wiki/api/v2/search?cql=type=page%20AND%20parent=${pageId}&limit=50`
+        );
+
+        if (childrenResponse.ok) {
+          const childrenData = await childrenResponse.json();
+          setChildren(childrenData.results || []);
+        }
+      } catch (error) {
+        console.error('Failed to load hierarchy:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadHierarchy();
+  }, [pageId]);
+
+  if (loading) {
+    return <div>Loading navigation...</div>;
+  }
+
+  return (
+    <div className="hierarchy-nav">
+      {/* Ancestors / Breadcrumbs */}
+      {ancestors.length > 0 && (
+        <nav style={{ marginBottom: '16px' }}>
+          <strong>Breadcrumb:</strong>
+          <ol style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '4px 8px',
+            listStyle: 'none',
+            padding: 0,
+            margin: '4px 0'
+          }}>
+            {ancestors.map((ancestor, index) => (
+              <li key={index}>
+                <a href={`/wiki/spaces/${ancestor.spaceKey}/pages/${ancestor.id}`}>
+                  {ancestor.title}
+                </a>
+                {index < ancestors.length - 1 && <span>/</span>}
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
+
+      {/* Children / Subpages */}
+      {children.length > 0 && (
+        <div className="subpages">
+          <h4>Subpages ({children.length})</h4>
+          
+          <ul style={{ padding: '0 20px' }}>
+            {children.map(child => (
+              <li key={child.id}>
+                <a href={`/wiki/spaces/${child.spaceKey}/pages/${child.id}`}>
+                  {child.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Parent link (if this is a child) */}
+      {ancestors.length > 0 && (
+        <div style={{ marginTop: '16px' }}>
+          <a href={`/wiki/spaces/${ancestors[ancestors.length - 1].spaceKey}/pages/${ancestors[ancestors.length - 1].id}`}>
+            ← Up to parent
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+---
+# Page Tree Display Component
+
+```jsx
+// src/components/PageTree.jsx
+import React, { useState } from 'react';
+import { requestConfluence } from '@forge/bridge';
+
+export function PageTree({ parentId = null, level = 0 }) {
+  const [children, setChildren] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadChildren() {
+      try {
+        let response;
+        
+        if (parentId) {
+          // Get direct children
+          response = await requestConfluence(
+            `/wiki/api/v2/search?cql=type=page%20AND%20parent=${parentId}&limit=50`
+          );
+        } else {
+          // Get root pages in current space
+          const spaceKey = AP.context.getSpaceKey();
+          response = await requestConfluence(
+            `/wiki/api/v2/search?cql=type=page%20AND%20space="${spaceKey}"&limit=50`
+          );
+        }
+
+        if (response.ok) {
+          const data = await response.json();
+          setChildren(data.results || []);
+        }
+      } catch (error) {
+        console.error('Failed to load page tree:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadChildren();
+  }, [parentId]);
+
+  if (loading) return <div>Loading...</div>;
+
+  return (
+    <ul style={{ paddingLeft: `${level * 20}px` }}>
+      {children.map(child => (
+        <li key={child.id}>
+          <a href={`/wiki/spaces/${child.spaceKey}/pages/${child.id}`}>
+            {child.title}
+          </a>
+          
+          {/* Recursive call for nested children */}
+          <PageTree parentId={child.id} level={level + 1} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// Usage
+<PageTree />  // Show all pages in space
+<PageTree parentId={pageId} />  // Show children of specific page
+```
+
+---
+# Recursive Page List with Expand/Collapse
+
+```jsx
+// src/components/ExpandablePageList.jsx
+import React, { useState } from 'react';
+import { requestConfluence } from '@forge/bridge';
+
+export default function ExpandablePageList({ parentId = null }) {
+  const [expanded, setExpanded] = useState({});
+  const [children, setChildren] = useState(null);
+
+  useEffect(() => {
+    async function loadChildren() {
+      let response;
+      
+      if (parentId) {
+        response = await requestConfluence(
+          `/wiki/api/v2/search?cql=type=page%20AND%20parent=${parentId}&limit=50`
+        );
+      } else {
+        const spaceKey = AP.context.getSpaceKey();
+        response = await requestConfluence(
+          `/wiki/api/v2/search?cql=type=page%20AND%20space="${spaceKey}"&limit=50`
+        );
+      }
+
+      if (response.ok) {
+        setChildren(await response.json());
+      }
+    }
+
+    loadChildren();
+  }, [parentId]);
+
+  const toggleExpand = () => {
+    if (!children) return;
+    
+    setExpanded(prev => ({
+      ...prev,
+      [parentId]: !prev[parentId]
+    }));
+  };
+
+  const hasChildren = children?.total > 0;
+
+  return (
+    <div>
+      <div 
+        style={{ cursor: 'pointer', fontWeight: 'bold' }}
+        onClick={toggleExpand}
+      >
+        {hasChildren && (
+          <span style={{ marginRight: '8px' }}>
+            {expanded[parentId] ? '▼' : '▶'}
+          </span>
+        )}
+        
+        {parentId 
+          ? children?.results?.find(c => c.id === parentId)?.title || 'Loading...'
+          : 'All Pages'
+        }
+      </div>
+
+      {hasChildren && expanded[parentId] && (
+        <div style={{ paddingLeft: '20px' }}>
+          <ul>
+            {children.results.map(child => (
+              <li key={child.id}>
+                <a href={`/wiki/spaces/${child.spaceKey}/pages/${child.id}`}>
+                  {child.title}
+                </a>
+                
+                {/* Recursive nested list */}
+                <ExpandablePageList parentId={child.id} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+---
+# Quick Links Between Related Pages
+
+```jsx
+// src/components/QuickLinks.jsx
+import React, { useState, useEffect } from 'react';
+import { requestConfluence } from '@forge/bridge';
+
+export default function QuickLinks({ pageId }) {
+  const [links, setLinks] = useState(null);
+
+  useEffect(() => {
+    async function loadLinks() {
+      try {
+        // Get current page info
+        const currentPageResponse = await requestConfluence(
+          `/wiki/api/v2/pages/${pageId}?expand=ancestors`
+        );
+
+        if (!currentPageResponse.ok) return;
+
+        const currentPage = await currentPageResponse.json();
+        
+        // Find parent (if exists)
+        let parentPage = null;
+        if (currentPage.ancestors && currentPage.ancestors.length > 0) {
+          const parentId = currentPage.ancestors[currentPage.ancestors.length - 1].id;
+          
+          const parentResponse = await requestConfluence(
+            `/wiki/api/v2/pages/${parentId}?expand=title`
+          );
+          
+          if (parentResponse.ok) {
+            parentPage = await parentResponse.json();
+          }
+        }
+
+        // Find sibling pages
+        let siblingPages = [];
+        if (currentPage.ancestors?.length > 0) {
+          const parentId = currentPage.ancestors[currentPage.ancestors.length - 1].id;
+          
+          const siblingsResponse = await requestConfluence(
+            `/wiki/api/v2/search?cql=type=page%20AND%20parent=${parentId}&limit=10`
+          );
+          
+          if (siblingsResponse.ok) {
+            const data = await siblingsResponse.json();
+            siblingPages = (data.results || []).filter(p => p.id !== pageId);
+          }
+        }
+
+        setLinks({ parentPage, siblingPages });
+      } catch (error) {
+        console.error('Failed to load links:', error);
+      }
+    }
+
+    loadLinks();
+  }, [pageId]);
+
+  if (!links) return <div>Loading...</div>;
+
+  return (
+    <div className="quick-links">
+      {links.parentPage && (
+        <div style={{ marginBottom: '16px' }}>
+          <strong>Parent:</strong>{' '}
+          <a href={`/wiki/spaces/${links.parentPage.spaceKey}/pages/${links.parentPage.id}`}>
+            {links.parentPage.title}
+          </a>
+        </div>
+      )}
+
+      {links.siblingPages.length > 0 && (
+        <div>
+          <strong>Siblings:</strong>
+          <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
+            {links.siblingPages.map(page => (
+              <li key={page.id}>
+                <a href={`/wiki/spaces/${page.spaceKey}/pages/${page.id}`}>
+                  {page.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}

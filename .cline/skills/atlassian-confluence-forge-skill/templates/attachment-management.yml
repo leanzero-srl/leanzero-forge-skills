@@ -1,0 +1,728 @@
+# Attachment Management Template
+# Work with Confluence page attachments - upload, list, download
+# Documentation: https://developer.atlassian.com/cloud/confluence/rest/api-group-attachment/
+
+modules:
+  # Add attachment UI to pages or content actions
+  confluence:pageBanner:
+    - key: {{APP_KEY}}-attachments
+      resource: main
+      title: "Attachments"
+      
+  resources:
+    - key: main
+      path: src/attachments.jsx
+
+permissions:
+  scopes:
+    - read:confluence-content.attachment:all
+    - write:confluence-content.attachment:all
+
+---
+# Attachment API Operations
+
+## List Attachments on a Page
+
+```javascript
+// src/utils/attachments.js
+import { route } from '@forge/api';
+import { requestConfluence } from '@forge/bridge';
+
+export async function listAttachments(pageId, options = {}) {
+  const { start = 0, limit = 25, expand = 'mediaThumbUrl' } = options;
+
+  try {
+    const response = await requestConfluence(
+      route`/wiki/api/v2/pages/${pageId}/attachments?start=${start}&limit=${limit}&expand=${expand}`
+    );
+
+    if (!response.ok) throw new Error('Failed to get attachments');
+
+    const data = await response.json();
+    
+    return {
+      attachments: data.results || [],
+      start: data.start,
+      limit: data.limit,
+      size: data.size,
+      total: data.total
+    };
+  } catch (error) {
+    console.error('Error listing attachments:', error);
+    throw error;
+  }
+}
+
+// Usage - Get first page of attachments
+const result = await listAttachments(pageId);
+console.log(`${result.attachments.length} attachments found`);
+
+// Usage - Iterate through all attachments
+async function getAllAttachments(pageId) {
+  let start = 0;
+  const allAttachments = [];
+
+  do {
+    const result = await listAttachments(pageId, { start, limit: 100 });
+    allAttachments.push(...(result.attachments || []));
+    
+    if (result.size < result.limit) break;
+    start += result.limit;
+  } while (true);
+
+  return allAttachments;
+}
+```
+
+### Attachment Object Structure
+
+```javascript
+{
+  id: "attachment-id",
+  type: "attachment",
+  title: "document.pdf",
+  mediaType: "application/pdf",
+  fileSize: 123456,
+  creationDate: "2024-01-15T10:30:00.000Z",
+  version: {
+    number: 1,
+    minorEdit: false
+  },
+  mediaThumbUrl: "/wiki/download/attachments/...",
+  downloadUrl: "/wiki/download/attachments/..."
+}
+```
+
+## Download Attachment
+
+```javascript
+export async function downloadAttachment(attachmentId, fileName) {
+  try {
+    const token = await AP.context.getToken();
+    
+    // Get the attachment content
+    const response = await requestConfluence(
+      route`/wiki/api/v2/pages/attachments/${attachmentId}/data`
+    );
+
+    if (!response.ok) throw new Error('Failed to download');
+
+    // Create blob and trigger download
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Error downloading attachment:', error);
+    throw error;
+  }
+}
+
+// Usage
+await downloadAttachment(attachmentId, 'document.pdf');
+```
+
+## Upload Attachment to Page
+
+```javascript
+export async function uploadAttachment(pageId, file, options = {}) {
+  const { comment = '' } = options;
+
+  try {
+    const token = await AP.context.getToken();
+
+    const formData = new FormData();
+    formData.append('file', file);
+    if (comment) {
+      formData.append('comment', comment);
+    }
+
+    // Get space key from context
+    const spaceKey = AP.context.getSpaceKey();
+
+    const response = await fetch(
+      `/wiki/rest/api/content/${pageId}/child/attachment?os_authType=bearer&spaceKey=${spaceKey}`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to upload');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error uploading attachment:', error);
+    throw error;
+  }
+}
+
+// Usage
+const fileInput = document.querySelector('#file-upload');
+if (fileInput.files.length > 0) {
+  const result = await uploadAttachment(pageId, fileInput.files[0]);
+  console.log(`Uploaded: ${result.title}`);
+}
+```
+
+## Delete Attachment
+
+```javascript
+export async function deleteAttachment(attachmentId) {
+  try {
+    // Note: The attachment ID is different from page ID
+    // You need to get the actual attachment ID first
+    
+    const token = await AP.context.getToken();
+    
+    const response = await fetch(
+      `/wiki/rest/api/content/attachment/${attachmentId}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      }
+    );
+
+    return response.ok;
+  } catch (error) {
+    console.error('Error deleting attachment:', error);
+    throw error;
+  }
+}
+
+// Usage
+const success = await deleteAttachment(attachmentId);
+```
+
+## Get Attachment by Name
+
+```javascript
+export async function findAttachmentByName(pageId, fileName) {
+  try {
+    const allAttachments = await getAllAttachments(pageId);
+    
+    return allAttachments.find(
+      a => a.title === fileName || a.mediaThumbUrl?.includes(fileName)
+    );
+  } catch (error) {
+    console.error('Error finding attachment:', error);
+    throw error;
+  }
+}
+
+// Usage
+const doc = await findAttachmentByName(pageId, 'document.pdf');
+if (doc) {
+  console.log(`Found: ${doc.downloadUrl}`);
+}
+```
+
+---
+# Attachment UI Components
+
+## Simple Attachment List
+
+```jsx
+// src/components/AttachmentList.jsx
+import React, { useState, useEffect } from 'react';
+import { listAttachments, downloadAttachment } from '../utils/attachments';
+
+export default function AttachmentList({ pageId }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadAttachments() {
+      try {
+        const result = await listAttachments(pageId);
+        setData(result);
+      } catch (error) {
+        console.error('Failed to load attachments:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (pageId) {
+      loadAttachments();
+    }
+  }, [pageId]);
+
+  if (loading) return <div>Loading...</div>;
+
+  return (
+    <div className="attachment-list">
+      {data.attachments.length === 0 && (
+        <p>No attachments yet.</p>
+      )}
+
+      <ul style={{ listStyle: 'none', padding: 0 }}>
+        {data.attachments.map(attachment => {
+          const isImage = attachment.mediaType?.startsWith('image/');
+          
+          return (
+            <li 
+              key={attachment.id}
+              style={{
+                padding: '8px',
+                marginBottom: '4px',
+                backgroundColor: '#f3f2f1',
+                borderRadius: '4px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                {isImage ? (
+                  <img 
+                    src={attachment.mediaThumbUrl} 
+                    alt="Thumbnail"
+                    style={{
+                      width: '40px',
+                      height: '40px',
+                      marginRight: '8px',
+                      borderRadius: '2px'
+                    }}
+                  />
+                ) : (
+                  <span style={{ fontSize: '16px', marginRight: '8px' }}>
+                    📎
+                  </span>
+                )}
+
+                <div style={{ flex: 1 }}>
+                  <strong>{attachment.title}</strong>
+                  <p style={{
+                    fontSize: '12px',
+                    margin: '2px 0',
+                    color: '#6b7280'
+                  }}>
+                    {Math.round(attachment.fileSize / 1024)} KB
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => downloadAttachment(
+                    attachment.id,
+                    attachment.title
+                  )}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '12px'
+                  }}
+                >
+                  Download
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {data.total > data.size && (
+        <p>
+          Showing {data.attachments.length} of {data.total} attachments
+        </p>
+      )}
+    </div>
+  );
+}
+```
+
+## Attachment Upload Component
+
+```jsx
+// src/components/AttachmentUpload.jsx
+import React, { useState } from 'react';
+import { uploadAttachment } from '../utils/attachments';
+
+export default function AttachmentUpload({ pageId }) {
+  const [file, setFile] = useState(null);
+  const [comment, setComment] = useState('');
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileSelect = (e) => {
+    if (e.target.files.length > 0) {
+      setFile(e.target.files[0]);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!file) return;
+
+    setUploading(true);
+
+    try {
+      await uploadAttachment(pageId, file, { comment });
+      
+      // Reset form
+      setFile(null);
+      setComment('');
+      
+      alert('Attachment uploaded successfully!');
+      
+      // Optionally trigger a refresh of the attachment list
+      window.dispatchEvent(new Event('attachments-updated'));
+    } catch (error) {
+      alert(`Failed to upload: ${error.message}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="attachment-upload">
+      <h4>Upload Attachment</h4>
+      
+      <input
+        type="file"
+        onChange={handleFileSelect}
+        style={{ marginBottom: '8px' }}
+      />
+
+      {file && (
+        <p style={{ fontSize: '12px', color: '#6b7280' }}>
+          Selected: {file.name} ({Math.round(file.size / 1024)} KB)
+        </p>
+      )}
+
+      <textarea
+        placeholder="Attachment comment (optional)"
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        style={{ width: '100%', marginBottom: '8px' }}
+      />
+
+      <button
+        onClick={handleSubmit}
+        disabled={!file || uploading}
+        style={{
+          padding: '8px 16px',
+          cursor: !file || uploading ? 'not-allowed' : 'pointer'
+        }}
+      >
+        {uploading ? 'Uploading...' : 'Upload'}
+      </button>
+    </div>
+  );
+}
+```
+
+## Attachment Gallery
+
+```jsx
+// src/components/AttachmentGallery.jsx
+import React, { useState, useEffect } from 'react';
+import { listAttachments } from '../utils/attachments';
+
+export default function AttachmentGallery({ pageId }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadAttachments() {
+      try {
+        const result = await listAttachments(pageId);
+        setData(result);
+      } catch (error) {
+        console.error('Failed to load attachments:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (pageId) {
+      loadAttachments();
+    }
+  }, [pageId]);
+
+  if (loading) return <div>Loading...</div>;
+
+  const images = data.attachments.filter(
+    a => a.mediaType?.startsWith('image/')
+  );
+
+  return (
+    <div className="attachment-gallery">
+      {images.length === 0 && <p>No image attachments.</p>}
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+        gap: '8px'
+      }}>
+        {images.map(image => (
+          <a 
+            key={image.id}
+            href={image.downloadUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'block',
+              borderRadius: '4px',
+              overflow: 'hidden',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.12)'
+            }}
+          >
+            <img
+              src={image.mediaThumbUrl}
+              alt={image.title}
+              style={{
+                width: '100%',
+                height: '150px',
+                objectFit: 'cover'
+              }}
+            />
+            <div style={{ padding: '4px' }}>
+              <p style={{ margin: 0, fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {image.title}
+              </p>
+            </div>
+          </a>
+        ))}
+      </div>
+
+      {images.length > 0 && (
+        <p style={{ marginTop: '16px' }}>
+          Showing {images.length} of {data.total} attachments
+        </p>
+      )}
+    </div>
+  );
+}
+```
+
+---
+# Attachment Helper Class
+
+```javascript
+// src/utils/attachmentStore.js
+import { route } from '@forge/api';
+import { requestConfluence } from '@forge/bridge';
+
+export class AttachmentStore {
+  constructor() {}
+
+  async _getAttachments(pageId, options = {}) {
+    const { start = 0, limit = 25, expand = 'mediaThumbUrl' } = options;
+
+    const response = await requestConfluence(
+      route`/wiki/api/v2/pages/${pageId}/attachments?start=${start}&limit=${limit}&expand=${expand}`
+    );
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    return {
+      attachments: data.results || [],
+      start: data.start,
+      limit: data.limit,
+      size: data.size,
+      total: data.total
+    };
+  }
+
+  async getAll(pageId) {
+    let start = 0;
+    const allAttachments = [];
+
+    do {
+      const result = await this._getAttachments(pageId, { start, limit: 100 });
+      if (!result || !result.attachments) break;
+
+      allAttachments.push(...(result.attachments || []));
+      
+      if (result.size < result.limit) break;
+      start += result.limit;
+    } while (true);
+
+    return allAttachments;
+  }
+
+  async getImages(pageId) {
+    const all = await this.getAll(pageId);
+    return all.filter(a => a.mediaType?.startsWith('image/'));
+  }
+
+  async getFileByName(pageId, fileName) {
+    const all = await this.getAll(pageId);
+    return all.find(
+      a => a.title === fileName || a.downloadUrl?.includes(fileName)
+    );
+  }
+
+  async download(attachmentId, fileName) {
+    try {
+      const token = await AP.context.getToken();
+      
+      const response = await requestConfluence(
+        route`/wiki/api/v2/pages/attachments/${attachmentId}/data`
+      );
+
+      if (!response.ok) throw new Error('Failed to download');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      return true;
+    } catch (error) {
+      console.error('Error downloading:', error);
+      throw error;
+    }
+  }
+
+  async delete(attachmentId) {
+    try {
+      const token = await AP.context.getToken();
+      
+      const response = await fetch(
+        `/wiki/rest/api/content/attachment/${attachmentId}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+
+      return response.ok;
+    } catch (error) {
+      console.error('Error deleting:', error);
+      throw error;
+    }
+  }
+
+  async upload(pageId, file, comment = '') {
+    try {
+      const token = await AP.context.getToken();
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      if (comment) {
+        formData.append('comment', comment);
+      }
+
+      const spaceKey = AP.context.getSpaceKey();
+
+      const response = await fetch(
+        `/wiki/rest/api/content/${pageId}/child/attachment?os_authType=bearer&spaceKey=${spaceKey}`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to upload');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error uploading:', error);
+      throw error;
+    }
+  }
+}
+
+export const attachmentStore = new AttachmentStore();
+```
+
+---
+# Permissions Required
+
+| Operation | Required Scopes |
+|-----------|-----------------|
+| List attachments | `read:confluence-content.attachment:all` |
+| Download attachments | `read:confluence-content.attachment:all` |
+| Upload attachments | `write:confluence-content.attachment:all` |
+| Delete attachments | `write:confluence-content.attachment:all` |
+
+```yaml
+permissions:
+  scopes:
+    - read:confluence-content.attachment:all
+    - write:confluence-content.attachment:all
+```
+
+---
+# Best Practices
+
+### 1. Handle Large Attachment Lists
+
+```javascript
+export async function getAttachmentsWithProgress(pageId, onProgress) {
+  let start = 0;
+  const allAttachments = [];
+
+  do {
+    const result = await listAttachments(pageId, { start, limit: 50 });
+    
+    if (result.attachments) {
+      allAttachments.push(...(result.attachments || []));
+      onProgress(allAttachments.length, result.total);
+    }
+    
+    if (result.size < result.limit) break;
+    start += result.limit;
+  } while (true);
+
+  return allAttachments;
+}
+```
+
+### 2. Cache Attachments
+
+```javascript
+const attachmentCache = new Map();
+
+export async function getCachedAttachments(pageId, ttlMs = 300000) {
+  const cacheKey = `attachments:${pageId}`;
+  
+  if (attachmentCache.has(cacheKey)) {
+    const entry = attachmentCache.get(cacheKey);
+    if (Date.now() - entry.timestamp < ttlMs) {
+      return entry.data;
+    }
+  }
+
+  const data = await getAllAttachments(pageId);
+  attachmentCache.set(cacheKey, { timestamp: Date.now(), data });
+  
+  return data;
+}
+```
+
+### 3. Check File Size Before Upload
+
+```javascript
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
+export function isValidFileSize(file) {
+  if (file.size > MAX_FILE_SIZE) {
+    alert(`File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+    return false;
+  }
+  
+  return true;
+}
+
+// Usage
+if (isValidFileSize(selectedFile)) {
+  await uploadAttachment(pageId, selectedFile);
+}
