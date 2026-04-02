@@ -1,0 +1,55 @@
+# Confluence Custom Content Module Template
+
+## Basic Module
+
+```yaml
+modules:
+  confluence:customContent:
+    - key: my-custom-content
+      resource: main
+      title: "Custom Content Title"
+      description: "Description of custom content type"
+
+resources:
+  - key: main
+    path: static/custom-content/build
+
+permissions:
+  scopes:
+    - read:confluence-content.summary
+    - write:confluence-content
+```
+
+## Complete Module with Resolver
+
+```yaml
+modules:
+  confluence:customContent:
+    - key: project-documentation
+      resource: main
+      title: "Project Documentation"
+      description: "Create and manage project documentation"
+      icon: https://example.com/icon.svg
+      render: native
+      resolver:
+        function: contentResolver
+
+functions:
+  - key: contentResolver
+    handler: index.handler
+
+resources:
+  - key: main
+    path: static/custom-content/build
+
+permissions:
+  scopes:
+    - read:confluence-content.summary
+    - write:confluence-content
+```
+
+## Usage Notes
+
+- Replace `my-custom-content` with a unique module key
+- Update `path` to point to your built frontend directory
+- Adjust permissions based on required API access

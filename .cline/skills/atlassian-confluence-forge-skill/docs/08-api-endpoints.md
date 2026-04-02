@@ -4,27 +4,79 @@ This document provides a comprehensive reference for the most commonly used Conf
 
 **Base URL:** `https://{your-domain}.atlassian.net/wiki/api/v2`
 
+**Important**: All API calls should use Forge's proxy mechanism via `@forge/bridge` to avoid CORS issues and ensure proper authentication.
+
 ---
 
 ## Authentication
 
-All API calls from Forge use OAuth 2.0 (3LO) or JWT tokens obtained via the Bridge API:
+Forge apps use the `requestConfluence` method from `@forge/bridge` for all Confluence REST API calls. This handles authentication automatically and avoids CORS issues.
+
+### Using requestConfluence (Recommended)
 
 ```javascript
-import AP from '@atlaskit/platform-api-bridge';
+import { route } from '@forge/api';
+import { requestConfluence } from '@forge/bridge';
 
-// Get access token for Confluence REST API
-const token = await AP.context.getToken({
-  scope: ['read:page:confluence', 'write:page:confluence']
-});
+// Get page by ID
+const response = await requestConfluence(route`/wiki/api/v2/pages/${pageId}`);
 
-// Make authenticated request
-const response = await fetch('https://mycompany.atlassian.net/wiki/api/v2/pages/123456', {
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
+if (response.ok) {
+  const data = await response.json();
+  console.log(data);
+}
+
+// POST with body
+const response = await requestConfluence(
+  route`/wiki/api/v2/pages`,
+  { method: 'POST', body: JSON.stringify({ title: 'New Page' }) }
+);
+```
+
+### Using asUser() Context (for user-level permissions)
+
+```javascript
+import api, { route } from '@forge/api';
+
+const response = await api.asUser().requestConfluence(
+  route`/wiki/api/v2/pages/${pageId}?body-format=storage`
+);
+
+if (response.ok) {
+  const page = await response.json();
+}
+```
+
+### Traditional Token Method (Legacy)
+
+If you need to use traditional token-based authentication:
+
+```javascript
+import { useEffect, useState } from 'react';
+import { AP } from '@atlaskit/platform-api-bridge';
+
+export default function MyComponent() {
+  const [token, setToken] = useState(null);
+
+  useEffect(() => {
+    AP.context.getToken({ scope: ['read:page:confluence'] })
+      .then(setToken)
+      .catch(console.error);
+  }, []);
+
+  async function fetchPage(pageId) {
+    if (!token) return null;
+    
+    const response = await fetch(
+      `${AP.context.getSiteBaseUrl()}/wiki/api/v2/pages/${pageId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    
+    return response.ok ? await response.json() : null;
   }
-});
+
+  // ...
+}
 ```
 
 ---
@@ -484,34 +536,41 @@ async function fetchWithRetry(url, options, maxRetries = 3) {
 ## Utility Functions for Forge Apps
 
 ```javascript
-// Helper to build API URL
-function confluenceApiUrl(path) {
-  const domain = AP.context.getSiteBaseUrl(); // e.g., https://mycompany.atlassian.net
-  return `${domain}/wiki/api/v2${path}`;
-}
+import { route } from '@forge/api';
+import { requestConfluence } from '@forge/bridge';
 
-// Generic fetch wrapper with auth
-async function apiRequest(method, path, body = null) {
-  const token = await AP.context.getToken({ scope: ['read:page:confluence'] });
+// Generic Confluence API wrapper (recommended)
+async function confluenceRequest(path, options = {}) {
+  const response = await requestConfluence(route`${path}`, options);
   
-  const options = {
-    method,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
-  };
-  
-  if (body) {
-    options.body = JSON.stringify(body);
+  if (!response.ok) {
+    throw new Error(`Confluence API error: ${response.status} ${response.statusText}`);
   }
   
-  return fetch(confluenceApiUrl(path), options).then(res => res.json());
+  return response.json();
 }
 
 // Usage examples:
-const page = await apiRequest('GET', '/pages/123456');
-await apiRequest('POST', '/pages', { title: 'New Page', /* ... */ });
+const page = await confluenceRequest(`/wiki/api/v2/pages/${pageId}`);
+
+// POST with body
+await confluenceRequest(
+  '/wiki/api/v2/pages',
+  { method: 'POST', body: JSON.stringify({ title: 'New Page' }) }
+);
+
+// Using asUser context (for user-level permissions)
+import api, { route } from '@forge/api';
+
+async function confluenceAsUser(path, options = {}) {
+  const response = await api.asUser().requestConfluence(route`${path}`, options);
+  
+  if (!response.ok) {
+    throw new Error(`Confluence API error: ${response.status}`);
+  }
+  
+  return response.json();
+}
 ```
 
 ---

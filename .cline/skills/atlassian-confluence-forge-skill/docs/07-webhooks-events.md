@@ -237,17 +237,22 @@ async function handlePageDeleted(data) {
   // Clean up external data, remove sync records, etc.
 }
 
-async function addDefaultLabel(pageId, label, token) {
+import { route } from '@forge/api';
+import { requestConfluence } from '@forge/bridge';
+
+async function addDefaultLabel(pageId, label) {
   try {
-    await api.fetch({
-      url: `/wiki/api/v2/pages/${pageId}/labels`,
-      method: 'POST',
-      headers: { 
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify([label])
-    });
+    const response = await requestConfluence(
+      route`/wiki/api/v2/pages/${pageId}/labels`,
+      { 
+        method: 'POST',
+        body: JSON.stringify([{ prefix: 'global', name: label }])
+      }
+    );
+
+    if (!response.ok) {
+      console.error('Failed to add label:', response.statusText);
+    }
   } catch (error) {
     console.error('Failed to add label:', error);
   }

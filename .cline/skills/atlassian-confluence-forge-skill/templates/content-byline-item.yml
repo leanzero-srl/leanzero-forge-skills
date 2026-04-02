@@ -1,0 +1,86 @@
+# Confluence Content Byline Item Template
+
+## Basic Module
+
+```yaml
+modules:
+  confluence:contentBylineItem:
+    - key: my-byline-item
+      resource: main
+      title: "My Byline Item"
+      icon: https://example.com/icon.svg
+      tooltip: "Tooltip text"
+
+resources:
+  - key: main
+    path: static/byline/build
+
+permissions:
+  scopes:
+    - read:confluence-content.summary
+```
+
+## Complete Module with Resolver
+
+```yaml
+modules:
+  confluence:contentBylineItem:
+    - key: approval-status
+      resource: bylineResource
+      title: "Approval Status"
+      icon: https://cdn-icons-png.flaticon.com/512/746/746158.png
+      tooltip: "View approval information"
+      render: native
+      resolver:
+        function: bylineResolver
+
+functions:
+  - key: bylineResolver
+    handler: index.handler
+
+resources:
+  - key: bylineResource
+    path: static/byline/build
+
+permissions:
+  scopes:
+    - read:confluence-content.summary
+```
+
+## Frontend Component Example
+
+```jsx
+// src/frontend/BylineItem.jsx
+import React from 'react';
+import { useContent } from '@forge/bridge';
+
+export const BylineItem = () => {
+  const content = useContent();
+
+  if (!content) return <div>Loading...</div>;
+
+  // Get approval status from storage or API
+  const getApprovalStatus = async () => {
+    const storage = getStorage();
+    const data = await storage.get(`approval-${content.id}`);
+    
+    if (data) {
+      return JSON.parse(data);
+    }
+    return { status: 'pending', approvedBy: null };
+  };
+
+  return (
+    <div className="byline-item">
+      <span>Approval:</span>
+      <span className="status">{getApprovalStatus().status}</span>
+    </div>
+  );
+};
+```
+
+## Usage Notes
+
+- The byline item appears in the content metadata section
+- Use `render: native` for React components with resolvers
+- Use `resource` for static HTML resources

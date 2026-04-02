@@ -81,12 +81,15 @@ Modules are the building blocks of your app:
 
 | Module Type | Description |
 |-------------|-------------|
-| `confluence:pageCustomUi` | Custom UI on Confluence pages |
-| `confluence:blogPostCustomUi` | Custom UI on blog posts |
+| `confluence:pageBanner` | Banner on Confluence pages and blog posts |
+| `confluence:contentAction` | Menu item in "more actions" (•••) for pages/blogs |
+| `confluence:contextMenu` | Context menu entry when text is selected |
 | `confluence:spaceSettings` | Configuration panel in space settings |
 | `webhook` | Handle Confluence events |
 | `function.scheduled` | Background scheduled tasks |
 | `customContent` | Create custom content types (v2) |
+
+**Important**: Confluence Forge does NOT have `confluence:pageCustomUi` or `confluence:blogPostCustomUi` modules. Use the modules above instead.
 
 ### 3. Resources
 
@@ -111,28 +114,28 @@ graph LR
 
 For dynamic content, you'll need a resolver:
 
-1. **Custom UI** calls `AP.context.getToken()` to get auth token
-2. Your app makes API call with that token
+1. **Custom UI** calls `requestConfluence()` from `@forge/bridge` to make API calls
+2. Forge handles authentication automatically via the proxy mechanism
 3. Data is fetched from Confluence REST API v2
 4. Component renders the data
 
 ```jsx
 import React, { useEffect, useState } from 'react';
-import { api } from '@forge/bridge';
+import { route } from '@forge/api';
+import { requestConfluence } from '@forge/bridge';
 
 export default function PageExtension() {
   const [data, setData] = useState(null);
 
   useEffect(() => {
     async function fetchData() {
-      const token = await AP.context.getToken(); // Get auth token
+      // Use requestConfluence for API calls - handles auth automatically
+      const response = await requestConfluence(route`/wiki/api/v2/pages/by-title`);
       
-      const response = await api.fetch({
-        url: '/wiki/api/v2/pages/by-title',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      setData(await response.json());
+      if (response.ok) {
+        const result = await response.json();
+        setData(result);
+      }
     }
     
     fetchData();

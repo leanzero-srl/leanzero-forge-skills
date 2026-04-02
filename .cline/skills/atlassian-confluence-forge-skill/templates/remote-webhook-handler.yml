@@ -1,0 +1,155 @@
+# Confluence Remote Webhook Handler Template
+
+## Basic Remote Event Routing
+
+```yaml
+modules:
+  trigger:
+    - key: page-created-trigger
+      endpoint: remoteEvents
+      events:
+        - avi:confluence:created:page
+        - avi:confluence:updated:page
+
+endpoint:
+  - key: remoteEvents
+    remote: myRemoteApp
+    route:
+      path: /frc-event
+    auth:
+      appSystemToken:
+        enabled: true
+
+permissions:
+  scopes:
+    - read:app-system-token
+
+remotes:
+  - key: myRemoteApp
+    baseUrl: https://your-external-service.com
+```
+
+## Multiple Event Types
+
+```yaml
+modules:
+  trigger:
+    - key: space-events-trigger
+      endpoint: remoteEvents
+      events:
+        - avi:confluence:created:space:V2
+        - avi:confluence:updated:space:V2
+        - avi:confluence:permissions_updated:space:V2
+
+endpoint:
+  - key: remoteEvents
+    remote: myRemoteApp
+    route:
+      path: /frc-event
+    auth:
+      appSystemToken:
+        enabled: true
+
+permissions:
+  scopes:
+    - read:app-system-token
+    - read:confluence-space.summary
+    - write:confluence-space
+
+remotes:
+  - key: myRemoteApp
+    baseUrl: https://your-external-service.com
+```
+
+## External Service Example (Node.js/Express)
+
+```javascript
+// server.js - Your external service
+const express = require('express');
+const app = express();
+
+app.use(express.json());
+
+app.post('/frc-event', async (req, res) => {
+  const event = req.body;
+  
+  console.log(`Received event: ${event.eventType}`);
+  console.log(`Timestamp: ${event.eventCreatedDate}`);
+  
+  // Handle different event types
+  switch (event.eventType) {
+    case 'avi:confluence:created:page':
+      await handlePageCreated(event);
+      break;
+      
+    case 'avi:confluence:updated:page':
+      await handlePageUpdated(event);
+      break;
+      
+    case 'avi:confluence:created:space:V2':
+      await handleSpaceCreated(event);
+      break;
+  }
+  
+  res.status(200).send('OK');
+});
+
+async function handlePageCreated(event) {
+  console.log(`New page created: ${event.page.title}`);
+  console.log(`Space: ${event.space.name}`);
+}
+
+async function handlePageUpdated(event) {
+  console.log(`Page updated: ${event.page.title}`);
+  console.log(`Version: ${event.page.version.number}`);
+}
+
+async function handleSpaceCreated(event) {
+  console.log(`New space created: ${event.space.name}`);
+}
+
+app.listen(3000, () => {
+  console.log('Server running on port 3000');
+});
+```
+
+## Event Payload Structure
+
+```json
+{
+  "eventType": "avi:confluence:created:page",
+  "atlassianId": "user-123456",
+  "eventCreatedDate": "2024-04-02T10:00:00.000Z",
+  "space": {
+    "id": 827392002,
+    "key": "SP",
+    "name": "Project Space"
+  },
+  "page": {
+    "id": "123456789",
+    "title": "My Page",
+    "spaceId": 827392002
+  }
+}
+```
+
+## Permissions Required
+
+| Event Type | Required Scopes |
+|------------|-----------------|
+| `avi:confluence:created:page` | `read:app-system-token`, `read:confluence-content.summary` |
+| `avi:confluence:updated:page` | `read:app-system-token`, `read:confluence-content.summary` |
+| `avi:confluence:created:space:V2` | `read:app-system-token`, `read:confluence-space.summary` |
+
+## Deployment Steps
+
+1. Add trigger configuration to `manifest.yml`
+2. Run `forge lint --fix` (auto-adds scopes)
+3. Deploy with `forge deploy`
+4. Install with `forge install --upgrade`
+
+## External Service Setup
+
+1. Set up HTTPS endpoint (use ngrok for local testing)
+2. Update `remotes.baseUrl` in manifest
+3. Redeploy after updating URL

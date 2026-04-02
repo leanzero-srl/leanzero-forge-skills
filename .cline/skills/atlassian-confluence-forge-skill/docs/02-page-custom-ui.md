@@ -1,36 +1,53 @@
 # Page Custom UI: Confluence Extensions
 
-This guide covers building custom UI extensions for Confluence pages - the most common Forge app type for Confluence.
+This guide covers building custom UI extensions for Confluence pages. Note that Confluence Forge uses **pageBanner** module type rather than a dedicated "pageCustomUi" module.
 
 ---
 
-## What is Page Custom UI?
+## Available Module Types for Pages
 
-Page Custom UI allows you to add custom React components to any Confluence page. The extension appears as an embedded iframe within the page content area.
+Confluence does not have a `confluence:pageCustomUi` module type. Instead, use these modules:
+
+| Module | Description |
+|--------|-------------|
+| `confluence:pageBanner` | Adds a banner to Confluence pages |
+| `confluence:contentAction` | Adds menu item to "more actions" (•••) for pages and blogs |
+| `confluence:contextMenu` | Adds menu entry when text is selected on a page or blog |
+
+---
+
+## confluence:pageBanner Module
+
+The `pageBanner` module adds a banner that appears at the top of Confluence pages.
 
 ```yaml
 modules:
-  confluence:pageCustomUi:
-    - key: my-extension
+  confluence:pageBanner:
+    - key: my-page-banner
       resource: main
-      icon: icon.png
-      title: My Extension Title
-      location: confluence-page-custom-ui-top
+      title: My Page Banner
 ```
 
 ---
 
-## Location Points
+## confluence:contentAction Module
 
-| Location | Description | Position in Page |
-|----------|-------------|------------------|
-| `confluence-page-custom-ui-top` | Top of page content | Above page body |
-| `confluence-page-custom-ui-bottom` | Bottom of page content | Below page body |
-| `confluence-page-custom-ui-inline` | Inline (deprecated) | - |
+The `contentAction` module adds a menu item to the "more actions" dropdown for pages and blog posts.
 
+```yaml
+modules:
+  confluence:contentAction:
+    - key: my-content-action
+      resource: main
+      title: My Action
+      displayConditions:
+        pageTypes:
+          - page
+          - blogpost
+```
 ---
 
-## Basic Implementation
+## Basic Implementation (Page Banner)
 
 ### Manifest Configuration
 
@@ -41,66 +58,37 @@ app:
 
 permissions:
   scopes:
-    - read:confluence-content:*
-  # Optional: Scoped to specific space
-  scoped:
-    - spaces:${SPACE_ID}
-    - sites:${SITE_URL}
+    - read:confluence-content.summary
 
 modules:
-  confluence:pageCustomUi:
-    - key: my-extension
+  confluence:pageBanner:
+    - key: my-page-banner
       resource: main
+      title: My Page Banner
       icon: icon.png
-      title: My Extension
 
-  resource:
-    - key: main
-      path: src/page-custom-ui.jsx
+resources:
+  - key: main
+    path: src/page-banner.jsx
 ```
 
 ### React Component
 
 ```jsx
-import React, { useEffect, useState } from 'react';
-import { api } from '@forge/bridge';
+import React from 'react';
+import { useProductContext } from '@forge/bridge';
 
-export default function PageExtension() {
-  const [content, setContent] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function loadPageData() {
-      try {
-        // Get the auth token from Confluence context
-        const token = await AP.context.getToken();
-        
-        // Fetch page data using Confluence REST API v2
-        const response = await api.fetch({
-          url: '/wiki/api/v2/pages/by-title',
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setContent(data);
-        }
-      } catch (error) {
-        console.error('Failed to load page data:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadPageData();
-  }, []);
-
-  if (loading) return <div>Loading...</div>;
+export default function PageBanner() {
+  const context = useProductContext();
   
+  // Context provides page information
+  console.log('Page ID:', context.content.id);
+  console.log('Space ID:', context.space.id);
+
   return (
-    <div className="my-extension">
-      <h3>My Extension Content</h3>
-      {content && <p>{content.title}</p>}
+    <div className="page-banner">
+      <h3>My Page Banner</h3>
+      <p>This banner appears on all Confluence pages.</p>
     </div>
   );
 }

@@ -1,35 +1,24 @@
 # Blog Post Custom UI: Confluence Extensions
 
-This guide covers building custom UI extensions specifically for Confluence blog posts. Blog post extensions appear within the blog post content area and can provide additional functionality like analytics, related content, or integration with external systems.
+This guide covers building custom UI extensions for Confluence blog posts. Note that blog post extensions use the same modules as page extensions.
 
 ---
 
-## What is Blog Post Custom UI?
+## Available Module Types for Blog Posts
 
-Blog Post Custom UI allows you to add custom React components to any Confluence blog post. The extension appears as an embedded iframe within the blog post content area, similar to Page Custom UI but specifically targeted at blog posts.
+Confluence uses these module types for blog post extensions:
 
-```yaml
-modules:
-  confluence:blogPostCustomUi:
-    - key: my-blog-extension
-      resource: main
-      icon: icon.png
-      title: My Blog Extension
-      location: confluence-blog-post-custom-ui-top
-```
+| Module | Description |
+|--------|-------------|
+| `confluence:pageBanner` | Adds a banner to blog posts (same as pages) |
+| `confluence:contentAction` | Adds menu item to "more actions" for blog posts |
+| `confluence:contextMenu` | Adds menu entry when text is selected on a blog post |
+
+**Note**: Confluence does not have a separate `confluence:blogPostCustomUi` module type. Blog posts use the same extension modules as pages.
 
 ---
 
-## Location Points
-
-| Location | Description | Position in Blog Post |
-|----------|-------------|----------------------|
-| `confluence-blog-post-custom-ui-top` | Top of blog post content | Above blog post body |
-| `confluence-blog-post-custom-ui-bottom` | Bottom of blog post content | Below blog post body |
-
----
-
-## Basic Implementation
+## Basic Implementation (Page Banner on Blog)
 
 ### Manifest Configuration
 
@@ -40,65 +29,41 @@ app:
 
 permissions:
   scopes:
-    - read:confluence-content:*
-  # Optional: Scoped to specific space
-  scoped:
-    - spaces:${SPACE_ID}
+    - read:confluence-content.summary
 
 modules:
-  confluence:blogPostCustomUi:
-    - key: my-blog-extension
+  confluence:pageBanner:
+    - key: my-blog-banner
       resource: main
+      title: Blog Post Banner
       icon: icon.png
-      title: My Blog Extension
+      displayConditions:
+        pageTypes:
+          - blogpost  # Only show on blog posts
 
-  resource:
-    - key: main
-      path: src/blog-post-custom-ui.jsx
+resources:
+  - key: main
+    path: src/blog-post-banner.jsx
 ```
+---
 
 ### React Component
 
 ```jsx
-import React, { useEffect, useState } from 'react';
-import { api } from '@forge/bridge';
+import React from 'react';
+import { useProductContext } from '@forge/bridge';
 
-export default function BlogPostExtension() {
-  const [blogPost, setBlogPost] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function loadBlogPostData() {
-      try {
-        // Get the auth token from Confluence context
-        const token = await AP.context.getToken();
-        
-        // Extract blog post ID from route and fetch data
-        const response = await api.fetch({
-          url: '/wiki/api/v2/blogposts/by-title',
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setBlogPost(data);
-        }
-      } catch (error) {
-        console.error('Failed to load blog post data:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadBlogPostData();
-  }, []);
-
-  if (loading) return <div>Loading...</div>;
+export default function BlogPostBanner() {
+  const context = useProductContext();
   
+  // Context provides blog post information
+  console.log('Blog Post ID:', context.content.id);
+  console.log('Space ID:', context.space.id);
+
   return (
-    <div className="blog-post-extension">
-      <h3>My Blog Extension Content</h3>
-      {blogPost && <p>{blogPost.title}</p>}
+    <div className="blog-post-banner">
+      <h3>My Blog Post Banner</h3>
+      <p>This banner appears on all blog posts.</p>
     </div>
   );
 }
