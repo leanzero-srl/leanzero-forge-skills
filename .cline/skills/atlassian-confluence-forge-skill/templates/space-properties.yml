@@ -1,0 +1,509 @@
+# Space Properties Module Template
+# Store app configuration at space level for Confluence
+# Documentation: https://developer.atlassian.com/cloud/confluence/rest/v2/api-space-properties/
+
+modules:
+  # Your modules here (pageBanner, contentAction, etc.)
+  confluence:pageBanner:
+    - key: {{APP_KEY}}-extension
+      resource: main
+      title: {{EXTENSION_TITLE}}
+      
+  resources:
+    - key: main
+      path: src/main.jsx
+
+---
+# Space Properties API Usage
+
+## Get Space Property
+
+```javascript
+// src/utils/spaceProperties.js
+import { api } from '@forge/bridge';
+
+export async function getSpaceProperty(spaceKey, propertyKey) {
+  const token = await AP.context.getToken();
+  
+  // First need to find a page in this space to get the space ID
+  const response = await api.fetch({
+    url: `/wiki/api/v2/spaces/${spaceKey}`,
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  if (!response.ok) return null;
+
+  const spaceData = await response.json();
+  const spaceId = spaceData.id;
+
+  // Now get the property
+  const propResponse = await api.fetch({
+    url: `/wiki/api/v2/spaces/${spaceId}/properties/${propertyKey}`,
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  if (propResponse.status === 404) return null;
+  if (!propResponse.ok) throw new Error('Failed to get property');
+
+  const propData = await propResponse.json();
+  return propData.value;
+}
+
+// Usage
+const defaultValue = await getSpaceProperty('PROJ', 'myapp:defaults');
+```
+
+## Set Space Property
+
+```javascript
+export async function setSpaceProperty(spaceKey, propertyKey, value) {
+  const token = await AP.context.getToken();
+  
+  // Get space ID
+  const response = await api.fetch({
+    url: `/wiki/api/v2/spaces/${spaceKey}`,
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  if (!response.ok) throw new Error('Failed to get space');
+
+  const spaceData = await response.json();
+  const spaceId = spaceData.id;
+
+  // Set the property
+  const propResponse = await api.fetch({
+    url: `/wiki/api/v2/spaces/${spaceId}/properties/${propertyKey}`,
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ value })
+  });
+
+  if (!propResponse.ok) throw new Error('Failed to set property');
+
+  return true;
+}
+
+// Usage
+await setSpaceProperty('PROJ', 'myapp:defaults', {
+  syncEnabled: true,
+  externalApiUrl: 'https://api.example.com',
+  labelsToSync: ['sync-required']
+});
+```
+
+## Delete Space Property
+
+```javascript
+export async function deleteSpaceProperty(spaceKey, propertyKey) {
+  const token = await AP.context.getToken();
+  
+  // Get space ID
+  const response = await api.fetch({
+    url: `/wiki/api/v2/spaces/${spaceKey}`,
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  if (!response.ok) throw new Error('Failed to get space');
+
+  const spaceData = await response.json();
+  const spaceId = spaceData.id;
+
+  // Delete the property
+  const propResponse = await api.fetch({
+    url: `/wiki/api/v2/spaces/${spaceId}/properties/${propertyKey}`,
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  return propResponse.ok;
+}
+
+// Usage
+await deleteSpaceProperty('PROJ', 'myapp:defaults');
+```
+
+## List All Space Properties
+
+```javascript
+export async function listSpaceProperties(spaceKey) {
+  const token = await AP.context.getToken();
+  
+  // Get space ID
+  const response = await api.fetch({
+    url: `/wiki/api/v2/spaces/${spaceKey}`,
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  if (!response.ok) throw new Error('Failed to get space');
+
+  const spaceData = await response.json();
+  const spaceId = spaceData.id;
+
+  // List properties
+  const propResponse = await api.fetch({
+    url: `/wiki/api/v2/spaces/${spaceId}/properties`,
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  if (!propResponse.ok) throw new Error('Failed to list properties');
+
+  const data = await propResponse.json();
+  return data.results || [];
+}
+
+// Usage
+const allProperties = await listSpaceProperties('PROJ');
+```
+
+---
+# Space Settings UI Integration
+
+```jsx
+// src/space-settings.jsx
+import React, { useState, useEffect } from 'react';
+import {
+  Form,
+  Section,
+  TextField,
+  Checkbox,
+  Select,
+  Button
+} from '@atlaskit/form';
+import { api } from '@forge/bridge';
+
+export default function SpaceSettings() {
+  const [spaceKey] = useState(AP.context.getSpaceKey());
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  
+  // Form state
+  const [syncEnabled, setSyncEnabled] = useState(true);
+  const [externalApiUrl, setExternalApiUrl] = useState('');
+  const [labelsToSync, setLabelsToSync] = useState('');
+
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const token = await AP.context.getToken();
+        
+        // Get space ID first
+        const spaceResponse = await api.fetch({
+          url: `/wiki/api/v2/spaces/${spaceKey}`,
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (spaceResponse.ok) {
+          const spaceData = await spaceResponse.json();
+          const spaceId = spaceData.id;
+
+          // Load properties
+          const syncResponse = await api.fetch({
+            url: `/wiki/api/v2/spaces/${spaceId}/properties/myapp:defaults`,
+            headers: { Authorization: `Bearer ${token}` }
+          });
+
+          if (syncResponse.ok) {
+            const props = await syncResponse.json();
+            const defaults = props.value || {};
+            
+            setSyncEnabled(defaults.syncEnabled ?? true);
+            setExternalApiUrl(defaults.externalApiUrl ?? '');
+            setLabelsToSync((defaults.labelsToSync || []).join(', '));
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load settings:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (spaceKey) {
+      loadSettings();
+    }
+  }, [spaceKey]);
+
+  const handleSubmit = async () => {
+    setSaving(true);
+
+    try {
+      const token = await AP.context.getToken();
+
+      // Get space ID
+      const spaceResponse = await api.fetch({
+        url: `/wiki/api/v2/spaces/${spaceKey}`,
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (spaceResponse.ok) {
+        const spaceData = await spaceResponse.json();
+        const spaceId = spaceData.id;
+
+        // Save properties
+        await api.fetch({
+          url: `/wiki/api/v2/spaces/${spaceId}/properties/myapp:defaults`,
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            value: {
+              syncEnabled,
+              externalApiUrl,
+              labelsToSync: labelsToSync
+                .split(',')
+                .map(l => l.trim())
+                .filter(Boolean)
+            }
+          })
+        });
+
+        console.log('Settings saved successfully');
+      }
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <div>Loading settings...</div>;
+  }
+
+  return (
+    <Form onSubmit={handleSubmit}>
+      {({ handleSubmit }) => (
+        <Section>
+          <TextField
+            name="externalApiUrl"
+            label="External API URL"
+            defaultValue={externalApiUrl}
+            onChange={(e) => setExternalApiUrl(e.target.value)}
+            isCompact
+          />
+
+          <Checkbox
+            name="syncEnabled"
+            label="Enable Sync"
+            defaultChecked={syncEnabled}
+            onChange={(e) => setSyncEnabled(e.target.checked)}
+          />
+
+          <TextField
+            name="labelsToSync"
+            label="Labels to Sync (comma separated)"
+            defaultValue={labelsToSync}
+            onChange={(e) => setLabelsToSync(e.target.value)}
+            isCompact
+          />
+
+          <Button type="submit" isLoading={saving}>
+            Save Settings
+          </Button>
+        </Section>
+      )}
+    </Form>
+  );
+}
+```
+
+---
+# Common Patterns
+
+## Pattern 1: Space-Wide Default Configuration
+
+```javascript
+// src/utils/config.js
+import { api } from '@forge/bridge';
+
+export async function getSpaceDefaults(spaceKey) {
+  const token = await AP.context.getToken();
+  
+  // Try to get space defaults first
+  try {
+    const response = await api.fetch({
+      url: `/wiki/api/v2/spaces/${spaceKey}`,
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (response.ok) {
+      const spaceData = await response.json();
+      const spaceId = spaceData.id;
+
+      const propResponse = await api.fetch({
+        url: `/wiki/api/v2/spaces/${spaceId}/properties/myapp:defaults`,
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (propResponse.ok) {
+        return (await propResponse.json()).value;
+      }
+    }
+  } catch (error) {
+    // Property doesn't exist or other error
+  }
+
+  // Return defaults
+  return {
+    syncEnabled: true,
+    externalApiUrl: '',
+    labelsToSync: ['sync'],
+    batchSize: 10
+  };
+}
+```
+
+## Pattern 2: Space Property Helper Class
+
+```javascript
+// src/utils/spacePropertyStore.js
+import { api } from '@forge/bridge';
+
+export class SpacePropertyStore {
+  constructor(appPrefix = 'myapp:') {
+    this.appPrefix = appPrefix;
+    this._spaceIdCache = new Map();
+  }
+
+  async _getSpaceId(spaceKey, token) {
+    if (this._spaceIdCache.has(spaceKey)) {
+      return this._spaceIdCache.get(spaceKey);
+    }
+
+    const response = await api.fetch({
+      url: `/wiki/api/v2/spaces/${spaceKey}`,
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (!response.ok) throw new Error(`Failed to get space: ${spaceKey}`);
+
+    const data = await response.json();
+    this._spaceIdCache.set(spaceKey, data.id);
+
+    return data.id;
+  }
+
+  async _getFullKey(key) {
+    return `${this.appPrefix}${key}`;
+  }
+
+  async get(spaceKey, key) {
+    try {
+      const token = await AP.context.getToken();
+      const spaceId = await this._getSpaceId(spaceKey, token);
+      const fullKey = await this._getFullKey(key);
+
+      const response = await api.fetch({
+        url: `/wiki/api/v2/spaces/${spaceId}/properties/${fullKey}`,
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error('Failed to get property');
+
+      const data = await response.json();
+      return data.value;
+    } catch (error) {
+      console.error(`Error getting space property ${key}:`, error);
+      throw error;
+    }
+  }
+
+  async set(spaceKey, key, value) {
+    try {
+      const token = await AP.context.getToken();
+      const spaceId = await this._getSpaceId(spaceKey, token);
+      const fullKey = await this._getFullKey(key);
+
+      const response = await api.fetch({
+        url: `/wiki/api/v2/spaces/${spaceId}/properties/${fullKey}`,
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ value })
+      });
+
+      if (!response.ok) throw new Error('Failed to set property');
+
+      return true;
+    } catch (error) {
+      console.error(`Error setting space property ${key}:`, error);
+      throw error;
+    }
+  }
+
+  async delete(spaceKey, key) {
+    try {
+      const token = await AP.context.getToken();
+      const spaceId = await this._getSpaceId(spaceKey, token);
+      const fullKey = await this._getFullKey(key);
+
+      const response = await api.fetch({
+        url: `/wiki/api/v2/spaces/${spaceId}/properties/${fullKey}`,
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      return response.ok;
+    } catch (error) {
+      console.error(`Error deleting space property ${key}:`, error);
+      throw error;
+    }
+  }
+
+  async clear(spaceKey) {
+    try {
+      const token = await AP.context.getToken();
+      const spaceId = await this._getSpaceId(spaceKey, token);
+
+      // List all properties
+      const listResponse = await api.fetch({
+        url: `/wiki/api/v2/spaces/${spaceId}/properties`,
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!listResponse.ok) throw new Error('Failed to list properties');
+
+      const data = await listResponse.json();
+      const results = data.results || [];
+
+      // Delete all app properties
+      for (const prop of results) {
+        if (prop.key.startsWith(this.appPrefix)) {
+          await this.delete(spaceKey, prop.key.replace(this.appPrefix, ''));
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error clearing space properties:', error);
+      throw error;
+    }
+  }
+}
+
+// Usage
+export const spacePropertyStore = new SpacePropertyStore('myapp:');
+```
+
+---
+# Permissions Required
+
+| Operation | Required Scopes |
+|-----------|-----------------|
+| Read space properties | `read:confluence-content:*` |
+| Write space properties | `write:confluence-content:*` |
+| Get space info | `read:confluence-space.summary` |
+
+```yaml
+permissions:
+  scopes:
+    - read:confluence-content:*
+    - write:confluence-content:*

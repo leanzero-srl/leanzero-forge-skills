@@ -1,0 +1,420 @@
+# Content Macro Module Template
+# Create custom macros that can be inserted into Confluence page content
+# Documentation: https://developer.atlassian.com/cloud/confluence/modules/content-macro/
+
+modules:
+  confluence:contentMacro:
+    - key: {{APP_KEY}}-my-macro
+      resource: main
+      name: "{{MACRO_NAME}}"
+      description: "{{MACRO_DESCRIPTION}}"
+      icon: https://example.com/macro-icon.svg
+      
+  resources:
+    - key: main
+      path: static/my-macro/build
+
+permissions:
+  scopes:
+    - read:confluence-content.summary
+    - write:confluence-content
+
+---
+# Example Macro Implementation
+
+## Basic Macro (React Component)
+
+```jsx
+// src/main.jsx
+import React from 'react';
+import { AP } from '@forge/bridge';
+
+export default function MyMacro() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        // Get macro parameters
+        const params = AP.context.macro?.parameters || {};
+        
+        // Use parameters to fetch data
+        if (params.pageId) {
+          // Fetch page content
+        }
+        
+        setData({ params });
+      } catch (error) {
+        console.error('Macro error:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  return (
+    <div className="my-macro">
+      <h3>{data.params.title || 'My Macro'}</h3>
+      <p>Macro executed successfully!</p>
+    </div>
+  );
+}
+```
+
+## Macro with Configuration UI
+
+```jsx
+// src/config.jsx - Configuration screen for the macro
+import React, { useState } from 'react';
+import {
+  Form,
+  Section,
+  TextField,
+  Select,
+  Checkbox
+} from '@atlaskit/form';
+
+export default function MacroConfig({ onSave }) {
+  const [title, setTitle] = useState('');
+  const [pageId, setPageId] = useState('');
+  const [showMetadata, setShowMetadata] = useState(true);
+
+  const handleSubmit = () => {
+    if (onSave) {
+      onSave({
+        title,
+        pageId: pageId.trim(),
+        showMetadata
+      });
+    }
+  };
+
+  return (
+    <Form onSubmit={handleSubmit}>
+      {({ handleSubmit }) => (
+        <Section>
+          <TextField
+            name="title"
+            label="Title"
+            isRequired
+            onChange={(e) => setTitle(e.target.value)}
+            value={title}
+          />
+
+          <TextField
+            name="pageId"
+            label="Page ID (optional)"
+            placeholder="e.g., 123456789"
+            onChange={(e) => setPageId(e.target.value)}
+            value={pageId}
+            isCompact
+          />
+
+          <Checkbox
+            name="showMetadata"
+            label="Show metadata"
+            defaultChecked={showMetadata}
+            onChange={(e) => setShowMetadata(e.target.checked)}
+          />
+
+          <button type="submit">Save</button>
+        </Section>
+      )}
+    </Form>
+  );
+}
+```
+
+## Macro with Resolver Pattern
+
+```yaml
+# manifest.yml
+modules:
+  confluence:contentMacro:
+    - key: {{APP_KEY}}-dynamic-macro
+      resource: main
+      name: "Dynamic Data"
+      description: "Display dynamic data from external source"
+      resolver: macroResolver
+      
+functions:
+  - key: macroResolver
+    handler: index.handler
+
+resources:
+  - key: main
+    path: static/macro/build
+
+permissions:
+  scopes:
+    - read:confluence-content.summary
+```
+
+```javascript
+// src/index.js - Resolver function
+export const handler = async (args) => {
+  const { macro } = args;
+  
+  // Get macro configuration
+  const config = macro.configuration || {};
+  
+  try {
+    // Fetch data based on configuration
+    const data = await fetchDataFromExternalSource(config);
+    
+    return {
+      html: `<div class="dynamic-macro">${data}</div>`,
+      metadata: {
+        canEdit: true,
+        css: ['/static/macro/styles.css'],
+        js: ['/static/macro/script.js']
+      }
+    };
+  } catch (error) {
+    console.error('Macro resolver error:', error);
+    
+    return {
+      html: `<div class="dynamic-macro error">Error loading macro: ${error.message}</div>`
+    };
+  }
+};
+```
+
+---
+# Available Macro Parameters
+
+The macro context provides the following parameters:
+
+```javascript
+// AP.context.macro contains:
+{
+  id: "macro-id",
+  configuration: {
+    title: "My Title",
+    pageId: "123456"
+  },
+  storageFormat: "storage", // or "wiki"
+  contentId: "page-id"
+}
+```
+
+---
+# Macro Permissions
+
+| Permission | Description |
+|------------|-------------|
+| `read:confluence-content.summary` | View page metadata |
+| `read:confluence-content` | View full page content |
+| `write:confluence-content` | Modify content |
+
+```yaml
+permissions:
+  scopes:
+    - read:confluence-content.summary
+```
+
+---
+# Example Macro Use Cases
+
+## 1. Page Status Indicator
+
+```jsx
+// src/status-macro.jsx
+import React, { useState, useEffect } from 'react';
+import { route } from '@forge/api';
+import { requestConfluence } from '@forge/bridge';
+
+export default function StatusMacro() {
+  const [status, setStatus] = useState(null);
+
+  useEffect(() => {
+    async function loadStatus() {
+      try {
+        const pageId = AP.context.macro?.configuration?.pageId;
+        
+        if (!pageId) return;
+
+        const response = await requestConfluence(
+          route`/wiki/api/v2/pages/${pageId}?expand=status`
+        );
+
+        if (response.ok) {
+          setStatus((await response.json()).status);
+        }
+      } catch (error) {
+        console.error('Failed to load status:', error);
+      }
+    }
+
+    loadStatus();
+  }, []);
+
+  if (!status) return <span>Checking...</span>;
+
+  const colors = {
+    current: '#54A276',
+    outdated: '#C23B28',
+    archived: '#6b7280'
+  };
+
+  return (
+    <div style={{
+      padding: '8px 16px',
+      backgroundColor: colors[status] || '#f3f2f1',
+      borderRadius: '4px',
+      display: 'inline-block'
+    }}>
+      Status: {status.toUpperCase()}
+    </div>
+  );
+}
+```
+
+## 2. Recent Changes Widget
+
+```jsx
+// src/recent-changes.jsx
+import React, { useState, useEffect } from 'react';
+import { route } from '@forge/api';
+import { requestConfluence } from '@forge/bridge';
+
+export default function RecentChanges() {
+  const [changes, setChanges] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadChanges() {
+      try {
+        const config = AP.context.macro?.configuration || {};
+        const limit = parseInt(config.limit) || 10;
+
+        // Get current space
+        const spaceKey = AP.context.getSpaceKey();
+
+        const response = await requestConfluence(
+          route`/wiki/api/v2/search?cql=type=page%20AND%20space="${spaceKey}"%20AND%20lastModified>-7d&limit=${limit}&expand=title,lastmodifier`
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          setChanges(data.results || []);
+        }
+      } catch (error) {
+        console.error('Failed to load changes:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadChanges();
+  }, []);
+
+  if (loading) return <span>Loading...</span>;
+
+  return (
+    <div className="recent-changes">
+      <h4>Recent Changes</h4>
+      
+      {changes.length === 0 && <p>No changes in the last 7 days.</p>}
+      
+      <ul>
+        {changes.map(change => (
+          <li key={change.id}>
+            <a href={`/wiki/spaces/${change.space.key}/pages/${change.id}`}>
+              {change.title}
+            </a>
+            {' - '}
+            {change.lastModifier?.displayName || 'Unknown'}
+            {' - '}
+            {new Date(change.lastModified).toLocaleDateString()}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+## 3. User Activity Stats
+
+```jsx
+// src/user-stats.jsx
+import React, { useState, useEffect } from 'react';
+import { route } from '@forge/api';
+import { requestConfluence } from '@forge/bridge';
+
+export default function UserStats() {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadStats() {
+      try {
+        // Get current user
+        const userId = AP.context.getUserId();
+        
+        // Count pages created by this user in current space
+        const spaceKey = AP.context.getSpaceKey();
+
+        const response = await requestConfluence(
+          route`/wiki/api/v2/search?cql=type=page%20AND%20space="${spaceKey}"%20AND%20creator="${userId}"`
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          
+          setStats({
+            pagesCreated: data.total || 0,
+            spaceName: AP.context.getSpaceDisplayName()
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load stats:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadStats();
+  }, []);
+
+  if (loading) return <span>Loading...</span>;
+
+  return (
+    <div className="user-stats">
+      <h4>Your Activity</h4>
+      
+      {stats ? (
+        <p>You have created {stats.pagesCreated} pages in the {stats.spaceName} space.</p>
+      ) : (
+        <p>Unable to load your activity stats.</p>
+      )}
+    </div>
+  );
+}
+```
+
+---
+# Deployment
+
+1. Add macro module to `manifest.yml`
+2. Build frontend: `npm run build` (if using Create React App)
+3. Deploy: `forge deploy --verbose`
+4. Install/upgrade: `forge install --upgrade`
+5. Use in Confluence: Type `/your-macro-name` and press Enter
+
+---
+# Notes
+
+- Content macros appear in the macro browser (`/macro`)
+- They can be inserted into any page content
+- The macro HTML is rendered inline within the page
+- Configuration UI allows users to customize macro behavior
+- Resolver pattern provides server-side processing capability

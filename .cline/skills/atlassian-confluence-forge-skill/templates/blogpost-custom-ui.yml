@@ -1,0 +1,162 @@
+# Blog Post Custom UI Module Template
+# Add custom React components to Confluence blog posts
+# Location: https://developer.atlassian.com/cloud/confluence/modules/
+
+modules:
+  # Option 1: Banner on blog posts (appears at top)
+  confluence:pageBanner:
+    - key: {{APP_KEY}}-blogpost-banner
+      resource: main
+      title: {{EXTENSION_TITLE}}
+      displayConditions:
+        pageTypes:
+          - blogpost
+          
+  resources:
+    - key: main
+      path: src/blogpost-custom-ui.jsx
+      
+---
+# Option 2: Menu item in "more actions" (•••) for blog posts
+
+modules:
+  confluence:contentAction:
+    - key: {{APP_KEY}}-blogpost-action
+      resource: main
+      title: {{ACTION_TITLE}}
+      icon: icon.png
+      displayConditions:
+        pageTypes:
+          - blogpost
+          
+  resources:
+    - key: main
+      path: src/blogpost-menu-item.jsx
+      
+---
+# Example React Component for Blog Post Extension
+
+```jsx
+// src/blogpost-custom-ui.jsx
+import React, { useEffect, useState } from 'react';
+import { route, api } from '@forge/bridge';
+
+export default function BlogPostExtension() {
+  const [blogPost, setBlogPost] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchBlogPostData() {
+      try {
+        // Get current blog post ID from route
+        const routeInfo = await routeHandlers.getCurrentRoute();
+        
+        // Parse blog post ID from URL
+        let blogpostId = null;
+        const match = routeInfo.path.match(/\/blogpost\/(\d+)/);
+        if (match) {
+          blogpostId = match[1];
+        }
+        
+        if (!blogpostId) return;
+
+        // Fetch blog post details using requestConfluence
+        const response = await api.requestConfluence(
+          route`/wiki/api/v2/blogposts/${blogpostId}`
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          setBlogPost(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch blog post:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    // Small delay to ensure route context is ready
+    setTimeout(fetchBlogPostData, 200);
+  }, []);
+
+  if (loading) {
+    return <div>Loading blog post data...</div>;
+  }
+
+  if (!blogPost) {
+    return <div>Unable to load blog post</div>;
+  }
+
+  return (
+    <div className="blogpost-extension">
+      <h3>{blogPost.title}</h3>
+      <p>Last modified: {new Date(blogPost.lastModified).toLocaleDateString()}</p>
+      
+      {/* Your custom UI here */}
+      <button onClick={() => console.log('Custom action!')}>
+        Custom Action
+      </button>
+    </div>
+  );
+}
+```
+
+---
+# Example Menu Item Implementation
+
+```jsx
+// src/blogpost-menu-item.jsx
+import React from 'react';
+import { route, api } from '@forge/bridge';
+
+export default function BlogPostAction() {
+  const handleCustomAction = async () => {
+    try {
+      // Get current blog post context
+      const pageId = AP.context.getPageId();
+      
+      if (!pageId) {
+        console.log('No page ID available');
+        return;
+      }
+
+      // Perform your custom action here
+      await api.requestConfluence(
+        route`/wiki/api/v2/blogposts/${pageId}/properties/myapp:action`,
+        { 
+          method: 'PUT',
+          body: JSON.stringify({ value: 'processed' })
+        }
+      );
+
+      console.log('Action completed successfully');
+    } catch (error) {
+      console.error('Action failed:', error);
+    }
+  };
+
+  return (
+    <div>
+      <button onClick={handleCustomAction}>
+        {{ACTION_TITLE}}
+      </button>
+    </div>
+  );
+}
+```
+
+---
+# Usage Notes
+
+1. Replace `{{APP_KEY}}` with your app's unique key
+2. Replace `{{EXTENSION_TITLE}}` or `{{ACTION_TITLE}}` with display titles
+3. Create src/blogpost-custom-ui.jsx or src/blogpost-menu-item.jsx with your React component
+4. Deploy: forge deploy --verbose
+
+# Notes
+
+- Blog post extensions work the same way as page extensions
+- Use `pageBanner` module for banners on blog posts (it supports both pages and blog posts)
+- Use `contentAction` module for menu items in "more actions" dropdown
+- The `displayConditions.pageTypes` array can include 'blogpost' to target blog posts specifically
