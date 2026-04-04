@@ -15,7 +15,7 @@ Dashboard widgets are small, self-contained applications that display informatio
 
 ```yaml
 modules:
-  confluence:dashboardGadget:
+  confluence:dashboardWidget:
     - key: my-dashboard-widget
       title: My Dashboard Widget
       description: A custom widget for the dashboard
@@ -46,7 +46,7 @@ permissions:
     - write:confluence-content:*
 
 modules:
-  confluence:dashboardGadget:
+  confluence:dashboardWidget:
     - key: my-dashboard-widget
       title: My Dashboard Widget
       description: Display recent page activity
@@ -129,7 +129,7 @@ export default function DashboardWidget() {
 | `resizable` | boolean | Allow user to resize widget | false |
 
 ```yaml
-confluence:dashboardGadget:
+confluence:dashboardWidget:
   - key: my-widget
     width: 400
     height: 300
@@ -142,7 +142,7 @@ Allow users to configure the widget:
 
 ```yaml
 modules:
-  confluence:dashboardGadget:
+  confluence:dashboardWidget:
     - key: configurable-widget
       title: Configurable Widget
       resource: main
@@ -617,7 +617,7 @@ export default function RobustWidget() {
 
 ### Widget Not Appearing on Dashboard
 
-1. **Check manifest.yml**: Ensure `confluence:dashboardGadget` module is properly configured
+1. **Check manifest.yml**: Ensure `confluence:dashboardWidget` module is properly configured
 2. **Verify permissions**: User needs dashboard viewing permissions
 3. **Deploy latest version**: Run `forge deploy --verbose`
 

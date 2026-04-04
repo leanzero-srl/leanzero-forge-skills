@@ -339,17 +339,30 @@ export async function approvePage(pageId) {
   await labelStore.add(pageId, APPROVAL_LABELS.APPROVED);
 }
 
+import { route } from '@forge/api';
+import { requestConfluence } from '@forge/bridge';
+
+// Store rejection reason using content properties API v2
+async function setContentProperty(pageId, key, value) {
+  const response = await requestConfluence(
+    route`/wiki/api/v2/pages/${pageId}/properties`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ key: `myapp:${key}`, value: JSON.stringify(value) })
+    }
+  );
+  
+  if (!response.ok) {
+    throw new Error(`Failed to set content property: ${response.status}`);
+  }
+}
+
 export async function rejectPage(pageId, reason) {
   // Add rejected label with reason
   await labelStore.add(pageId, APPROVAL_LABELS.REJECTED);
   
   // Store rejection reason in content properties
-  await setPageProperty(
-    pageId,
-    'rejectionReason',
-    reason,
-    token
-  );
+  await setContentProperty(pageId, 'rejectionReason', reason);
 }
 
 export async function isApprovable(pageId) {
@@ -377,10 +390,11 @@ export default async function handler() {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - ageLabel.thresholdDays);
     
-    const response = await api.fetch({
-      url: `/wiki/api/v2/search?cql=type=page%20AND%20lastModified<${cutoffDate.toISOString()}&limit=100`,
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    const cqlQuery = encodeURIComponent(`type=page AND lastModified<"${cutoffDate.toISOString()}"`);
+      
+      const response = await requestConfluence(
+        route`/wiki/api/v2/search?cql=${cqlQuery}&limit=100`
+      );
 
     if (!response.ok) continue;
 

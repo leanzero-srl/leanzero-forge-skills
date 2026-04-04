@@ -113,9 +113,7 @@ export default function SpaceSettings() {
 
   async function loadSettings() {
     try {
-      // In resolver functions or using @forge/api for backend:
-      // const token = await api.asUser().getToken();
-      //
+      const token = await AP.context.getToken();
       
       // Fetch space properties to find our settings
       const response = await api.fetch({
@@ -142,9 +140,7 @@ export default function SpaceSettings() {
     setSaving(true);
     
     try {
-      // In resolver functions or using @forge/api for backend:
-      // const token = await api.asUser().getToken();
-      //
+      const token = await AP.context.getToken();
       
       // Save space property
       await api.fetch({

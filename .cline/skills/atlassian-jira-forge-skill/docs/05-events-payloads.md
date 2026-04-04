@@ -37,18 +37,19 @@ All Forge events share a common structure:
 
 ### Issue Events
 
+Forge trigger modules use the `jira:<action>:<entity>` format (e.g., `jira:issue_created`, `jira:comment_updated`):
+
 | Event Name | Description |
 |------------|-------------|
-| `avi:jira:created:issue` | When a new issue is created |
-| `avi:jira:updated:issue` | When an issue's fields are updated |
-| `avi:jira:deleted:issue` | When an issue is deleted |
-| `avi:jira:transited:issue` | When an issue's status changes |
+| `jira:issue_created` | When a new issue is created |
+| `jira:issue_updated` | When an issue's fields are updated |
+| `jira:issue_deleted` | When an issue is deleted |
 
 ### Issue Payload Structure
 
 ```javascript
 {
-  "eventType": "avi:jira:created:issue",
+  "eventType": "jira:issue_created",
   "atlassianId": "557058:1234-5678-abcd-efgh",
   "context": {
     "cloudId": "ari:cloud:identity::site/...",
@@ -99,15 +100,15 @@ All Forge events share a common structure:
 
 | Event Name | Description |
 |------------|-------------|
-| `avi:jira:created:comment` | When a comment is added to an issue |
-| `avi:jira:updated:comment` | When a comment is edited |
-| `avi:jira:deleted:comment` | When a comment is deleted |
+| `jira:comment_created` | When a comment is added to an issue |
+| `jira:comment_updated` | When a comment is edited |
+| `jira:comment_deleted` | When a comment is deleted |
 
 ### Comment Payload
 
 ```javascript
 {
-  "eventType": "avi:jira:created:comment",
+  "eventType": "jira:comment_created",
   "atlassianId": "557058:abc123",
   "issue": {
     "id": "12345",
@@ -129,7 +130,7 @@ All Forge events share a common structure:
 
 | Event Name | Description |
 |------------|-------------|
-| `avi:jira:workflow:transition` | When any workflow transition occurs |
+| `jira:workflow_transitioned` | When any workflow transition occurs |
 
 ## Trigger Module Configuration
 
@@ -138,15 +139,15 @@ modules:
   trigger:
     - key: issue-created-trigger
       events:
-        - avi:jira:created:issue
-        - avi:jira:updated:issue
+        - jira:issue_created
+        - jira:issue_updated
       function: handleIssueEvents
       
     - key: pr-merge-check
       events:
-        - avi:bitbucket:pr:opened
-        - avi:bitbucket:pr:updated
-      function: handlePR Events
+        - bitbucket:pullrequest_opened
+        - bitbucket:pullrequest_updated
+      function: handlePREvents
 ```
 
 ## Function Handler Signature
@@ -156,14 +157,14 @@ export const handleIssueEvents = async (event, context) => {
   console.log('Event type:', event.eventType);
   
   switch(event.eventType) {
-    case 'avi:jira:created:issue':
+    case 'jira:issue_created':
       return handleCreatedIssue(event);
-    case 'avi:jira:updated:issue':
+    case 'jira:issue_updated':
       return handleUpdatedIssue(event);
   }
 };
 
-export const handlePR Events = async (event, context) => {
+export const handlePREvents = async (event, context) => {
   console.log('PR trigger:', event.pullrequest.title);
   // Your PR handling logic
 };
@@ -175,7 +176,7 @@ When a workflow condition/validator expression fails:
 
 ```javascript
 {
-  "eventType": "avi:jira:failed:expression",
+  "eventType": "jira:workflow_validation_failed",
   "extensionId": "ari:cloud:ecosystem::extension/appId/envId/static/forge-condition",
   "workflowId": "workflow-uuid",
   "workflowName": "Software Workflow",

@@ -151,14 +151,43 @@ await api.asApp().requestJira('/rest/api/3/issue/bulk', {
 
 ### Get Multiple Issues
 
-Retrieve multiple issues by ID.
+**Important:** The `/rest/api/3/issue/bulk` endpoint only supports the POST method according to Atlassian's OpenAPI specification.
+
+**Recommended Approach: Use Search API**
 
 ```javascript
+// Use JQL search with multiple issue IDs - this is the preferred method
 const response = await api.asApp().requestJira(
-  '/rest/api/3/issue/bulk',
+  '/rest/api/3/search',
   {
-    method: 'GET',
-    query: { id: ['12345', '67890', '11111'] }
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jql: 'id IN (12345, 67890, 11111)',
+      startAt: 0,
+      maxResults: 50,
+      fields: ['summary', 'status', 'assignee']
+    })
+  }
+);
+
+const issues = await response.json();
+console.log(`Found ${issues.issues.length} issues`);
+```
+
+**Alternative: Use POST /rest/api/3/issue/bulkfetch**
+
+```javascript
+// The bulkfetch endpoint accepts POST with issue IDs in body
+const response = await api.asApp().requestJira(
+  '/rest/api/3/issue/bulkfetch',
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      issueIds: ['12345', '67890', '11111'],
+      fields: ['summary', 'status', 'assignee']
+    })
   }
 );
 
@@ -456,11 +485,37 @@ await api.asApp().requestJira(
 
 ### Get Comments
 
-Retrieve all comments for an issue.
+Comments are retrieved when fetching an issue with `expand=changelog,renderedFields,names,schema,operations,editmeta`.
+
+**Option 1: Fetch comments via Issue with Expand**
 
 ```javascript
 const response = await api.asApp().requestJira(
-  `/rest/api/3/issue/${issueKeyOrId}/comment/list`,
+  `/rest/api/3/issue/${issueKeyOrId}?expand=changelog`,
+  { method: 'GET' }
+);
+
+// Comments are in the changelog.history array
+const data = await response.json();
+const comments = data.changelog?.history || [];
+```
+
+**Option 2: Use Search API (JQL) for Comment Search**
+
+```javascript
+const jql = `issue = ${issueKeyOrId} ORDER BY created DESC`;
+const response = await api.asApp().requestJira(
+  `/rest/api/3/search?jql=${encodeURIComponent(jql)}&expand=changelog`,
+  { method: 'GET' }
+);
+```
+
+**Option 3: Fetch Comments via REST API v2**
+
+```javascript
+// Use the /comment endpoint for a specific issue
+const response = await api.asApp().requestJira(
+  `/rest/api/3/issue/${issueKeyOrId}/comments`,
   { method: 'GET' }
 );
 ```

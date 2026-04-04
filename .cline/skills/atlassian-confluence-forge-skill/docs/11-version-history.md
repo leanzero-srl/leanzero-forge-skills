@@ -21,10 +21,21 @@ Confluence maintains version history for all content. Key capabilities:
 |-----------|-------------|----------|
 | Get version history | GET | `/wiki/api/v2/pages/{pageId}/versions` |
 | Get specific version | GET | `/wiki/api/v2/pages/{pageId}/versions/{versionNumber}` |
-| Compare versions | GET | `/wiki/api/v2/pages/{pageId}/versions/diff` |
-| Restore version | PUT | `/wiki/api/v2/pages/{pageId}?versionComment=...` |
+| Compare versions | GET | `/wiki/api/v2/pages/{pageId}/compare?to={versionId}&from={versionId}` |
+| Restore version | POST | `/wiki/api/v2/pages/{pageId}/versions/restore` |
 
 ---
+
+**Note on Version Operations:**
+
+Confluence Cloud REST API v2 has different approaches for version operations:
+
+1. **Compare Versions**: Use `/compare` endpoint with `to` and `from` query parameters containing version IDs
+
+2. **Restore Version**: Confluence Cloud does NOT provide a direct "restore" API. To restore content to a previous version, you must:
+   - Get the version's content via `/pages/{pageId}/versions/{versionNumber}`
+   - Create a new page update with that content using the PUT `/pages/{pageId}` endpoint
+   - Increment the version number in the request body
 
 ## Get Version History
 
@@ -37,9 +48,9 @@ export async function getVersionHistory(pageId, options = {}) {
   const { start = 0, limit = 25 } = options;
 
   try {
-    // Get version history with expand to include author info
+    // Get version history
     const response = await requestConfluence(
-      route`/wiki/api/v2/pages/${pageId}/versions?start=${start}&limit=${limit}&expand=author`
+      route`/wiki/api/v2/pages/${pageId}/versions?start=${start}&limit=${limit}`
     );
 
     if (!response.ok) throw new Error('Failed to get versions');

@@ -342,7 +342,7 @@ function hashContent(content) {
 
 ## Rate Limiting & Backoff
 
-Handle rate limits gracefully in logs/handlers:
+Handle rate limits gracefully in webhook handlers:
 
 ```javascript
 async function handlePageCreated(data) {
@@ -382,7 +382,7 @@ function isRateLimitError(error) {
 ### Manual Testing with Forge CLI
 
 ```bash
-# Deploy logs/handler
+# Deploy webhook handler
 forge deploy --verbose
 
 # Trigger webhook manually for testing
@@ -612,7 +612,7 @@ async function handlePageUpdated(data) {
 ### Handler Errors in Logs
 
 ```bash
-# View logs/handler logs
+# View webhook handler logs
 forge logs --app my-app --function page-handler
 ```
 

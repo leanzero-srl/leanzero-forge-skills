@@ -63,6 +63,7 @@ cd my-confluence-app
 | `forge install` | Install app on an Atlassian site (prompts for site) |
 | `forge install --upgrade` | Upgrade installation (re-prompts for new permissions) |
 | `forge install --upgrade code` | Code-only upgrade (no permission re-approval) |
+| `forge install list` | List all installations of the app |
 | `forge uninstall` | Remove app from a site |
 | `forge uninstall --batch` | Batch uninstall up to 10 installations at once |
 

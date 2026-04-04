@@ -190,7 +190,7 @@ Use `@forge/bridge` when you need:
 |---------|-------------|
 | Access Jira REST API from UI | Custom Page + Bridge API |
 | Configuration for workflow rules | validator/condition/post-function config-ui |
-| Dashboard widgets | dashboard-background-script |
+| Dashboard widgets | jira:dashboardGadget |
 | Portal panel customization | jsm portal modules |
 
 ---

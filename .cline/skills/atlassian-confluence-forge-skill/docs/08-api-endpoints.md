@@ -67,12 +67,25 @@ export default function MyComponent() {
   async function fetchPage(pageId) {
     if (!token) return null;
     
-    const response = await fetch(
-      `${AP.context.getSiteBaseUrl()}/wiki/api/v2/pages/${pageId}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+    // Remove trailing slashes from base URL to avoid duplicate slashes
+    const baseUrl = AP.context.getSiteBaseUrl().replace(/\/+$/, '');
     
-    return response.ok ? await response.json() : null;
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/v2/pages/${pageId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      if (!response.ok) {
+        console.error(`API Error ${response.status}:`, await response.text());
+        return null;
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Fetch error:', error);
+      return null;
+    }
   }
 
   // ...
