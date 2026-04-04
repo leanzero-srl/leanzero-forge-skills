@@ -1,30 +1,13 @@
 # Space Settings: Confluence Configuration Panels
 
-This guide covers creating configuration panels for Confluence spaces using the `confluence:spaceSettings` module.
+**Note:** confluence:spaceSettings provides space-level configuration panels for managing app settings per space.
 
 ---
 
-## What is Space Settings?
+## Available Modules for Space-Level Configuration
 
-The `confluence:spaceSettings` module allows you to add custom configuration panels within a Confluence space's settings area. This is ideal for:
-- App-wide configuration per space
-- Space-level preferences and defaults
-- Admin controls for space-specific features
-
-```yaml
-modules:
-  confluence:spaceSettings:
-    - key: my-app-settings
-      resource: settings
-      icon: icon.png
-      title: My App Settings
-      
-  resource:
-    - key: settings
-      path: src/space-settings.jsx
-```
-
----
+### Option 1: Global Settings (Site-Wide)
+Use `globalSettings` for site-wide admin configuration:
 
 ## When to Use Space Settings vs Page Custom UI
 
@@ -71,10 +54,14 @@ modules:
 
 ```jsx
 import React, { useEffect, useState } from 'react';
-import { api, routeHandlers } from '@forge/bridge';
-import { Card, Heading, Text } from '@atlaskit/card';
-import { TextField } from '@atlaskit/textfield';
-import { Button } from '@atlaskit/button';
+import ForgeReconciler, {
+  Card,
+  Heading,
+  Text,
+  TextField,
+  Button,
+} from '@forge/react';
+import { view, router } from '@forge/bridge';
 
 export default function SpaceSettings() {
   const [spaceId, setSpaceId] = useState(null);
@@ -86,27 +73,35 @@ export default function SpaceSettings() {
     defaultLabel: ''
   });
 
-  // Extract space ID from route
+  // Extract space information from context
   useEffect(() => {
-    async function extractSpaceId() {
-      const route = routeHandlers.getCurrentRoute();
-      
-      // Space settings routes look like:
-      // /spaces/~username/settings/... or contain space key
-      
-      if (route.path.includes('/spaces/')) {
-        const parts = route.path.split('/');
-        // Find the numeric space ID
-        for (const part of parts) {
-          if (/^\d+$/.test(part)) {
-            setSpaceId(parseInt(part, 10));
-            break;
+    async function extractSpaceInfo() {
+      try {
+        // Method 1: Use view.getContext() - the recommended approach
+        const context = await view.getContext();
+        
+        // Space information is available in extension context
+        if (context.extension.space) {
+          setSpaceId(context.extension.space.id);
+        }
+        
+        // Alternative: Extract from URL path using router
+        const currentUrl = window.location.pathname;
+        if (currentUrl.includes('/spaces/')) {
+          const parts = currentUrl.split('/');
+          for (const part of parts) {
+            if (/^\d+$/.test(part)) {
+              setSpaceId(parseInt(part, 10));
+              break;
+            }
           }
         }
+      } catch (error) {
+        console.error('Failed to extract space info:', error);
       }
     }
     
-    extractSpaceId();
+    extractSpaceInfo();
   }, []);
 
   // Load existing settings when space ID is available
@@ -118,7 +113,9 @@ export default function SpaceSettings() {
 
   async function loadSettings() {
     try {
-      const token = await AP.context.getToken();
+      // In resolver functions or using @forge/api for backend:
+      // const token = await api.asUser().getToken();
+      //
       
       // Fetch space properties to find our settings
       const response = await api.fetch({
@@ -145,7 +142,9 @@ export default function SpaceSettings() {
     setSaving(true);
     
     try {
-      const token = await AP.context.getToken();
+      // In resolver functions or using @forge/api for backend:
+      // const token = await api.asUser().getToken();
+      //
       
       // Save space property
       await api.fetch({
@@ -216,6 +215,12 @@ export default function SpaceSettings() {
     </Card>
   );
 }
+
+ForgeReconciler.render(
+  <React.StrictMode>
+    <SpaceSettings />
+  </React.StrictMode>
+);
 ```
 
 ---
@@ -314,25 +319,41 @@ modules:
 ### Extract Space ID from Route
 
 ```jsx
-import { routeHandlers } from '@forge/bridge';
+import { view, router } from '@forge/bridge';
 
 function extractSpaceInfo() {
-  const route = routeHandlers.getCurrentRoute();
+  // Method 1: Use view.getContext() - the recommended approach
+  const context = await view.getContext();
   
-  // Various space settings URL formats
-  const patterns = [
-    /\/spaces\/[^/]+\/settings\/(\d+)/,     // Standard space settings
-    /\/spaces\/([^/]+)/,                     // Space key from path
-  ];
+  if (context.extension.space) {
+    return {
+      spaceKey: context.extension.space.key,
+      spaceId: context.extension.space.id,
+      fullPath: context.location
+    };
+  }
+  
+  // Method 2: Extract from URL path using router (fallback)
+  try {
+    const currentUrl = window.location.pathname;
+    
+    // Various space settings URL formats
+    const patterns = [
+      /\/spaces\/[^/]+\/settings\/(\d+)/,     // Standard space settings with numeric ID
+      /\/spaces\/([^/]+)/,                     // Space key from path
+    ];
 
-  for (const pattern of patterns) {
-    const match = route.path.match(pattern);
-    if (match) {
-      return {
-        spaceKey: match[1],
-        fullPath: route.path
-      };
+    for (const pattern of patterns) {
+      const match = currentUrl.match(pattern);
+      if (match) {
+        return {
+          spaceKey: match[1],
+          fullPath: currentUrl
+        };
+      }
     }
+  } catch (error) {
+    console.error('URL extraction failed:', error);
   }
   
   return null;
@@ -363,6 +384,13 @@ async function getSpaceByKey(spaceKey, token) {
   }
   
   return null;
+}
+
+// Alternative: Use requestConfluence from @forge/bridge
+async function getSpaceWithBridge(spaceKey) {
+  const response = await requestConfluence(`/wiki/api/v2/spaces?keys=${spaceKey}`);
+  const data = await response.json();
+  return data.results?.[0] || null;
 }
 ```
 
@@ -465,11 +493,13 @@ async function isFeatureEnabled(spaceId, featureName, token) {
 // Fallback: Use API to get current context
 async function getCurrentContext(token) {
   // Try multiple methods
-  const route = routeHandlers.getCurrentRoute();
   
-  // Method 1: Parse route
-  const match = route.path.match(/\/spaces\/([^/]+)/);
-  if (match) return { spaceKey: match[1] };
+  // Method 1: Parse route using view.getContext()
+  const context = await view.getContext();
+  
+  if (context.extension.space) {
+    return { spaceKey: context.extension.space.key };
+  }
   
   // Method 2: Use Confluence context from token
   try {
@@ -485,8 +515,44 @@ async function getCurrentContext(token) {
     console.error('Context extraction failed:', e);
   }
   
+  // Method 3: Fallback to URL parsing
+  const currentUrl = window.location.pathname;
+  const match = currentUrl.match(/\/spaces\/([^/]+)/);
+  if (match) return { spaceKey: match[1] };
+  
   return null;
 }
+```
+
+### Using routeHandlers (Custom Wrapper)
+
+The `routeHandlers` object referenced in this document is a **custom wrapper** around the standard Forge bridge APIs. It's not part of the core `@forge/bridge` package but can be implemented as a utility:
+
+```jsx
+// Custom routeHandlers utility (optional)
+import { router, view } from '@forge/bridge';
+
+export const routeHandlers = {
+  getCurrentRoute: async () => {
+    const context = await view.getContext();
+    
+    return {
+      path: window.location.pathname,
+      query: new URLSearchParams(window.location.search),
+      spaceId: context.extension.space?.id,
+      spaceKey: context.extension.space?.key,
+      ...context
+    };
+  },
+  
+  navigateToSpaceSettings: async (spaceKey) => {
+    await router.navigate({
+      target: 'module',
+      moduleKey: 'my-app-settings',
+      spaceKey: spaceKey
+    });
+  }
+};
 ```
 
 ---

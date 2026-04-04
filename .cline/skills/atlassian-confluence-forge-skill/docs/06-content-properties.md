@@ -40,14 +40,16 @@ The Content Properties API v2 provides CRUD operations for managing properties o
 ### Reading a Content Property
 
 ```jsx
-import { api } from '@forge/bridge';
+// For Forge apps, use requestConfluence from @forge/bridge instead of direct API calls
 
 async function getPageProperty(pageId, key) {
-  const token = await AP.context.getToken();
+  // Token is handled automatically by requestConfluence - no need to get token manually
   
-  const response = await api.fetch({
+  const response = await requestConfluence({
     url: `/wiki/api/v2/pages/${pageId}/properties/${key}`,
-    headers: { Authorization: `Bearer ${token}` }
+      headers: {
+        'Accept': 'application/json',
+      },
   });
 
   if (response.status === 404) {
@@ -70,13 +72,12 @@ const syncStatus = await getPageProperty('123456789', 'myapp:syncStatus');
 
 ```jsx
 async function setPageProperty(pageId, key, value) {
-  const token = await AP.context.getToken();
+  // Token is handled automatically by requestConfluence - no need to get token manually
   
-  const response = await api.fetch({
+  const response = await requestConfluence({
     url: `/wiki/api/v2/pages/${pageId}/properties/${key}`,
     method: 'PUT',
     headers: { 
-      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({ value })
@@ -101,12 +102,14 @@ await setPageProperty('123456789', 'myapp:syncStatus', {
 
 ```jsx
 async function deletePageProperty(pageId, key) {
-  const token = await AP.context.getToken();
+  // Token is handled automatically by requestConfluence - no need to get token manually
   
-  const response = await api.fetch({
+  const response = await requestConfluence({
     url: `/wiki/api/v2/pages/${pageId}/properties/${key}`,
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` }
+      headers: {
+        'Accept': 'application/json',
+      },
   });
 
   return response.ok || response.status === 404;
@@ -117,11 +120,13 @@ async function deletePageProperty(pageId, key) {
 
 ```jsx
 async function listPageProperties(pageId) {
-  const token = await AP.context.getToken();
+  // Token is handled automatically by requestConfluence - no need to get token manually
   
-  const response = await api.fetch({
+  const response = await requestConfluence({
     url: `/wiki/api/v2/pages/${pageId}/properties`,
-    headers: { Authorization: `Bearer ${token}` }
+      headers: {
+        'Accept': 'application/json',
+      },
   });
 
   if (!response.ok) {
@@ -141,7 +146,7 @@ Create a reusable helper class for working with content properties:
 
 ```jsx
 // src/utils/contentProperties.js
-import { api } from '@forge/bridge';
+// For Forge apps, use requestConfluence from @forge/bridge instead of direct API calls
 
 export class ContentPropertyStore {
   constructor(appPrefix) {
@@ -153,15 +158,17 @@ export class ContentPropertyStore {
   }
 
   async _getToken() {
-    return await AP.context.getToken();
+    // Token is handled automatically by requestConfluence
   }
 
   async get(pageId, key) {
     try {
       const token = await this._getToken();
-      const response = await api.fetch({
+      const response = await requestConfluence({
         url: `/wiki/api/v2/pages/${pageId}/properties/${this._getKey(key)}`,
-        headers: { Authorization: `Bearer ${token}` }
+      headers: {
+        'Accept': 'application/json',
+      },
       });
 
       if (response.status === 404) return null;
@@ -181,7 +188,7 @@ export class ContentPropertyStore {
   async set(pageId, key, value) {
     try {
       const token = await this._getToken();
-      const response = await api.fetch({
+      const response = await requestConfluence({
         url: `/wiki/api/v2/pages/${pageId}/properties/${this._getKey(key)}`,
         method: 'PUT',
         headers: { 
@@ -205,10 +212,12 @@ export class ContentPropertyStore {
   async delete(pageId, key) {
     try {
       const token = await this._getToken();
-      const response = await api.fetch({
+      const response = await requestConfluence({
         url: `/wiki/api/v2/pages/${pageId}/properties/${this._getKey(key)}`,
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
+      headers: {
+        'Accept': 'application/json',
+      },
       });
 
       return response.ok || response.status === 404;
@@ -221,9 +230,11 @@ export class ContentPropertyStore {
   async getAll(pageId) {
     try {
       const token = await this._getToken();
-      const response = await api.fetch({
+      const response = await requestConfluence({
         url: `/wiki/api/v2/pages/${pageId}/properties`,
-        headers: { Authorization: `Bearer ${token}` }
+      headers: {
+        'Accept': 'application/json',
+      },
       });
 
       if (!response.ok) {
@@ -426,56 +437,76 @@ const relatedPages = await getCachedData(
 
 ### Pattern 4: Space-Level Properties
 
-Store properties at the space level for configuration:
+Store properties at the space level for configuration.
+
+**Note:** In Confluence Cloud, space-level properties are stored as content properties on a designated "config" page within each space. To access them, you need to first find or create this config page.
 
 ```jsx
+import { requestConfluence } from '@forge/bridge';
+
 async function getSpaceProperty(spaceKey, key) {
-  const token = await AP.context.getToken();
+  // First, search for the config page in the specified space
+  // Token is handled automatically by requestConfluence - no need to get token manually
   
-  // First, get a page from the space to use as reference
-  // Or store space properties in a dedicated "config" page
-  
-  const response = await api.fetch({
-    url: `/wiki/api/v2/search?cql=space=${spaceKey}%20AND%20title="App+Configuration"&limit=1`,
-    headers: { Authorization: `Bearer ${token}` }
-  });
+  try {
+    // Use requestConfluence for Confluence REST API calls
+    const response = await requestConfluence(
+      `/wiki/api/v2/search?cql=space="${spaceKey}"%20AND%20title="App Configuration"&limit=1`
+    );
 
-  if (!response.ok) return null;
-  
-  const data = await response.json();
-  if (!data.results || data.results.length === 0) return null;
-  
-  const configPageId = data.results[0].id;
-  
-  // Now get the property from the config page
-  const propResponse = await api.fetch({
-    url: `/wiki/api/v2/pages/${configPageId}/properties/${key}`,
-    headers: { Authorization: `Bearer ${token}` }
-  });
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    if (!data.results || data.results.length === 0) return null;
+    
+    // Search results have structure: [{ content: { id, ... } }]
+    const configPageId = data.results[0].content.id;
+    
+    // Now get the property from the config page
+    const propResponse = await requestConfluence(
+      `/wiki/api/v2/pages/${configPageId}/properties/${key}`
+    );
 
-  if (propResponse.status === 404) return null;
-  
-  const propData = await propResponse.json();
-  return propData.value;
+    if (propResponse.status === 404) return null;
+    
+    const propData = await propResponse.json();
+    return propData.value;
+  } catch (error) {
+    console.error('Error getting space property:', error);
+    return null;
+  }
 }
 
 async function setSpaceProperty(spaceKey, key, value) {
-  const token = await AP.context.getToken();
-  
   // Find or create config page
-  let configPageId = await this._getOrCreateConfigPage(spaceKey, token);
+  let configPageId = await _getOrCreateConfigPage(spaceKey);
   
-  const response = await api.fetch({
-    url: `/wiki/api/v2/pages/${configPageId}/properties/${key}`,
-    method: 'PUT',
-    headers: { 
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ value })
-  });
+  // Token is handled automatically by requestConfluence - no need to get token manually
+  
+  try {
+    const response = await requestConfluence(
+      `/wiki/api/v2/pages/${configPageId}/properties/${key}`,
+      {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ value })
+      }
+    );
 
-  return response.ok;
+    return response.ok;
+  } catch (error) {
+    console.error('Error setting space property:', error);
+    return false;
+  }
+}
+
+// Helper function to get or create config page
+async function _getOrCreateConfigPage(spaceKey) {
+  // Implementation depends on your app's specific requirements
+  // Typically involves creating a dedicated "App Configuration" page in the space
+  return null; // Replace with actual implementation
 }
 ```
 
@@ -487,11 +518,13 @@ The same API works for blog posts:
 
 ```jsx
 async function getBlogPostProperty(blogPostId, key) {
-  const token = await AP.context.getToken();
+  // Token is handled automatically by requestConfluence - no need to get token manually
   
-  const response = await api.fetch({
+  const response = await requestConfluence({
     url: `/wiki/api/v2/blogposts/${blogPostId}/properties/${key}`,
-    headers: { Authorization: `Bearer ${token}` }
+      headers: {
+        'Accept': 'application/json',
+      },
   });
 
   if (response.status === 404) return null;
@@ -505,13 +538,12 @@ async function getBlogPostProperty(blogPostId, key) {
 }
 
 async function setBlogPostProperty(blogPostId, key, value) {
-  const token = await AP.context.getToken();
+  // Token is handled automatically by requestConfluence - no need to get token manually
   
-  const response = await api.fetch({
+  const response = await requestConfluence({
     url: `/wiki/api/v2/blogposts/${blogPostId}/properties/${key}`,
     method: 'PUT',
     headers: { 
-      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({ value })

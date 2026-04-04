@@ -27,33 +27,69 @@ Confluence provides several APIs for:
 
 ## Getting Current User Info
 
-### Get Current User Account ID
+### Get Current User Account ID (via Context)
+
+In Forge apps, the user's account ID is accessed through the context object passed to resolver functions or via the bridge API.
 
 ```javascript
-// src/utils/user.js
-import { AP } from '@forge/bridge';
+// In a resolver function, access context directly:
+export const myResolverFunction = async (payload, context) => {
+  // The context contains user information
+  console.log(`User Account ID: ${context.accountId}`);
+  
+  return { userId: context.accountId };
+};
 
-export function getCurrentUserId() {
-  return AP.context.getUserId();
+// For Custom UI components, get context from bridge:
+import { useEffect, useState } from 'react';
+import { bridge } from '@forge/bridge';
+
+export function useCurrentUser() {
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    async function loadUserContext() {
+      try {
+        const context = await bridge.getContext();
+        setCurrentUser({
+          accountId: context.accountId,
+          displayName: context.displayName
+        });
+      } catch (error) {
+        console.error('Error loading user context:', error);
+      }
+    }
+
+    loadUserContext();
+  }, []);
+
+  return currentUser;
 }
 
-// Usage
-const userId = getCurrentUserId();
-console.log(`Current user: ${userId}`);
-```
+// Usage in React component
+function UserProfile() {
+  const user = useCurrentUser();
+  
+  if (!user) return <div>Loading...</div>;
+  
+  return (
+    <div>
+      <p>Logged in as: {user.displayName}</p>
+      <p>User ID: {user.accountId}</p>
+    </div>
+  );
+}
 
-### Get Current User Details
+### Get Current User Details (via Confluence API)
 
 ```javascript
 import { route } from '@forge/api';
 import { requestConfluence } from '@forge/bridge';
 
 export async function getCurrentUserDetails() {
-  const token = await AP.context.getToken();
-  const userId = AP.context.getUserId();
-
+  // Note: For user details, you can use the current-user endpoint
   const response = await requestConfluence(
-    route`/wiki/api/v2/users/${userId}`
+    route`/wiki/api/v2/current-user`
   );
 
   if (!response.ok) throw new Error('Failed to get user');
@@ -64,19 +100,39 @@ export async function getCurrentUserDetails() {
 // Usage
 const user = await getCurrentUserDetails();
 console.log(`${user.displayName} (${user.email})`);
-```
 
-### Get User Display Name
+### Get User Display Name (via Context)
+
+As noted above, use `bridge.getContext()` to get user display name:
 
 ```javascript
-export function getUserDisplayName() {
-  const displayName = AP.context.getUserDisplayName();
-  return displayName || 'Unknown';
+import { useEffect, useState } from 'react';
+import { bridge } from '@forge/bridge';
+
+export function useUserDisplayName() {
+  const [displayName, setDisplayName] = useState('Unknown');
+
+  useEffect(() => {
+    async function loadContext() {
+      try {
+        const context = await bridge.getContext();
+        setDisplayName(context.displayName || 'Unknown');
+      } catch (error) {
+        console.error('Error loading context:', error);
+      }
+    }
+
+    loadContext();
+  }, []);
+
+  return displayName;
 }
 
 // Usage in React component
 function UserProfile() {
-  return <div>Logged in as: {getUserDisplayName()}</div>;
+  const displayName = useUserDisplayName();
+  
+  return <div>Logged in as: {displayName}</div>;
 }
 ```
 

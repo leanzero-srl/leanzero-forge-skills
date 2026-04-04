@@ -25,7 +25,7 @@ Forge apps request permissions (scopes) in `manifest.yml` to access Atlassian pr
 | Scope | Description |
 |-------|-------------|
 | `read:jira-work` | View issues, projects, workflows, statuses |
-| `read:project:jira` | Read project data and metadata |
+| `read:project` | Read project data and metadata |
 | `read:workflow:jira` | Access workflow configurations |
 | `read:user:jira` | Read user information (accounts, groups) |
 
@@ -148,7 +148,65 @@ permissions:
         - "api.yourservice.com"
 ```
 
----
+
+## Permissions by Module Type
+
+This section maps Forge module types to their required permission scopes.
+
+| Module Type | Read Scopes | Write Scopes | Notes |
+|-------------|-------------|--------------|-------|
+| `jira:workflowValidator` | `read:jira-work`, `read:workflow:jira`, `read:user:jira` | - | Validates before transition completes |
+| `jira:workflowCondition` | `read:jira-work`, `read:workflow:jira` | - | Controls transition visibility in UI |
+| `jira:workflowPostFunction` | `read:jira-work` | `write:jira-work` | Executes after successful transition |
+| `jira:issueTabPanel` | `read:jira-work`, `read:user:jira` | - | Custom issue tab panel |
+| `jira:jiraIssueProperties` | `storage:app` | `storage:app` | Issue properties module |
+| `scheduledTrigger` | `read:jira-work` | `write:jira-work` | Runs on schedule (hourly/daily/weekly) |
+| `action` | `read:jira-work`, `read:user:jira` | `write:jira-work` | Automation action module |
+| `jira:dashboardWidget` | `read:jira-work` | - | Dashboard widget module |
+| `jira:mergeCheck` | `read:repository:bitbucket`, `read:pullrequest:bitbucket` | - | Bitbucket merge check module |
+| `jira:contentProperty` | `storage:app` | `storage:app` | Confluence content properties |
+
+### Common Scope Combinations by Use Case
+
+**Workflow Validator App:**
+```yaml
+permissions:
+  scopes:
+    - read:jira-work       # View issues and workflows
+    - read:workflow:jira   # Access workflow configurations
+    - read:user:jira       # For user/group checks in validation rules
+```
+
+**Issue Tab Panel App:**
+```yaml
+permissions:
+  scopes:
+    - read:jira-work       # View issue data for tab content
+    - read:user:jira       # Read user information
+```
+
+**Issue Properties (KVS) App:**
+```yaml
+permissions:
+  scopes:
+    - storage:app          # Store custom properties on issues
+```
+
+**Scheduled Trigger App:**
+```yaml
+permissions:
+  scopes:
+    - read:jira-work       # Read issue data for scheduled operations
+    - write:jira-work      # Update issues based on schedule logic
+```
+
+### Scope Prefix Reference
+
+| Prefix | Purpose |
+|--------|---------|
+| `read:jira-work` | View issues, projects, workflows |
+| `write:jira-work` | Create/update/delete issues |
+| `storage:app` | Forge Key-Value Storage (KVS) |
 
 ## Granting Permissions During Development
 
@@ -204,7 +262,7 @@ permissions:
   scopes:
     # Read operations
     - read:jira-work
-    - read:project:jira
+    - read:project
     - read:workflow:jira
     - read:user:jira
     

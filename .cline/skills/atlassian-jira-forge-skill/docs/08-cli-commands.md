@@ -10,19 +10,22 @@ The Forge CLI (`forge`) is used to develop, deploy, and manage Forge apps. All c
 
 | Command | Description |
 |---------|-------------|
-| `forge init` | Create a new Forge app |
-| `forge --version` | Show CLI version |
+| `forge create` | Create a new Forge app (interactive prompts) |
+| `forge deploy` | Deploy app to development environment |
 | `forge login` | Log in to Atlassian account |
 | `forge logout` | Log out of current session |
 
 ### Initialize New App
 
 ```bash
-# Start interactive setup
-forge init
+# Start interactive setup (prompts for name, category, template)
+forge create
 
-# Or specify template
-forge init --template react-nodejs
+# Example flow:
+# ? Enter a name for your app: my-app
+# ? Select an Atlassian app or platform tool: Jira
+# ? Select a category: UI Kit
+# ? Select a template: jira-admin-page
 ```
 
 ---
@@ -34,7 +37,7 @@ forge init --template react-nodejs
 | `forge deploy` | Deploy app to development environment |
 | `forge install` | Install app on current site |
 | `forge install --upgrade` | Update installation with new version |
-| `forge uninstall` | Remove app from current site |
+# App removal is done via Atlassian Admin Console (Settings > Apps)
 
 ### Deployment Flow
 
@@ -58,8 +61,7 @@ forge logs -n 50
 
 | Command | Description |
 |---------|-------------|
-| `forge tunnel` | Create local tunnel for testing |
-| `forge status` | Show app deployment status |
+| `forge tunnel` | Create local tunnel for testing (development env) |
 
 ### Using Forge Tunnel
 
@@ -138,7 +140,7 @@ forge lint --fix
 forge [command] [options]
 
 Commands:
-  init                  Create a new Forge app
+  create                Create a new Forge app
   deploy                Deploy app to environment
   install               Install app on site
   uninstall             Remove app from site
@@ -165,7 +167,7 @@ Options:
 
 ```bash
 # 1. Create new app
-forge init my-forge-app
+forge create my-forge-app
 cd my-forge-app
 
 # 2. Add your custom logic
@@ -197,20 +199,65 @@ forge logs -n 50
 
 ---
 
-## Environment Variables
+## Environment Variables & Secret Storage
 
-For sensitive data like API keys:
+### Using Forge's KVS API (Recommended)
 
-```bash
-# Set environment variable
-export MY_API_KEY="secret-value"
+For sensitive data like API keys, use Forge's Key-Value Storage:
 
-# In your function:
-import { env } from '@forge/api';
-const apiKey = process.env.MY_API_KEY;
+```javascript
+// Store a secret (in your resolver function)
+import kvs from '@forge/kvs';
+await kvs.set('MY_API_KEY', 'secret-value');
+
+// Retrieve in your function:
+const apiKey = await kvs.get('MY_API_KEY');
 ```
 
-Or use Forge's built-in secret storage (if available in your environment).
+### Available KVS API Functions
+
+Use the `@forge/kvs` module in your JavaScript code:
+
+```javascript
+import kvs from '@forge/kvs';
+
+// Get a value
+const value = await kvs.get('MY_KEY');
+
+// Set a value
+await kvs.set('MY_KEY', 'value');
+
+// Delete a value
+await kvs.delete('MY_KEY');
+```
+
+### Permissions Required
+
+Your manifest.yml needs the appropriate permission scope:
+
+```yaml
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+```
+
+For app-level storage in Jira, use:
+
+```yaml
+resources:
+  - key: my-app-resources
+    path: src/frontend/index.jsx
+
+app:
+  id: <your-app-id>
+```
+
+```yaml
+permissions:
+  scopes:
+    - storage:app
+```
 
 ---
 

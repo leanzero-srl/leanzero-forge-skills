@@ -42,10 +42,16 @@ modules:
       description: A dashboard gadget example.
       resource: main
       thumbnail: 'https://example.com/icon.png'
+      # resolver is required for most gadgets to fetch data
+      resolver:
+        function: resolverFunction
 permissions:
   scopes:
     - 'read:jira-work'
-```
+
+# Optional additional properties
+# refreshable: true  # Override native Jira refresh behavior
+# displayConditions: {}  # Define visibility conditions
 
 #### Event Triggers with Filtering (trigger)
 ```yaml
@@ -61,6 +67,7 @@ modules:
 ```
 
 #### Bitbucket Merge Checks (bitbucket:mergeCheck)
+
 ```yaml
 modules:
   bitbucket:mergeCheck:
@@ -68,12 +75,20 @@ modules:
       function: main
       name: Check PR Title
       description: Validates pull request title format
+      # Triggers control when the merge check is invoked
       triggers:
-        - on-merge
+        - on-merge         # When user attempts to merge (prevents merge if fails)
+        - on-code-pushed   # On each push to source branch
+        - on-reviewer-status-changed  # When reviewer approval status changes
 permissions:
   scopes:
     - 'read:pullrequest:bitbucket'
 ```
+
+**Available Triggers:**
+- `on-merge` - Invoked when user attempts to merge (prevents merge if required check fails)
+- `on-code-pushed` - Invoked on each push to the source branch
+- `on-reviewer-status-changed` - Invoked when reviewer approval status changes
 
 [Files]
 ### New Files to Create

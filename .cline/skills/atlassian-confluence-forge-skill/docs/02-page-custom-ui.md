@@ -1,18 +1,47 @@
 # Page Custom UI: Confluence Extensions
 
-This guide covers building custom UI extensions for Confluence pages. Note that Confluence Forge uses **pageBanner** module type rather than a dedicated "pageCustomUi" module.
+This guide covers building custom UI extensions for Confluence pages using Atlassian Forge.
 
 ---
 
 ## Available Module Types for Pages
 
-Confluence does not have a `confluence:pageCustomUi` module type. Instead, use these modules:
+
+Confluence supports the following module types for custom UI extensions:
 
 | Module | Description |
 |--------|-------------|
 | `confluence:pageBanner` | Adds a banner to Confluence pages |
-| `confluence:contentAction` | Adds menu item to "more actions" (•••) for pages and blogs |
+| `confluence:contentAction` | Adds menu item to "more actions" (...) for pages and blogs |
 | `confluence:contextMenu` | Adds menu entry when text is selected on a page or blog |
+| `confluence:contentBylineItem` | Adds an entry to the content byline section (contributor metadata area) |
+| `confluence:fullPage` | Displays content in place of a Confluence page, with a custom route |
+| `confluence:spacePage` | Creates dedicated pages within a Confluence space navigation menu |
+| `confluence:globalPage` | Creates top-level pages accessible via the Apps section of main navigation |
+| `confluence:homepageFeed` | Adds dynamic content in the right panel of the Confluence home page |
+| `macro` | Inserts dynamic content into pages via the editor |
+
+---
+
+## Permission Scopes
+
+When using `confluence:pageCustomUi` or related modules, declare the appropriate scopes in your manifest:
+
+```yaml
+permissions:
+  scopes:
+    - read:confluence-content.summary
+    - read:confluence-content:*
+    - write:confluence-content:*
+```
+
+For content properties API access:
+```yaml
+permissions:
+  scopes:
+    - read:confluence-content.summary
+    - write:confluence-content.properties
+```
 
 ---
 
@@ -20,41 +49,102 @@ Confluence does not have a `confluence:pageCustomUi` module type. Instead, use t
 
 The `pageBanner` module adds a banner that appears at the top of Confluence pages.
 
+### Manifest Configuration (UI Kit)
+
 ```yaml
 modules:
   confluence:pageBanner:
-    - key: my-page-banner
+    - key: hello-world-page-banner
       resource: main
-      title: My Page Banner
+      render: native
+resources:
+  - key: main
+    path: src/frontend/index.jsx
 ```
+
+### Manifest Configuration (Custom UI)
+
+```yaml
+modules:
+  confluence:pageBanner:
+    - key: hello-world-page-banner
+      resource: main
+resources:
+  - key: main
+    path: static/page-banner/build
+```
+
+### Properties
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `key` | string | Yes | A unique key for the module. Regex: `^[a-zA-Z0-9_-]+$` |
+| `resource` | string | Yes | A reference to the static resources entry |
+| `render` | `'native'` | Only for UI Kit | Indicates the module uses UI Kit |
+| `resolver` | object | No | `{ function: string }` or `{ endpoint: string }` for content resolution |
+| `displayConditions` | object | No | Defines when the page banner is displayed |
+| `unlicensedAccess` | string[] | No | User types that can access: `unlicensed`, `anonymous` |
+
+### Extension Context
+
+Available via `useProductContext()` (UI Kit) or `view.getContext()` (Custom UI):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `type` | string | The type of the module |
+| `content.id` | string | Unique identifier of the content object |
+| `content.type` | string | The type of the content object |
+| `content.subtype` | string \| null | The subtype of the content object |
+| `space.id` | string | Unique identifier of the space |
+| `space.key` | string | Unique key of the space |
+| `location` | string | Full URL of the host page |
 
 ---
 
 ## confluence:contentAction Module
 
-The `contentAction` module adds a menu item to the "more actions" dropdown for pages and blog posts.
+The `contentAction` module adds a menu item to the "more actions" (...) dropdown for pages and blog posts. Clicking the item triggers a modal dialog.
 
 ```yaml
 modules:
   confluence:contentAction:
     - key: my-content-action
       resource: main
+      render: native
       title: My Action
+      resolver:
+        function: resolver
+      viewportSize: medium
       displayConditions:
         pageTypes:
           - page
           - blogpost
 ```
+
+### Properties
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `key` | string | Yes | Unique key. Regex: `^[a-zA-Z0-9_-]+$` |
+| `title` | string or i18n object | Yes | Text displayed as the menu item |
+| `resource` | string | For Custom UI / modern UI Kit | Key of a static resources entry |
+| `render` | `'native'` | For modern UI Kit | Indicates UI Kit usage |
+| `resolver` | object | No | `{ function: string }` or `{ endpoint: string }` |
+| `viewportSize` | `'small'` \| `'medium'` \| `'large'` \| `'xlarge'` \| `'max'` | No | Display size of the resource |
+| `displayConditions` | object | No | Conditions for when the module is displayed |
+| `keyboardShortcut` | object | No | Keyboard shortcut to trigger the module |
+
 ---
 
-## Basic Implementation (Page Banner)
+## Basic Implementation (Page Banner with UI Kit)
 
 ### Manifest Configuration
 
 ```yaml
 app:
   id: ari:cloud:ecosystem::app/my-confluence-app
-  name: My Confluence App
+  runtime:
+    name: nodejs24.x
 
 permissions:
   scopes:
@@ -64,31 +154,70 @@ modules:
   confluence:pageBanner:
     - key: my-page-banner
       resource: main
-      title: My Page Banner
-      icon: icon.png
+      render: native
+      resolver:
+        function: resolver
+  function:
+    - key: resolver
+      handler: index.handler
 
 resources:
   - key: main
-    path: src/page-banner.jsx
+    path: src/frontend/index.jsx
 ```
 
-### React Component
+### UI Kit Component
 
 ```jsx
 import React from 'react';
-import { useProductContext } from '@forge/bridge';
+import ForgeReconciler, { Text, Heading, useProductContext } from '@forge/react';
+
+const App = () => {
+  const context = useProductContext();
+
+  // Context provides page information via extension
+  const contentId = context?.extension?.content?.id;
+  const spaceKey = context?.extension?.space?.key;
+
+  return (
+    <>
+      <Heading as="h3">My Page Banner</Heading>
+      <Text>Content ID: {contentId}, Space: {spaceKey}</Text>
+    </>
+  );
+};
+
+ForgeReconciler.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+```
+
+### Custom UI Component
+
+For Custom UI, use `view.getContext()` from `@forge/bridge` instead of `useProductContext`:
+
+```jsx
+import React, { useEffect, useState } from 'react';
+import { view } from '@forge/bridge';
 
 export default function PageBanner() {
-  const context = useProductContext();
-  
-  // Context provides page information
-  console.log('Page ID:', context.content.id);
-  console.log('Space ID:', context.space.id);
+  const [context, setContext] = useState(null);
+
+  useEffect(() => {
+    view.getContext().then(setContext);
+  }, []);
+
+  if (!context) return <div>Loading...</div>;
+
+  const contentId = context.extension?.content?.id;
+  const spaceKey = context.extension?.space?.key;
 
   return (
     <div className="page-banner">
       <h3>My Page Banner</h3>
-      <p>This banner appears on all Confluence pages.</p>
+      <p>Content ID: {contentId}, Space: {spaceKey}</p>
     </div>
   );
 }
@@ -98,118 +227,59 @@ export default function PageBanner() {
 
 ## Getting Page Context
 
-To work with the current page, you need to extract its context:
+Forge provides the page context directly through the extension context. You do **not** need to parse URLs.
 
-### Extracting Page ID from URL
-
-```jsx
-import { routeHandlers } from '@forge/bridge';
-
-function getPageIdFromRoute() {
-  const route = routeHandlers.getCurrentRoute();
-  
-  // Confluence pages have routes like:
-  // /spaces/~username/page/123456789/Page+Title
-  
-  if (route.path.startsWith('/spaces')) {
-    const parts = route.path.split('/');
-    // Find the numeric ID segment
-    for (const part of parts) {
-      if (/^\d+$/.test(part)) {
-        return parseInt(part, 10);
-      }
-    }
-  }
-  
-  return null;
-}
-
-// Alternative: Use route parameters directly
-function usePageContext() {
-  const route = routeHandlers.getCurrentRoute();
-  const params = new URLSearchParams(route.search);
-  
-  // Some routes include pageId in query params
-  return {
-    pageId: params.get('pageId') || getPageIdFromRoute(),
-    spaceKey: params.get('spaceKey'),
-    title: params.get('title')
-  };
-}
-```
-
-### Using Route Handlers Properly
+### UI Kit
 
 ```jsx
-import { routeHandlers } from '@forge/bridge';
-import { useEffect, useState } from 'react';
+import ForgeReconciler, { Text, useProductContext } from '@forge/react';
 
-export default function PageExtension() {
-  const [pageId, setPageId] = useState(null);
+const App = () => {
+  const context = useProductContext();
 
-  useEffect(() => {
-    // Wait for Confluence to set up the route context
-    const timer = setTimeout(() => {
-      const route = routeHandlers.getCurrentRoute();
-      
-      // Parse page ID from route
-      if (route.path.includes('/page/')) {
-        const match = route.path.match(/\/page\/(\d+)/);
-        if (match) {
-          setPageId(parseInt(match[1], 10));
-        }
-      }
-    }, 100); // Small delay to ensure context is ready
+  const contentId = context?.extension?.content?.id;
+  const contentType = context?.extension?.content?.type;
+  const spaceId = context?.extension?.space?.id;
+  const spaceKey = context?.extension?.space?.key;
 
-    return () => clearTimeout(timer);
-  }, []);
+  return (
+    <>
+      <Text>Page ID: {contentId}</Text>
+      <Text>Type: {contentType}</Text>
+      <Text>Space: {spaceKey} (ID: {spaceId})</Text>
+    </>
+  );
+};
 
-  return <div>Current Page ID: {pageId || 'Loading...'}</div>;
-}
+ForgeReconciler.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
 ```
 
----
-
-## Fetching Current Page Data
-
-Once you have the page ID, fetch its content:
+### Custom UI
 
 ```jsx
 import React, { useEffect, useState } from 'react';
-import { api, routeHandlers } from '@forge/bridge';
+import { view } from '@forge/bridge';
 
-async function getCurrentPageData() {
-  const token = await AP.context.getToken();
-  
-  // Extract page ID from current route
-  const route = routeHandlers.getCurrentRoute();
-  const match = route.path.match(/\/page\/(\d+)/);
-  
-  if (!match) return null;
-  
-  const pageId = match[1];
-  
-  const response = await api.fetch({
-    url: `/wiki/api/v2/pages/${pageId}`,
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  
-  return response.ok ? response.json() : null;
-}
-
-export default function PageExtension() {
-  const [page, setPage] = useState(null);
+function PageExtension() {
+  const [context, setContext] = useState(null);
 
   useEffect(() => {
-    getCurrentPageData().then(setPage);
+    view.getContext().then(setContext);
   }, []);
 
-  if (!page) return <div>Loading page data...</div>;
+  if (!context) return <div>Loading...</div>;
+
+  const { content, space } = context.extension;
 
   return (
-    <div className="page-extension">
-      <h3>Page: {page.title}</h3>
-      <p>Last modified: {new Date(page.lastModified).toLocaleDateString()}</p>
+    <div>
+      <p>Page ID: {content?.id}</p>
+      <p>Type: {content?.type}</p>
+      <p>Space: {space?.key} (ID: {space?.id})</p>
     </div>
   );
 }
@@ -217,69 +287,193 @@ export default function PageExtension() {
 
 ---
 
-## Using Confluence UI Kit Components
+## Fetching Current Page Data
 
-Atlassian provides React components that match Confluence's design system:
+Use `requestConfluence` from `@forge/bridge` (Custom UI) or `api.asUser().requestConfluence` from `@forge/api` (resolver functions). Authentication is handled automatically — no tokens needed.
+
+### Custom UI
 
 ```jsx
-import React from 'react';
-import { Card, Heading, Text } from '@atlaskit/card';
-import { InlineSpinner } from '@atlaskit/spinner';
-import { Button } from '@atlaskit/button';
-import { Modal, ModalBody, ModalHeader, ModalFooter } from '@atlaskit/modal-dialog';
+import React, { useEffect, useState } from 'react';
+import { view, requestConfluence } from '@forge/bridge';
 
 export default function PageExtension() {
-  const [isOpen, setIsOpen] = React.useState(false);
+  const [page, setPage] = useState(null);
+
+  useEffect(() => {
+    async function loadPage() {
+      const context = await view.getContext();
+      const contentId = context.extension?.content?.id;
+
+      if (!contentId) return;
+
+      const response = await requestConfluence(
+        `/wiki/api/v2/pages/${contentId}?body-format=storage`
+      );
+
+      if (response.ok) {
+        setPage(await response.json());
+      }
+    }
+    loadPage();
+  }, []);
+
+  if (!page) return <div>Loading page data...</div>;
 
   return (
-    <Card>
-      <Heading>My Extension</Heading>
-      <Text weight="strong">Welcome to my Confluence extension!</Text>
-      
-      <Button onClick={() => setIsOpen(true)}>
+    <div className="page-extension">
+      <h3>Page: {page.title}</h3>
+      <p>Status: {page.status}</p>
+    </div>
+  );
+}
+```
+
+### Resolver Function (Backend)
+
+```javascript
+import Resolver from '@forge/resolver';
+import api, { route } from '@forge/api';
+
+const resolver = new Resolver();
+
+resolver.define('getPageContent', async ({ payload }) => {
+  const response = await api.asUser().requestConfluence(
+    route`/wiki/api/v2/pages/${payload.pageId}?body-format=atlas_doc_format`
+  );
+
+  if (!response.ok) {
+    const err = `Error fetching page ${payload.pageId}: ${response.status} ${response.statusText}`;
+    console.error(err);
+    throw new Error(err);
+  }
+
+  return await response.json();
+});
+
+export const handler = resolver.getDefinitions();
+```
+
+---
+
+## Using Atlassian Design System Components
+
+Atlassian provides the Atlaskit design system. In **UI Kit** apps, use components from `@forge/react`. In **Custom UI** apps, you can use Atlaskit packages directly.
+
+### UI Kit (using @forge/react)
+
+```jsx
+import React, { useState } from 'react';
+import ForgeReconciler, {
+  Text,
+  Heading,
+  Button,
+  Strong,
+  useProductContext,
+} from '@forge/react';
+
+const App = () => {
+  const context = useProductContext();
+
+  return (
+    <>
+      <Heading as="h3">My Extension</Heading>
+      <Text>
+        <Strong>Welcome</Strong> to my Confluence extension!
+      </Text>
+      <Text>Module: {context?.moduleKey}</Text>
+    </>
+  );
+};
+
+ForgeReconciler.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+```
+
+### Custom UI (using Atlaskit packages)
+
+```jsx
+import React, { useState, useCallback } from 'react';
+import Button from '@atlaskit/button/new';
+import Spinner from '@atlaskit/spinner';
+import Modal, {
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+  ModalTransition,
+} from '@atlaskit/modal-dialog';
+
+export default function PageExtension() {
+  const [isOpen, setIsOpen] = useState(false);
+  const openModal = useCallback(() => setIsOpen(true), []);
+  const closeModal = useCallback(() => setIsOpen(false), []);
+
+  return (
+    <div>
+      <h3>My Extension</h3>
+      <p>Welcome to my Confluence extension!</p>
+
+      <Button appearance="primary" onClick={openModal}>
         Open Modal
       </Button>
 
-      {isOpen && (
-        <Modal onClose={() => setIsOpen(false)}>
-          <ModalHeader>Dialog Title</ModalHeader>
-          <ModalBody>Dialog content here...</ModalBody>
-          <ModalFooter>
-            <Button onClick={() => setIsOpen(false)}>Close</Button>
-          </ModalFooter>
-        </Modal>
-      )}
-    </Card>
+      <ModalTransition>
+        {isOpen && (
+          <Modal onClose={closeModal}>
+            <ModalHeader>
+              <ModalTitle>Dialog Title</ModalTitle>
+            </ModalHeader>
+            <ModalBody>Dialog content here...</ModalBody>
+            <ModalFooter>
+              <Button appearance="subtle" onClick={closeModal}>
+                Close
+              </Button>
+            </ModalFooter>
+          </Modal>
+        )}
+      </ModalTransition>
+    </div>
   );
 }
 ```
 
 ---
 
-## Handling Permissions
+## Checking Permitted Operations
 
-Check if user has permission to view/modify content:
+Check what operations the current user can perform on a page using the operations endpoint:
+
+### Custom UI
 
 ```jsx
-import { api } from '@forge/bridge';
-
-async function checkPagePermissions(pageId, token) {
-  // Check if user can edit the page
-  const response = await api.fetch({
-    url: `/wiki/api/v2/pages/${pageId}/permissions`,
-    headers: { Authorization: `Bearer ${token}` }
-  });
-
-  return response.ok ? await response.json() : null;
-}
+import React, { useEffect, useState } from 'react';
+import { view, requestConfluence } from '@forge/bridge';
 
 export default function PageExtension() {
   const [canEdit, setCanEdit] = useState(false);
 
   useEffect(() => {
     async function checkPermissions() {
-      const token = await AP.context.getToken();
-      // Your permission checking logic here
+      const context = await view.getContext();
+      const contentId = context.extension?.content?.id;
+      if (!contentId) return;
+
+      const response = await requestConfluence(
+        `/wiki/api/v2/pages/${contentId}/operations`
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        // Check if 'update' operation is permitted
+        const hasEdit = data.results?.some(
+          (op) => op.operation === 'update'
+        );
+        setCanEdit(hasEdit);
+      }
     }
     checkPermissions();
   }, []);
@@ -296,64 +490,152 @@ export default function PageExtension() {
 
 ## Common Patterns
 
-### Pattern 1: Display Related Content
+### Pattern 1: Search for Related Content
+
+Use the v1 REST API for CQL-based search (the v2 API does not support CQL search):
 
 ```jsx
-async function findRelatedPages(currentPage, token) {
-  // Search for pages with similar labels or content
-  const response = await api.fetch({
-    url: `/wiki/api/v2/search?cql=type=page%20AND%20ancestor=${currentPage.id}`,
-    headers: { Authorization: `Bearer ${token}` }
-  });
+import { requestConfluence } from '@forge/bridge';
 
-  return response.ok ? await response.json() : [];
+async function findRelatedPages(spaceKey) {
+  const cql = encodeURIComponent(`type=page AND space="${spaceKey}"`);
+  const response = await requestConfluence(
+    `/wiki/rest/api/search?cql=${cql}&limit=10`
+  );
+
+  if (response.ok) {
+    const data = await response.json();
+    return data.results;
+  }
+  return [];
 }
 ```
 
-### Pattern 2: Store Page-Specific Data
+### Pattern 2: Store Page-Specific Data with Content Properties
 
-Use page properties to store app data:
+Use content properties to store app data. The v2 API uses numeric property IDs for retrieval/update, so create with POST first:
 
 ```jsx
-async function savePageProperty(pageId, key, value, token) {
-  const response = await api.fetch({
-    url: `/wiki/api/v2/pages/${pageId}/properties/${key}`,
-    method: 'PUT',
-    headers: { 
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ value })
-  });
+import { requestConfluence } from '@forge/bridge';
 
-  return response.ok;
+// Create a new content property
+async function createPageProperty(pageId, key, value) {
+  const response = await requestConfluence(
+    `/wiki/api/v2/pages/${pageId}/properties`,
+    {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ key, value }),
+    }
+  );
+
+  return response.ok ? await response.json() : null;
+}
+
+// Update an existing content property (requires property ID and version number)
+async function updatePageProperty(pageId, propertyId, key, value, versionNumber) {
+  const response = await requestConfluence(
+    `/wiki/api/v2/pages/${pageId}/properties/${propertyId}`,
+    {
+      method: 'PUT',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        key,
+        value,
+        version: { number: versionNumber, message: 'Updated by app' },
+      }),
+    }
+  );
+
+  return response.ok ? await response.json() : null;
+}
+
+// List all content properties for a page
+async function getPageProperties(pageId) {
+  const response = await requestConfluence(
+    `/wiki/api/v2/pages/${pageId}/properties`,
+    { headers: { 'Accept': 'application/json' } }
+  );
+
+  return response.ok ? await response.json() : null;
 }
 ```
 
 ### Pattern 3: Sync with External Systems
 
-```jsx
-async function syncPageWithExternalSystem(pageId, token) {
-  // Fetch page content
-  const pageResponse = await api.fetch({
-    url: `/wiki/api/v2/pages/${pageId}?bodyFormat=storage`,
-    headers: { Authorization: `Bearer ${token}` }
-  });
+External fetch requires declaring allowed domains in `permissions.external.fetch` in the manifest:
 
+```yaml
+# manifest.yml
+permissions:
+  scopes:
+    - read:confluence-content.summary
+  external:
+    fetch:
+      backend:
+        - https://your-api.com
+      client:
+        - https://your-api.com
+```
+
+```jsx
+import { requestConfluence } from '@forge/bridge';
+
+async function syncPageWithExternalSystem(contentId) {
+  // Fetch page content via Forge bridge (auth handled automatically)
+  const pageResponse = await requestConfluence(
+    `/wiki/api/v2/pages/${contentId}?body-format=storage`
+  );
+
+  if (!pageResponse.ok) return;
   const page = await pageResponse.json();
 
-  // Sync with external system via your backend
+  // Sync with external system (requires permissions.external.fetch.client)
   await fetch('https://your-api.com/sync/page', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       confluencePageId: page.id,
       title: page.title,
-      content: page.body.storage.value
-    })
+      content: page.body?.storage?.value,
+    }),
   });
 }
 ```
+
+---
+
+## Router Navigation
+
+Use the `router` from `@forge/bridge` to navigate within Confluence:
+
+```javascript
+import { router } from '@forge/bridge';
+
+// Navigate to view a specific page
+router.navigate({ target: 'contentView', contentId: '238945' });
+
+// Navigate to edit a specific page
+router.navigate({ target: 'contentEdit', contentId: '238945' });
+
+// Navigate to a Forge module
+router.navigate({ target: 'module', moduleKey: 'my-global-page' });
+
+// Navigate to a content list in a space
+router.navigate({
+  target: 'contentList',
+  contentType: 'page',
+  spaceKey: 'TEAM',
+});
+```
+
+> **Important:** For Custom UI apps, content is rendered within a sandboxed Forge iframe. Standard HTML links (`<a href="...">`) will not be clickable. Use `router.navigate` from `@forge/bridge` for all navigation.
 
 ---
 
@@ -361,53 +643,68 @@ async function syncPageWithExternalSystem(pageId, token) {
 
 ### Extension Not Showing
 
-1. **Check manifest.yml**: Ensure `confluence:pageCustomUi` module is properly configured
-2. **Verify permissions**: User needs appropriate Confluence permissions
-3. **Deploy latest version**: Run `forge deploy --verbose`
+1. **Check manifest.yml**: Ensure the correct Confluence module type (e.g., `confluence:pageBanner`, `confluence:contentAction`) is properly configured with all required properties (`key`, `resource`, and `render: native` for UI Kit).
+2. **Verify permissions**: User needs appropriate Confluence permissions, and the app manifest needs the right scopes.
+3. **Deploy latest version**: Run `forge deploy --verbose` followed by `forge install --upgrade` if updating.
 
-### Token Acquisition Fails
+### Context is `undefined`
 
-```jsx
-// Common issue: Token not available immediately
-async function getTokenWithRetry(maxRetries = 3) {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await AP.context.getToken();
-    } catch (error) {
-      if (i === maxRetries - 1) throw error;
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-  }
-}
-```
-
-### Route Parsing Issues
-
-Different Confluence routes have different structures. Always handle edge cases:
+In UI Kit, `useProductContext()` loads asynchronously and returns `undefined` while loading. Always use optional chaining:
 
 ```jsx
-function safeParseRoute() {
-  try {
-    const route = routeHandlers.getCurrentRoute();
-    
-    // Handle various page URL formats
-    const patterns = [
-      /\/spaces\/[^/]+\/page\/(\d+)/,     // Standard page
-      /\/pages\/viewpage\.action\?pageId=(\d+)/,  // Legacy URL
-      /\/wiki\/pages\/(\d+)/              // Wiki path
-    ];
-
-    for (const pattern of patterns) {
-      const match = route.path.match(pattern);
-      if (match) return match[1];
-    }
-  } catch (error) {
-    console.error('Route parsing failed:', error);
-  }
-  
-  return null;
-}
+const context = useProductContext();
+const contentId = context?.extension?.content?.id; // Safe access
 ```
+
+In Custom UI, `view.getContext()` returns a Promise:
+
+```jsx
+const [context, setContext] = useState(null);
+useEffect(() => {
+  view.getContext().then(setContext);
+}, []);
+```
+
+### API Requests Failing
+
+Ensure you're using the correct request method for your context:
+
+| Context | Method | Package |
+|---------|--------|---------|
+| Custom UI (frontend) | `requestConfluence(url, options)` | `@forge/bridge` |
+| Resolver function (backend) | `api.asUser().requestConfluence(route\`...\`)` | `@forge/api` |
+| Resolver function (app permissions) | `api.asApp().requestConfluence(route\`...\`)` | `@forge/api` |
+
+```jsx
+// Custom UI - auth is automatic, no tokens needed
+import { requestConfluence } from '@forge/bridge';
+
+const response = await requestConfluence('/wiki/api/v2/pages/12345');
+console.log(await response.json());
+```
+
+```javascript
+// Resolver function - use route tagged template for safe URL construction
+import api, { route } from '@forge/api';
+
+const pageId = '12345';
+const response = await api.asUser().requestConfluence(
+  route`/wiki/api/v2/pages/${pageId}`
+);
+```
+
+### Scopes and Permissions
+
+Common Confluence scopes for Forge apps:
+
+| Scope | Description |
+|-------|-------------|
+| `read:confluence-content.summary` | Read content summaries |
+| `read:page:confluence` | Read pages |
+| `write:page:confluence` | Write/update pages |
+| `read:space:confluence` | Read spaces |
+| `write:space:confluence` | Write to spaces |
+| `storage:app` | Use Forge storage |
 
 ---
 

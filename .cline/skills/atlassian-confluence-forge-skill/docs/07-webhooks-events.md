@@ -1,18 +1,18 @@
 # Webhooks & Events: Handling Confluence Events
 
-This guide covers webhooks in Forge apps for Confluence - allowing your app to react to events like page creation, updates, and deletions.
+This guide covers triggers (webhook modules) in Forge apps for Confluence - allowing your app to react to events like page creation, updates, and deletions.
 
 ---
 
 ## Overview
 
-Forge webhooks enable your app to receive notifications when specific events occur in Confluence. Unlike polling with scheduled triggers, webhooks provide real-time event handling.
+Forge triggers enable your app to receive notifications when specific events occur in Confluence. Unlike polling with scheduled triggers, trigger modules provide real-time event handling.
 
 ```yaml
 modules:
-  webhook:
+  trigger:
     - destination: page-created-handler
-      event: confluence:page:created
+      event: avi:confluence:page:created
       
   function.scheduled:
     - key: fallback-checker
@@ -34,31 +34,31 @@ modules:
 
 | Event | Description | When Triggered |
 |-------|-------------|----------------|
-| `confluence:page:created` | New page created | Immediately after save |
-| `confluence:page:updated` | Page content changed | On each save |
-| `confluence:page:deleted` | Page moved to trash | When deleted/moved |
+| `avi:confluence:page:created` | New page created | Immediately after save |
+| `avi:confluence:page:updated` | Page content changed | On each save |
+| `avi:confluence:page:deleted` | Page moved to trash | When deleted/moved |
 
 ### Blog Post Events
 
 | Event | Description | When Triggered |
 |-------|-------------|----------------|
-| `confluence:blogpost:created` | New blog post published | After publication |
-| `confluence:blogpost:updated` | Blog post content changed | On save/update |
-| `confluence:blogpost:deleted` | Blog post moved to trash | When deleted/moved |
+| `avi:confluence:blogpost:created` | New blog post published | After publication |
+| `avi:confluence:blogpost:updated` | Blog post content changed | On save/update |
+| `avi:confluence:blogpost:deleted` | Blog post moved to trash | When deleted/moved |
 
 ### Space Events
 
 | Event | Description | When Triggered |
 |-------|-------------|----------------|
-| `confluence:space:created` | New space created | After creation |
-| `confluence:space:updated` | Space settings changed | On update |
-| `confluence:space:deleted` | Space deleted/archived | When deleted |
+| `avi:confluence:space:created` | New space created | After creation |
+| `avi:confluence:space:updated` | Space settings changed | On update |
+| `avi:confluence:space:deleted` | Space deleted/archived | When deleted |
 
 ### Attachment Events (via page updates)
 
 | Event | Description | When Triggered |
 |-------|-------------|----------------|
-| `confluence:page:updated` | Attachments added/removed | Via page update event |
+| `avi:confluence:page:updated` | Attachments added/removed | Via page update event |
 
 ---
 
@@ -68,7 +68,7 @@ modules:
 
 ```json
 {
-  "event": "confluence:page:created",
+  "event": "avi:confluence:page:created",
   "issueId": null,
   "data": {
     "space": {
@@ -107,7 +107,7 @@ modules:
 
 ```json
 {
-  "event": "confluence:page:updated",
+  "event": "avi:confluence:page:updated",
   "issueId": null,
   "data": {
     "space": {
@@ -143,7 +143,7 @@ modules:
 
 ```json
 {
-  "event": "confluence:page:deleted",
+  "event": "avi:confluence:page:deleted",
   "issueId": null,
   "data": {
     "space": {
@@ -175,15 +175,15 @@ export default async function handler(req, res) {
 
   try {
     switch (event) {
-      case 'confluence:page:created':
+      case 'avi:confluence:page:created':
         await handlePageCreated(data);
         break;
         
-      case 'confluence:page:updated':
+      case 'avi:confluence:page:updated':
         await handlePageUpdated(data);
         break;
         
-      case 'confluence:page:deleted':
+      case 'avi:confluence:page:deleted':
         await handlePageDeleted(data);
         break;
         
@@ -267,15 +267,15 @@ Filter webhooks to only trigger for specific conditions:
 
 ```yaml
 modules:
-  webhook:
+  trigger:
     - destination: filtered-page-handler
-      event: confluence:page:created
+      event: avi:confluence:page:created
       filter: |
         # Only trigger for pages in specific space
         data.space.key == "PROJ"
         
     - destination: labeled-pages-handler
-      event: confluence:page:updated  
+      event: avi:confluence:page:updated  
       filter: |
         # Trigger when specific label is added/removed
         contains(data.content.labels, 'sync-required')
@@ -342,7 +342,7 @@ function hashContent(content) {
 
 ## Rate Limiting & Backoff
 
-Handle rate limits gracefully in webhook handlers:
+Handle rate limits gracefully in logs/handlers:
 
 ```javascript
 async function handlePageCreated(data) {
@@ -382,12 +382,12 @@ function isRateLimitError(error) {
 ### Manual Testing with Forge CLI
 
 ```bash
-# Deploy webhook handler
+# Deploy logs/handler
 forge deploy --verbose
 
 # Trigger webhook manually for testing
 forge trigger-webhook \
-  --event confluence:page:created \
+  --event avi:confluence:page:created \
   --payload '{"data":{"space":{"key":"PROJ"},"content":{"id":"123","title":"Test"}}}'
 ```
 
@@ -396,9 +396,9 @@ forge trigger-webhook \
 ```yaml
 # Add a test webhook to your manifest during development
 modules:
-  webhook:
+  trigger:
     - destination: test-webhook
-      event: confluence:page:created
+      event: avi:confluence:page:created
       
   # Point to ngrok or webhook.site for testing
   function.scheduled:
@@ -415,12 +415,12 @@ Use scheduled triggers as a fallback when webhooks might miss events:
 ```yaml
 modules:
   # Primary: Real-time event handling
-  webhook:
+  trigger:
     - destination: page-created-handler
-      event: confluence:page:created
+      event: avi:confluence:page:created
       
     - destination: page-updated-handler  
-      event: confluence:page:updated
+      event: avi:confluence:page:updated
   
   # Fallback: Periodic sync for missed events
   function.scheduled:
@@ -437,32 +437,46 @@ modules:
 
 ### Reconciliation Handler Example
 
+**Note:** This example uses `requestConfluence` from `@forge/bridge` for Confluence REST API calls, which is the recommended approach in Forge apps.
+
 ```javascript
 // src/scheduled/reconciliation.js
+
+import { requestConfluence } from '@forge/bridge';
 
 export default async function handler() {
   // Find pages that might have been missed by webhooks
   const lastSyncTime = await getLastSyncTimestamp();
   
-  const token = await AP.context.getToken();
-  
-  const response = await api.fetch({
-    url: `/wiki/api/v2/search?cql=type=page%20AND%20lastModified>${lastSyncTime}`,
-    headers: { Authorization: `Bearer ${token}` }
-  });
+  try {
+    // Search for recently modified pages using the Confluence API v2 search endpoint
+    // The search endpoint returns results in format: { results: [{ content: { id, ... } }] }
+    const response = await requestConfluence(
+      `/wiki/api/v2/search?cql=type=page%20AND%20lastModified>='${lastSyncTime}'&limit=100`
+    );
 
-  if (response.ok) {
-    const data = await response.json();
-    
-    for (const page of data.results) {
-      // Check if already processed
-      const isSynced = await getPageProperty(page.id, 'synced');
+    if (response.ok) {
+      const data = await response.json();
       
-      if (!isSynced) {
-        console.log(`Reconciling missed page: ${page.title}`);
-        await syncPageData(page);
+      for (const result of data.results || []) {
+        // Access page ID from result structure
+        const pageId = result.content?.id;
+        
+        if (!pageId) continue;
+        
+        // Check if already processed
+        const isSynced = await getPageProperty(pageId, 'synced');
+        
+        if (!isSynced) {
+          console.log(`Reconciling missed page: ${result.content?.title || pageId}`);
+          await syncPageData(result.content);
+        }
       }
+    } else {
+      console.error('Search API failed:', response.statusText);
     }
+  } catch (error) {
+    console.error('Reconciliation error:', error);
   }
   
   // Update last sync timestamp
@@ -475,18 +489,22 @@ async function getLastSyncTimestamp() {
 }
 
 async function getPageProperty(pageId, key) {
-  const token = await AP.context.getToken();
-  
   try {
-    const response = await api.fetch({
-      url: `/wiki/api/v2/pages/${pageId}/properties/${key}`,
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    const response = await requestConfluence(
+      `/wiki/api/v2/pages/${pageId}/properties/${key}`
+    );
     
     return response.ok;
   } catch (e) {
+    console.error(`Error getting property for page ${pageId}:`, e);
     return false;
   }
+}
+
+// Placeholder function - replace with your implementation
+async function syncPageData(page) {
+  // Your synchronization logic here
+  console.log('Syncing page:', page.title);
 }
 ```
 
@@ -594,7 +612,7 @@ async function handlePageUpdated(data) {
 ### Handler Errors in Logs
 
 ```bash
-# View webhook handler logs
+# View logs/handler logs
 forge logs --app my-app --function page-handler
 ```
 

@@ -162,7 +162,10 @@ root.render(
 
 ```tsx
 import React, { useEffect, useState } from 'react';
-import { invoke } from '@forge/bridge';
+import { bridge } from '@forge/bridge';
+
+// Note: `invoke()` calls custom resolver functions defined in the backend.
+// See "Resolver Patterns" document for creating backend resolvers.
 
 interface IssueData {
   key: string;
@@ -185,14 +188,14 @@ function App() {
 
   useEffect(() => {
     // Get current user info
-    invoke('getCurrentUser')
+    bridge.invoke('getCurrentUser')
       .then(setUser)
       .catch(err => console.error('Failed to get user:', err));
 
     // Get issue data (issue key passed as parameter from context)
     const issueKey = 'PROJ-123'; // In real app, get from getContext()
     
-    invoke('getIssueData', { issueKey })
+    bridge.invoke('getIssueData', { issueKey })
       .then(data => {
         setIssue(data);
         setLoading(false);

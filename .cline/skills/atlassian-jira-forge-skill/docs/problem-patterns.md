@@ -60,7 +60,7 @@ export const Configure = () => {
         label="Select Project"
         options={projects}
         value={selectedProject}
-        onChange={(e) => setSelectedProject(e.target.value)}
+        onChange={(value) => setSelectedProject(value)}
       />
     </Form>
   );
@@ -137,13 +137,19 @@ export const validateExternal = async (args) => {
   }
   
   try {
-    // Call external API for validation
-    const response = await api.asApp().requestJira(
-      route`https://api.example.com/validate?value=${encodeURIComponent(fieldValue)}`
-    );
+    // Call external API for validation using fetch (api.asApp().requestJira is for Atlassian APIs only)
+    const endpoint = `https://api.example.com/validate?value=${encodeURIComponent(fieldValue)}`;
+    
+    // Option 1: Use requestConfluence from @forge/bridge for Custom UI frontend
+    // const response = await requestConfluence(endpoint);
+    
+    // Option 2: For backend functions, create a separate API endpoint that proxies to external service
+    const apiEndpoint = `/api/external/validate?value=${encodeURIComponent(fieldValue)}`;
+    const response = await api.asUser().requestConfluence(route`${apiEndpoint}`);
     
     if (!response.ok) {
-      console.error('External validation failed:', await response.text());
+      const errorText = await response.text();
+      console.error('External validation failed:', errorText);
       return { 
         result: false, 
         errorMessage: "External validation service unavailable" 

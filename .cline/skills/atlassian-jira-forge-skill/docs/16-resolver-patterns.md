@@ -1,6 +1,9 @@
 # Forge Resolver Patterns
 
-This document provides comprehensive reference for the Forge Resolver pattern, which enables Custom UI apps to communicate with backend functions through a defined interface.
+This document provides comprehensive reference for the Forge Resolver pattern, which enables frontend applications to communicate with backend functions through a defined interface. Resolvers can be used in any frontend context including:
+- Dashboard widgets
+- Issue view web items
+- Bitbucket merge check configurations
 
 ## Table of Contents
 1. [Resolver Pattern Overview](#resolver-pattern-overview)
@@ -59,7 +62,10 @@ export const fetchData = async (payload, context) => {
   // This function runs on Atlassian's serverless infrastructure
   console.log('Fetching data...');
   
-  // Make authenticated API calls
+  // Access product context from the payload/context
+  console.log(`User: ${context.userAccountId}`);
+  console.log(`App location: ${context.productContext?.location}`);
+  
   const response = await api.asApp().requestJira('/rest/api/3/myself');
   const user = await response.json();
   
@@ -72,19 +78,27 @@ export const fetchData = async (payload, context) => {
 export const processIssue = async (payload, context) => {
   const { issueKey, action } = payload;
   
+  // Access context information from the event
+  console.log(`Processing issue: ${issueKey} for user: ${context.userAccountId}`);
+  
   // Validate input
   if (!issueKey || !action) {
     throw new Error('Missing required parameters');
   }
   
   // Process the issue based on action
-  switch (action) {
-    case 'approve':
-      return await approveIssue(issueKey);
-    case 'reject':
-      return await rejectIssue(issueKey);
-    default:
-      throw new Error(`Unknown action: ${action}`);
+  try {
+    switch (action) {
+      case 'approve':
+        return await approveIssue(issueKey);
+      case 'reject':
+        return await rejectIssue(issueKey);
+      default:
+        throw new Error(`Unknown action: ${action}`);
+    }
+  } catch (error) {
+    console.error('Process issue error:', error);
+    throw error;
   }
 };
 

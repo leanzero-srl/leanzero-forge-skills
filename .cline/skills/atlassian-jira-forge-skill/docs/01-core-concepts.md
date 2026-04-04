@@ -201,7 +201,7 @@ export const handler = resolver.getDefinitions();
 
 | Command | Purpose |
 |---------|---------|
-| `forge init` | Create new app |
+| `forge create` | Create new app |
 | `forge deploy` | Deploy to development site |
 | `forge install --upgrade` | Install/update on site |
 | `forge tunnel` | Local testing with live environment |
