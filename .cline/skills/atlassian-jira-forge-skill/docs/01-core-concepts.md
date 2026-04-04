@@ -29,15 +29,16 @@ The central configuration file defining your app's capabilities.
 
 ```yaml
 modules:
-  jira:workflowValidator:
-    - key: my-validator
-      name: My Validator
-      description: Validates issue fields
-      function: validate
+  jira:issueCreatedTrigger:
+    - key: my-trigger
+      name: My Trigger
+      description: Triggers when an issue is created
+      events:
+        - jira:issue_created
 
 function:
-  - key: validate
-    handler: index.validate
+  - key: handleIssueCreated
+    handler: index.handleIssueCreated
 
 resources:
   - key: config-ui
@@ -62,10 +63,14 @@ A capability your app provides. Each module type serves a specific purpose:
 
 | Module Type | Purpose |
 |-------------|---------|
-| `jira:workflowValidator` | Validate data during workflow transitions |
-| `jira:workflowCondition` | Control visibility of transitions |
-| `jira:workflowPostFunction` | Execute logic after successful transition |
+| `jira:issueCreatedTrigger` | Trigger when an issue is created |
+| `jira:workflowCondition` | Control visibility of transitions using Jira expressions (Connect/Forge pattern) |
+| `jira:workflowPostFunction` | Execute logic after transition using Jira expressions (Connect/Forge pattern) |
+| `scheduledTriggers` | Run functions at scheduled intervals |
+| `trigger` | Handle webhook events from external systems |
 | `macro` | Insert content in Confluence pages |
+
+**Important Note**: Forge apps primarily use **Jira expressions** for workflow validators, conditions, and post functions - not custom module declarations like Connect apps. The `jira:workflowValidator`, `jira:workflowCondition`, and `jira:workflowPostFunction` keys shown in manifest examples are from the older Connect app framework.
 
 ### Function
 
@@ -135,25 +140,30 @@ export const issueCreated = async (event, context) => {
 Called from Custom UI to backend logic:
 
 ```javascript
-import Resolver from '@forge/resolver';
+import { get, load } from '@forge/bridge';
 
-const resolver = new Resolver();
-
-resolver.define('fetchData', async ({ payload }, context) => {
+const fetchData = async () => {
   // Can make Jira API calls with proper auth
   return { data: await response.json() };
-});
+};
 
-export const handler = resolver.getDefinitions();
+// Export functions for use in UI
+export const handler = async (args, context) => {
+  return fetchData();
+};
 ```
 
-### Workflow Module Functions
+### Scheduled Triggers
 
-| Module Type | Return Value |
-|-------------|--------------|
-| `jira:workflowValidator` | `{ result: true }` or `{ result: false, errorMessage: '...' }` |
-| `jira:workflowCondition` | `{ result: true }` or `{ result: false }` |
-| `jira:workflowPostFunction` | `{ result: true }` |
+Run at configured intervals:
+
+```javascript
+export const dailyReport = async (event, context) => {
+  console.log('Scheduled execution:', event.scheduledTime);
+  // Generate and send report
+  return { status: 'sent' };
+};
+```
 
 ## Manifest.yml Reference
 
@@ -168,7 +178,7 @@ export const handler = resolver.getDefinitions();
 ### Optional Sections
 
 - `function` - Define executable functions
-- `resolver` - Define resolver functions for UI communication
+- `resolver` - Define resolver functions for UI communication  
 - `resources` - Declare static asset locations
 - `permissions` - Request required scopes
 - `external.fetch` - Allow calls to external APIs (e.g., OpenAI)
@@ -210,7 +220,9 @@ export const handler = resolver.getDefinitions();
 
 ## Next Steps
 
-- **Jira Modules**: Learn about workflow validators, conditions, and post functions
+- **Jira Modules**: Learn about workflow conditions and post functions using Jira expressions
 - **Events & Payloads**: Understand what data is available when modules trigger
 - **API Endpoints**: Know how to call Jira REST APIs from your app
 - **Permissions**: Configure required scopes for your app's functionality
+
+**Important Note on Workflow Rules**: Forge apps use **Jira expressions** (not custom module types) for workflow validators, conditions, and post functions. These are configured via the Jira UI or through the Jira Management API, not in the `manifest.yml`.

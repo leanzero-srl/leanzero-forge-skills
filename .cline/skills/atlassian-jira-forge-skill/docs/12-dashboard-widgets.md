@@ -17,13 +17,15 @@ This document provides code examples for implementing dashboard widgets in Atlas
 
 ```yaml
 modules:
-  jira:dashboardGadget:
+  jira:dashboardWidget:
     - key: custom-stats-widget
       name: { value: 'Custom Statistics' }
       description: { value: 'Displays custom statistics on the dashboard' }
       function: customStatsFunction
       requiresContext: true
 ```
+
+**Important**: The correct module type is `jira:dashboardWidget`, not `jira:dashboardGadget` (which was used in Connect apps).
 
 ### Function Implementation
 
@@ -94,7 +96,7 @@ const renderWidgetContent = (stats) => {
 
 ```yaml
 modules:
-  jira:dashboardGadget:
+  jira:dashboardWidget:
     - key: project-health-widget
       name: { value: 'Project Health Dashboard' }
       description: { value: 'Shows health metrics for selected projects' }
@@ -220,7 +222,7 @@ const renderContent = (context) => {
 
 ```yaml
 modules:
-  jira:dashboardGadget:
+  jira:dashboardWidget:
     - key: project-health-widget
       name: { value: 'Project Health' }
       description: { value: 'Shows project health metrics' }
@@ -339,7 +341,7 @@ const renderHealthWidget = (stats) => {
 
 ```yaml
 modules:
-  jira:dashboardGadget:
+  jira:dashboardWidget:
     - key: my-tasks-widget
       name: { value: 'My Tasks' }
       description: { value: 'Shows tasks assigned to me' }
@@ -426,7 +428,7 @@ const getPriorityColor = (priorityName) => {
 
 ```yaml
 modules:
-  jira:dashboardGadget:
+  jira:dashboardWidget:
     - key: recent-activity-widget
       name: { value: 'Recent Activity' }
       description: { value: 'Shows recent activity on the project' }
@@ -581,4 +583,6 @@ export const gracefulWidget = async (payload, context) => {
 
 ## Related Documentation
 
-- [Forge Dashboard Widgets](https://developer.atlassian.com/cloud/forge/application-structure/#jira:dashboardGadget)
+- [Forge Dashboard Widgets](https://developer.atlassian.com/cloud/forge/application-structure/#jira:dashboardWidget)
+
+**Note**: The correct module type is `jira:dashboardWidget`, not `jira:dashboardGadget` (which was used in Connect apps).

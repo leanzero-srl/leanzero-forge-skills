@@ -58,7 +58,7 @@ function MyForm() {
     // Process the form data
     try {
       // Submit to backend
-      await bridge.invoke('submitForm', { payload: formData });
+      await invoke('submitForm', { payload: formData });
       
       // Show success message
       showToast('Form submitted successfully!');
@@ -770,12 +770,12 @@ function DismissibleAlert() {
 Show temporary notifications.
 
 ```javascript
-import { bridge } from '@forge/bridge';
+import { invoke, view } from '@forge/bridge';
 
 function ToastExample() {
   const showToast = async (message, type = 'success') => {
     try {
-      await bridge.configure({
+      view.configure({
         title: '',
         body: (
           <div className={`toast toast-${type}`}>
@@ -788,7 +788,7 @@ function ToastExample() {
       // Auto-close after 3 seconds
       setTimeout(async () => {
         try {
-          await bridge.close();
+          await view.close();
         } catch (error) {
           console.error('Failed to close toast:', error);
         }

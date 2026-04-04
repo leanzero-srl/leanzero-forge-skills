@@ -1,163 +1,242 @@
-# Jira Workflow Conditions
+# Jira Workflow Conditions (Jira Expressions)
 
 ## Overview
 
-The `jira:workflowCondition` module allows Forge apps to control whether transitions are visible in the workflow. Conditions are evaluated when the transition screen renders - if false, the transition is hidden from users.
+Forge apps **DO have a `jira:workflowCondition` module type**. This allows you to execute custom Forge functions to control the visibility of transitions, providing much more power than simple Jira expressions.
 
-**Key Difference**: Validators block transitions (after validation), conditions hide transitions (before rendering).
+While Jira expressions are useful for simple logic, the `jira:workflowCondition` module is the correct way to implement complex, data-driven visibility rules that require external API calls, database lookups, or advanced business logic.
 
-## Module Configuration
+### When to use `jira:workflowCondition` vs Jira Expressions
 
-```yaml
-modules:
-  jira:workflowCondition:
-    - key: my-condition               # Required: Unique identifier
-      name: Release Condition         # Required: Display name
-      description: Only show release transition for managers # Required: Description
-      
-      function: checkRelease          # Optional: Function to execute
-      expression: user.inGroup('release-managers')  # OR: Jira expression
-      
-      projectTypes:
-        - company-managed
-        - team-managed
-        
-      create:
-        resource: condition-config
-      edit:
-        resource: condition-config
-      view:
-        resource: condition-view
-```
+| Feature | Jira Expressions | `jira:workflowCondition` |
+|---------|-----------------|---------------------------|
+| **Complexity** | Simple logic (field presence, group check) | Complex logic (external API, KVS, DB) |
+| **Execution** | Within Jira engine (fast) | As a Forge function (more powerful) |
+| **Manifest** | No declaration needed | Requires `manifest.yml` entry |
+| **Configuration** | Direct in Workflow UI | Workflow UI + Forge Function |
 
-### Required Properties
+### What Are Jira Expressions?
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `key` | string | Unique alphanumeric identifier (regex: `^[a-zA-Z0-9_-]+$`) |
-| `name` | string \| i18n | Display name shown in workflow editor |
-| `description` | string \| i18n | Description shown in workflow editor |
+Jira expressions are a simple expression language that allows you to perform basic validation/visibility checks. They run within Jira's workflow engine.
 
-### Optional Properties
+**Key Points:**
+- No `manifest.yml` module declaration needed
+- Configured in Jira workflow editor or via REST API
+- Uses simple expression syntax like: `user.inGroup('release-managers')`
+- Runs within Jira's engine, not as a separate Forge function
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `function` | string | Reference to function handler (if not using expression) |
-| `expression` | string | Jira expression for simple condition |
-| `projectTypes` | array | Allowed project types: `company-managed`, `team-managed` |
+## Configuration Approach
 
-## Two Configuration Approaches
+### Using the Workflow Editor (UI)
 
-### Approach 1: Function-Based Condition (Full Control)
+1. Open your workflow in Jira
+2. Select the transition you want to add a condition to
+3. Add a condition of type **"Forge workflow condition"** (for custom modules) or **"Jira expression"** (for simple logic)
+4. If using a Forge module, select your app and the specific condition key
+5. If using a Jira expression, enter your expression: `user.inGroup('release-managers')`
+
+### Using the Forge Module (`jira:workflowCondition`)
+
+To implement a custom condition via Forge, you must declare it in your `manifest.yml`:
 
 ```yaml
 modules:
   jira:workflowCondition:
-    - key: licensing-condition
-      name: Licensing Check Condition
-      description: Only show if app license is active
-      function: checkLicense
-      
+    - key: my-custom-condition
+      name: Custom Visibility Rule
+      description: Hides transition based on complex external logic
+      function: checkVisibility
+      # Optional: UI for configuring the condition
       create:
-        resource: config-ui
+        resource: condition-config-ui
+
+functions:
+  - key: checkVisibility
+    handler: src/index.checkVisibility
+
+resources:
+  - key: condition-config-ui
+    path: static/condition-config/build
 ```
 
-Function implementation:
+### Function Implementation
+
+Your Forge function must return a response indicating whether the transition should be visible.
 
 ```javascript
-export const checkLicense = async (args) => {
-  const { configuration, context } = args;
-  
-  // Check license status from context
-  const isActive = context.license?.isActive === true;
-  
-  if (isActive) {
-    return { result: true };  // Show transition
-  } else {
-    return { result: false }; // Hide transition
+export const checkVisibility = async (payload) => {
+  const { issue, configuration } = payload;
+
+  try {
+    // Example: Check an external system or KVS
+    const isAllowed = await api.asApp().requestJira(route`/rest/api/3/issue/${issue.id}/some-custom-endpoint`);
+    
+    if (isAllowed.ok) {
+       return { result: true };
+    }
+
+    return { result: false };
+
+  } catch (error) {
+    console.error("Condition error:", error);
+    // Best practice: Fail closed (hide transition) if error occurs during critical checks
+    return { result: false };
   }
 };
 ```
 
-### Approach 2: Jira Expression (Simple Condition)
+## Response Formats
 
-```yaml
-modules:
-  jira:workflowCondition:
-    - key: has-assignee-condition
-      name: Must Be Assigned Condition
-      description: Only show if issue is assigned
-      expression: issue.assignee != null
-```
+The function must return an object with a `result` property (boolean).
 
-## Event Payload
+| Scenario | Return Value | Result in Jira |
+|----------|--------------|----------------|
+| **Visible** | `{ result: true }` | Transition is shown to users |
+| **Hidden** | `{ result: false }` | Transition is hidden from users |
 
-When the condition triggers:
+## Comparison: Connect vs Forge Approach
 
-```javascript
-{
-  issue: {
-    id: "12345",
-    key: "PROJ-123",
-    fields: { ... }
-  },
-  transition: {
-    id: "11",
-    name: "Done",
-    from: { id: "1" },
-    to: { id: "3" }
-  },
-  workflow: {
-    id: "workflow-uuid",
-    name: "Software Workflow"
-  },
-  configuration: {
-    requiredGroup: "release-managers",
-    enabled: true
-  }
-}
-```
+| Aspect | Connect Apps | Forge Apps |
+|--------|-------------|------------|
+| Module Type | `jiraWorkflowConditions` | `jira:workflowCondition` |
+| Manifest Entry | Required with `enabledForTmp` property | Required for custom modules |
+| Configuration | In manifest or via JS API | Workflow UI + Forge Function |
 
-## Response Format
 
-### Show Transition (Condition Met)
+## Jira Expression Syntax for Conditions
+
+### Basic Checks
 
 ```javascript
-return { result: true };
+// Check if user is in a group
+user.inGroup('release-managers')
+
+// Check if issue has assignee
+issue.assignee != null
+
+// Check if priority is high
+issue.priority.name == "High"
+
+// Check project key
+project.key == "PROJ"
 ```
 
-### Hide Transition (Condition Not Met)
+### Field Access
+
+| Expression | Returns |
+|-----------|---------|
+| `user.accountId` | User's Atlassian account ID |
+| `user.inGroup('group-name')` | Boolean - is user in group? |
+| `user.inProjectRole(roleId)` | Boolean - is user in role? |
+| `issue.assignee != null` | Boolean - is issue assigned? |
+| `project.key == "KEY"` | Boolean - project key match |
+
+### Operators
+
+- **Comparison**: `=`, `!=`, `>`, `<`, `>=`, `<=`
+- **Logical**: `&&`, `||`, `!`
+- **Methods**: `.inGroup()`, `.inProjectRole()`
+
+## Common Condition Examples
+
+### 1. Release Manager Only
 
 ```javascript
-return { result: false };
+user.inGroup('release-managers')
 ```
 
-## UI Bridge for Configuration
+**Use case**: Hide transition unless user is in release manager group.
+
+### 2. Must Be Assigned
 
 ```javascript
-import { workflowRules } from '@forge/jira-bridge';
-
-const onConfigureFn = async () => {
-  const requiredGroup = document.getElementById('group-select').value;
-  
-  return JSON.stringify({
-    requiredGroup,
-    invertCondition: false
-  });
-};
-
-await workflowRules.onConfigure(onConfigureFn);
+issue.assignee != null
 ```
+
+**Use case**: Hide transition until issue is assigned to someone.
+
+### 3. Only Reporter Can Proceed
+
+```javascript
+user.accountId == issue.reporter.accountId
+```
+
+**Use case**: Hide transition unless user created the issue.
+
+## Response Handling
+
+When a Jira expression evaluates to false:
+
+1. The transition is hidden from users
+2. Users cannot see or execute that transition
+3. **No Forge event is fired**
+4. Your Forge app functions do NOT run for condition evaluation
+
+### Important: No "Condition Failed" Event
+
+There is **NO** special event for failed conditions. This is a common misconception.
+
+When a condition fails:
+- The transition is hidden from the UI
+- **No external event is triggered**
+- Your Forge app functions do NOT run
 
 ## Permissions Required
+
+To configure conditions via REST API:
 
 ```yaml
 permissions:
   scopes:
-    - read:jira-work
-    - read:workflow:jira
-    - read:user:jira  # For user/group checks
+    - read:jira-work       # View issue data
+    - manage:jira-config   # Manage workflow configuration (requires Administer Jira)
 ```
+
+**Note**: Most condition configurations are done through the Jira UI, not programmatically.
+
+## Migration from Connect Apps
+
+If you have an existing Connect app with `jiraWorkflowConditions`:
+
+### Before (Connect)
+```json
+{
+  "modules": {
+    "jiraWorkflowConditions": [
+      {
+        "key": "my-condition",
+        "expression": "user.inGroup('release-managers')",
+        "enabledForTmp": true,
+        "name": {"value": "Release Condition"}
+      }
+    ]
+  }
+}
+```
+
+### After (Forge)
+- For **simple logic**: Use Jira Expressions directly in the workflow editor (no `manifest.yml` entry).
+- For **complex logic**: Implement a `jira:workflowCondition` module in your `manifest.yml` and point it to a Forge function.
+
+## Comparison: Connect vs Forge Approach
+
+| Aspect | Connect Apps | Forge Apps |
+|--------|-------------|------------|
+| Module Type | `jiraWorkflowConditions` | `jira:workflowCondition` |
+| Manifest Entry | Required with `enabledForTmp` property | Required for custom modules |
+| Configuration | In manifest or via JS API | Workflow UI + Forge Function |
+
+## Event Handling
+
+Forge apps do NOT receive events when conditions are evaluated. This is a key difference from triggers.
+
+### What happens during condition evaluation:
+
+1. User opens issue transition screen
+2. Jira evaluates all condition expressions (either via Jira Expressions or Forge functions)
+3. If expression/function returns false → transition hidden
+4. If expression/function returns true → transition shown
+5. **No event is fired** (even if a Forge function was executed to determine visibility)
 
 ## Common Use Cases
 
@@ -166,32 +245,12 @@ permissions:
 3. **Business Logic**: Hide transitions until prerequisites are met
 4. **Feature Flags**: Conditionally enable based on configuration
 
-## Event: Expression Evaluation Failure
-
-```json
-{
-  "eventType": "avi:jira:failed:expression",
-  "extensionId": "ari:cloud:ecosystem::extension/appId/envId/static/forge-condition",
-  "workflowId": "workflow-uuid",
-  "workflowName": "Software Workflow",
-  "conditionId": "condition-key",
-  "expression": "user.inGroup('nonexistent-group')",
-  "errorMessages": ["Group not found"],
-  "context": { ... }
-}
-```
-
-## Relationship to Validators
-
-| Aspect | Condition | Validator |
-|--------|-----------|-----------|
-| **When it runs** | Before transition screen renders | After user submits transition |
-| **Purpose** | Hide/show transitions in UI | Validate data before completion |
-| **Failure behavior** | Transition hidden from user | Transition blocked, error shown |
-| **User experience** | User doesn't see the option | User sees option but gets error |
+**Note**: For complex condition logic that requires external API calls, consider using a trigger module instead.
 
 ## Next Steps
 
-- **Workflow Validators**: Validate data when transition completes
-- **Workflow Post Functions**: Execute after successful transitions
-- **Admin Pages**: Create configuration interfaces for complex conditions
+- **Workflow Validators**: Validate data when transition completes (also uses Jira expressions)
+- **Workflow Post Functions**: Execute after successful transitions (uses Jira expressions)
+- **Jira Expressions Guide**: Learn more about the expression syntax at Atlassian's documentation
+
+**Remember**: Forge apps use Jira expressions for workflow conditions - not custom module types.

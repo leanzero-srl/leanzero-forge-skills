@@ -19,26 +19,28 @@ This document provides comprehensive examples of event filtering using Jira expr
 
 ### Manifest Configuration with Filter
 
+To apply filters to your trigger modules, use the `filter` key in your `manifest.yml`. The filter uses Jira expression syntax.
+
 ```yaml
 modules:
   trigger:
     - key: issue-created-trigger
       events:
-        - avi:jira:created:issue
+        - jira:issue_created
       filter: |
         issue.fields.project.key == 'PROJ'
       function: handleProjectIssues
       
     - key: bug-only-trigger  
       events:
-        - avi:jira:created:issue
+        - jira:issue_created
       filter: |
         issue.fields.issuetype.name == 'Bug'
       function: handleBugs
       
     - key: high-priority-trigger
       events:
-        - avi:jira:created:issue
+        - jira:issue_created
       filter: |
         issue.fields.priority.name in ['Highest', 'High']
       function: handleHighPriorityIssues
@@ -78,32 +80,34 @@ export const handleHighPriorityIssues = async (event, context) => {
 ### Filter by Single Project
 
 ```yaml
-trigger:
-  - key: specific-project-trigger
-    events:
-      - avi:jira:created:issue
-    filter: |
-      issue.fields.project.key == 'PROJ'
-    function: handleProjectIssues
-    
-  - key: another-project-trigger
-    events:
-      - avi:jira:updated:issue
-    filter: |
-      issue.fields.project.key == 'ANOTHER'
-    function: handleAnotherProjectUpdates
+modules:
+  trigger:
+    - key: specific-project-trigger
+      events:
+        - jira:issue_created
+      filter: |
+        issue.fields.project.key == 'PROJ'
+      function: handleProjectIssues
+      
+    - key: another-project-trigger
+      events:
+        - jira:issue_updated
+      filter: |
+        issue.fields.project.key == 'ANOTHER'
+      function: handleAnotherProjectUpdates
 ```
 
 ### Filter by Multiple Projects
 
 ```yaml
-trigger:
-  - key: multi-project-trigger
-    events:
-      - avi:jira:created:issue
-    filter: |
-      issue.fields.project.key in ['PROJ', 'PROJB', 'PROJC']
-    function: handleMultipleProjects
+modules:
+  trigger:
+    - key: multi-project-trigger
+      events:
+        - jira:issue_created
+      filter: |
+        issue.fields.project.key in ['PROJ', 'PROJB', 'PROJC']
+      function: handleMultipleProjects
 ```
 
 ---
@@ -113,32 +117,34 @@ trigger:
 ### Filter by Single Issue Type
 
 ```yaml
-trigger:
-  - key: bug-trigger
-    events:
-      - avi:jira:created:issue
-    filter: |
-      issue.fields.issuetype.name == 'Bug'
-    function: handleBugs
-    
-  - key: task-trigger
-    events:
-      - avi:jira:created:issue
-    filter: |
-      issue.fields.issuetype.name == 'Task'
-    function: handleTasks
+modules:
+  trigger:
+    - key: bug-trigger
+      events:
+        - jira:issue_created
+      filter: |
+        issue.fields.issuetype.name == 'Bug'
+      function: handleBugs
+      
+    - key: task-trigger
+      events:
+        - jira:issue_created
+      filter: |
+        issue.fields.issuetype.name == 'Task'
+      function: handleTasks
 ```
 
 ### Filter by Multiple Issue Types
 
 ```yaml
-trigger:
-  - key: work-item-trigger
-    events:
-      - avi:jira:updated:issue
-    filter: |
-      issue.fields.issuetype.name in ['Bug', 'Task', 'Story']
-    function: handleWorkItems
+modules:
+  trigger:
+    - key: work-item-trigger
+      events:
+        - jira:issue_updated
+      filter: |
+        issue.fields.issuetype.name in ['Bug', 'Task', 'Story']
+      function: handleWorkItems
 ```
 
 ---
@@ -148,32 +154,34 @@ trigger:
 ### Filter by High Priority
 
 ```yaml
-trigger:
-  - key: high-priority-trigger
-    events:
-      - avi:jira:created:issue
-    filter: |
-      issue.fields.priority.name in ['Highest', 'High']
-    function: handleHighPriority
-    
-  - key: critical-only-trigger
-    events:
-      - avi:jira:created:issue
-    filter: |
-      issue.fields.priority.name == 'Critical'
-    function: handleCriticalIssues
+modules:
+  trigger:
+    - key: high-priority-trigger
+      events:
+        - jira:issue_created
+      filter: |
+        issue.fields.priority.name in ['Highest', 'High']
+      function: handleHighPriority
+      
+    - key: critical-only-trigger
+      events:
+        - jira:issue_created
+      filter: |
+        issue.fields.priority.name == 'Critical'
+      function: handleCriticalIssues
 ```
 
 ### Filter by Low Priority
 
 ```yaml
-trigger:
-  - key: low-priority-trigger
-    events:
-      - avi:jira:updated:issue
-    filter: |
-      issue.fields.priority.name in ['Lowest', 'Low']
-    function: handleLowPriority
+modules:
+  trigger:
+    - key: low-priority-trigger
+      events:
+        - jira:issue_updated
+      filter: |
+        issue.fields.priority.name in ['Lowest', 'Low']
+      function: handleLowPriority
 ```
 
 ---
@@ -183,32 +191,34 @@ trigger:
 ### Filter by Specific Statuses
 
 ```yaml
-trigger:
-  - key: status-created-trigger
-    events:
-      - avi:jira:created:issue
-    filter: |
-      issue.fields.status.name == 'To Do'
-    function: handleTodoIssues
-    
-  - key: status-in-progress-trigger
-    events:
-      - avi:jira:updated:issue
-    filter: |
-      issue.fields.status.name == 'In Progress'
-    function: handleInProgressIssues
+modules:
+  trigger:
+    - key: status-created-trigger
+      events:
+        - jira:issue_created
+      filter: |
+        issue.fields.status.name == 'To Do'
+      function: handleTodoIssues
+      
+    - key: status-in-progress-trigger
+      events:
+        - jira:issue_updated
+      filter: |
+        issue.fields.status.name == 'In Progress'
+      function: handleInProgressIssues
 ```
 
 ### Filter by Status Change
 
 ```yaml
-trigger:
-  - key: transition-to-done-trigger
-    events:
-      - avi:jira:status:changed
-    filter: |
-      (changelog.to = 'Done' or changelog.toCategory.name == 'Done')
-    function: handleCompletedTransitions
+modules:
+  trigger:
+    - key: transition-to-done-trigger
+      events:
+        - jira:workflow_transitioned
+      filter: |
+        issue.fields.status.name == 'Done'
+      function: handleCompletedTransitions
 ```
 
 ---
@@ -218,33 +228,35 @@ trigger:
 ### Filter by Specific Label
 
 ```yaml
-trigger:
-  - key: security-label-trigger
-    events:
-      - avi:jira:created:issue
-    filter: |
-      'security' in issue.fields.labels
-    function: handleSecurityIssues
-    
-  - key: tech-debt-trigger
-    events:
-      - avi:jira:updated:issue
-    filter: |
-      'technical-debt' in issue.fields.labels
-    function: handleTechDebtIssues
+modules:
+  trigger:
+    - key: security-label-trigger
+      events:
+        - jira:issue_created
+      filter: |
+        'security' in issue.fields.labels
+      function: handleSecurityIssues
+      
+    - key: tech-debt-trigger
+      events:
+        - jira:issue_updated
+      filter: |
+        'technical-debt' in issue.fields.labels
+      function: handleTechDebtIssues
 ```
 
 ### Filter by Multiple Labels
 
 ```yaml
-trigger:
-  - key: multi-label-trigger
-    events:
-      - avi:jira:created:issue
-    filter: |
-      ('urgent' in issue.fields.labels) 
-      or ('critical' in issue.fields.labels)
-    function: handleUrgentIssues
+modules:
+  trigger:
+    - key: multi-label-trigger
+      events:
+        - jira:issue_created
+      filter: |
+        ('urgent' in issue.fields.labels) 
+        or ('critical' in issue.fields.labels)
+      function: handleUrgentIssues
 ```
 
 ---
@@ -254,32 +266,34 @@ trigger:
 ### Filter by Specific User
 
 ```yaml
-trigger:
-  - key: my-issues-trigger
-    events:
-      - avi:jira:created:issue
-    filter: |
-      issue.fields.assignee.accountId == 'user:123456:abc-def-ghi'
-    function: handleMyIssues
-    
-  - key: assigned-to-me-update
-    events:
-      - avi:jira:updated:issue
-    filter: |
-      issue.fields.assignee.accountId == context.accountId
-    function: handleAssignedToMe
+modules:
+  trigger:
+    - key: my-issues-trigger
+      events:
+        - jira:issue_created
+      filter: |
+        issue.fields.assignee.accountId == 'user:123456:abc-def-ghi'
+      function: handleMyIssues
+      
+    - key: assigned-to-me-update
+      events:
+        - jira:issue_updated
+      filter: |
+        issue.fields.assignee.accountId == context.accountId
+      function: handleAssignedToMe
 ```
 
 ### Filter by Unassigned Issues
 
 ```yaml
-trigger:
-  - key: unassigned-trigger
-    events:
-      - avi:jira:created:issue
-    filter: |
-      issue.fields.assignee is null
-    function: handleUnassignedIssues
+modules:
+  trigger:
+    - key: unassigned-trigger
+      events:
+        - jira:issue_created
+      filter: |
+        issue.fields.assignee is null
+      function: handleUnassignedIssues
 ```
 
 ---
@@ -289,69 +303,73 @@ trigger:
 ### Multiple Conditions (AND)
 
 ```yaml
-trigger:
-  - key: complex-and-filter
-    events:
-      - avi:jira:created:issue
-    filter: |
-      (issue.fields.project.key == 'PROJ')
-      and (issue.fields.issuetype.name in ['Bug', 'Task'])
-      and (issue.fields.priority.name in ['Highest', 'High'])
-    function: handleComplexCriteria
+modules:
+  trigger:
+    - key: complex-and-filter
+      events:
+        - jira:issue_created
+      filter: |
+        (issue.fields.project.key == 'PROJ')
+        and (issue.fields.issuetype.name in ['Bug', 'Task'])
+        and (issue.fields.priority.name in ['Highest', 'High'])
+      function: handleComplexCriteria
 ```
 
 ### Multiple Conditions (OR)
 
 ```yaml
-trigger:
-  - key: complex-or-filter
-    events:
-      - avi:jira:updated:issue
-    filter: |
-      (issue.fields.issuetype.name == 'Bug')
-      or ('security' in issue.fields.labels)
-    function: handleAnyMatchCriteria
+modules:
+  trigger:
+    - key: complex-or-filter
+      events:
+        - jira:issue_updated
+      filter: |
+        (issue.fields.issuetype.name == 'Bug')
+        or ('security' in issue.fields.labels)
+      function: handleAnyMatchCriteria
 ```
 
 ### Complex Combined Logic
 
 ```yaml
-trigger:
-  - key: complex-combined-filter
-    events:
-      - avi:jira:created:issue
-    filter: |
-      (issue.fields.project.key == 'PROJ')
-      and (
-        issue.fields.issuetype.name in ['Bug', 'Task']
-        or ('urgent' in issue.fields.labels)
-      )
-      and (
-        issue.fields.priority.name in ['Highest', 'High']
-        or issue.fields.issuetype.name == 'Bug'
-      )
-    function: handleComplexCombined
+modules:
+  trigger:
+    - key: complex-combined-filter
+      events:
+        - jira:issue_created
+      filter: |
+        (issue.fields.project.key == 'PROJ')
+        and (
+          issue.fields.issuetype.name in ['Bug', 'Task']
+          or ('urgent' in issue.fields.labels)
+        )
+        and (
+          issue.fields.priority.name in ['Highest', 'High']
+          or issue.fields.issuetype.name == 'Bug'
+        )
+      function: handleComplexCombined
 ```
 
 ### Filter by Custom Fields
 
 ```yaml
-trigger:
-  - key: custom-field-filter
-    events:
-      - avi:jira:created:issue
-    filter: |
-      issue.fields.customfield_10001 is not null
-      and issue.fields.customfield_10001.value == 'High'
-    function: handleCustomFieldIssues
-    
-  - key: date-based-filter
-    events:
-      - avi:jira:created:issue
-    filter: |
-      issue.fields.duedate is not null
-      and issue.fields.duedate < startOfWeek()
-    function: handleOverdueIssues
+modules:
+  trigger:
+    - key: custom-field-filter
+      events:
+        - jira:issue_created
+      filter: |
+        issue.fields.customfield_10001 is not null
+        and issue.fields.customfield_10001.value == 'High'
+      function: handleCustomFieldIssues
+      
+    - key: date-based-filter
+      events:
+        - jira:issue_created
+      filter: |
+        issue.fields.duedate is not null
+        and issue.fields.duedate < startOfWeek()
+      function: handleOverdueIssues
 ```
 
 ---

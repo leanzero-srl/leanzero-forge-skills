@@ -2,249 +2,106 @@
 
 ## Overview
 
-The `jira:workflowPostFunction` module allows Forge apps to execute logic after a workflow transition completes successfully. Post functions run in sequence and can modify issues, create related issues, send notifications, or call external APIs.
+Forge apps **DO have a `jira:workflowPostFunction` module type**. This allows you to execute custom Forge functions to perform complex actions immediately after a workflow transition completes successfully.
 
-**Key Difference**: Post functions execute AFTER the transition is complete (unlike validators/conditions).
+While Jira provides built-in system post functions for simple tasks, the `jira:workflowPostFunction` module is the correct way to implement advanced logic that requires external API calls, complex data processing, or integration with other systems.
 
-## Module Configuration
+### When to use `jira:workflowPostFunction` vs System Post Functions
 
-```yaml
-modules:
-  jira:workflowPostFunction:
-    - key: my-post-function          # Required: Unique identifier
-      name: Create Follow-up Issue   # Required: Display name
-      description: Creates a follow-up issue after transition # Required: Description
-      
-      function: createFollowUp        # Function to execute
-      
-      projectTypes:
-        - company-managed
-        - team-managed
-        
-      create:
-        resource: postfunction-config
-      edit:
-        resource: postfunction-config
-      view:
-        resource: postfunction-view
-```
+| Feature | System Post Functions | `jira:workflowPostFunction` |
+|---------|-----------------------|-----------------------------|
+| **Complexity** | Simple (update field, change assignee) | High (external API, complex logic) |
+| **Execution** | Built-in Jira logic | As a Forge function |
+| **Manifest** | No declaration needed | Requires `manifest.yml` entry |
+| **Configuration** | Direct in Workflow UI | Workflow UI + Forge Function |
 
-### Required Properties
+## Configuration Approach
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `key` | string | Unique alphanumeric identifier (regex: `^[a-zA-Z0-9_-]+$`) |
-| `name` | string \| i18n | Display name shown in workflow editor |
-| `description` | string \| i18n | Description shown in workflow editor |
+### Using the Workflow Editor (UI)
 
-### Optional Properties
+1. Open your workflow in Jira
+2. Select the transition you want to add a post function to
+3. Add a post function:
+   - Select a **System Post Function** for simple, built-in actions.
+   - Select **"Forge workflow post function"** to use your custom Forge module.
+4. If using a Forge module, select your app and the specific function key.
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `function` | string | Reference to function handler (required for function-based) |
-| `projectTypes` | array | Allowed project types: `company-managed`, `team-managed` |
+### Using the Forge Module (`jira:workflowPostFunction`)
 
-## Function-Based Post Function
+To implement a custom post function via Forge, you must declare it in your `manifest.yml`:
 
 ```yaml
 modules:
   jira:workflowPostFunction:
-    - key: ai-summary-enhancer
-      name: AI Summary Enhancer
-      description: Enhances issue summary using AI after transition
-      function: enhanceSummary
-      
-      create:
-        resource: config-ui
+    - key: my-custom-post-function
+      name: Post-Transition Sync
+      description: Syncs issue data to an external system
+      function: syncData
+
+functions:
+  - key: syncData
+    handler: src/index.syncData
 ```
 
-Function implementation:
+### Function Implementation
+
+Your Forge function performs the action after the transition is successful.
 
 ```javascript
-import api, { route } from '@forge/api';
+export const syncData = async (payload) => {
+  const { issue } = payload;
 
-export const enhanceSummary = async (args) => {
-  const { issue, configuration } = args;
-  
-  // Configuration contains what user set in UI
-  const promptTemplate = configuration.promptTemplate || 
-    "Improve this summary for clarity: {summary}";
-  
-  // Get original summary
-  const originalSummary = issue.fields.summary;
-  
   try {
-    // Call external AI service
-    const response = await api.asApp().requestJira(route`/rest/api/3/myself`);
+    // Example: Sync issue data to an external CRM
+    const response = await api.asApp().requestJira(route`/rest/api/3/issue/${issue.id}`);
     
-    // Call your external API (configure in manifest.external.fetch)
-    // const aiResponse = await fetch('https://api.yourservice.com/enhance', {...});
-    
-    const enhancedSummary = `ENHANCED: ${originalSummary}`;
-    
-    // Update the issue with enhanced summary
-    await api.asApp().requestJira(route`/rest/api/3/issue/${issue.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fields: {
-          summary: enhancedSummary
-        }
-      })
-    });
-    
-    return { result: true };
+    if (response.ok) {
+      console.log(`Successfully processed post-function for ${issue.key}`);
+    }
+
+    // Post functions typically do not return a 'result' to block the transition
+    // because the transition has ALREADY succeeded.
   } catch (error) {
-    console.error('Post function error:', error);
-    return { 
-      result: false,
-      errorMessage: `Enhancement failed: ${error.message}` 
-    };
+    console.error("Post-function error:", error);
   }
 };
 ```
 
-## Event Payload
+## Response Handling
 
-When the post function triggers:
+Unlike validators, post functions run **after** the transition is complete.
 
-```javascript
-{
-  issue: {
-    id: "12345",
-    key: "PROJ-123",
-    fields: {
-      summary: "Original title",
-      description: "Original description...",
-      customfield_10001: "some value"
-    }
-  },
-  transition: {
-    id: "11",
-    name: "In Progress",
-    from: { id: "1" },
-    to: { id: "2" },
-    executionId: "6540951a-7c88-4620-835b-61aab8bbb13e"
-  },
-  workflow: {
-    id: "workflow-uuid",
-    name: "Software Workflow"
-  },
-  changelog: [
-    {
-      field: "status",
-      from: "To Do (1)",
-      to: "In Progress (2)"
-    }
-  ],
-  configuration: {
-    relatedProjectKey: "OPS",
-    issueType: "Task",
-    enabled: true
-  }
-}
-```
+1. The transition has already succeeded.
+2. The user has already seen the success message/next screen.
+3. If your Forge function fails, the transition **cannot be rolled back** automatically. 
+4. **Best Practice**: Implement robust error handling (logging, retries, or error notification) within your function to handle failures gracefully.
 
-## Response Format
+## Comparison: Connect vs Forge Approach
 
-### Success (Continue workflow)
-
-```javascript
-return { result: true };
-```
-
-### Failure (Log error but don't block)
-
-```javascript
-return { 
-  result: false,
-  errorMessage: "External API call failed - continuing anyway" 
-};
-```
-
-**Note**: Post function failures typically log errors but don't roll back transitions (unlike validators).
-
-## Configuration Persistence
-
-```javascript
-import { workflowRules } from '@forge/jira-bridge';
-
-const onConfigureFn = async () => {
-  return JSON.stringify({
-    relatedProjectKey: document.getElementById('project').value,
-    issueType: document.getElementById('issuetype').value,
-    assignee: document.getElementById('assignee').value,
-    summaryTemplate: "Follow-up from {parent}: {summary}"
-  });
-};
-
-await workflowRules.onConfigure(onConfigureFn);
-```
-
-## Permissions Required
-
-```yaml
-permissions:
-  scopes:
-    - read:jira-work        # View issue data
-    - write:jira-work       # Update issues (for modifying fields)
-    - read:workflow:jira    # Access workflow info
-    
-external:
-  fetch:
-    backend:
-      - "api.yourservice.com"   # External API domains
-```
+| Aspect | Connect Apps | Forge Apps |
+|--------|-------------|------------|
+| Module Type | `jiraWorkflowPostFunctions` | `jira:workflowPostFunction` |
+| Execution Environment | External Server | Atlassian Forge Infrastructure |
+| Configuration | In manifest or via JS API | Workflow UI + Forge Function |
 
 ## Common Use Cases
 
-1. **Create Related Issues**: Automatically create subtasks or linked issues
-2. **Update Fields**: Modify issue fields based on transition context
-3. **External Integration**: Call external APIs to synchronize data
-4. **Notification**: Send notifications via email/webhook/slack
-5. **Audit Logging**: Log transition events to external systems
-
-## Post Function Execution Order
-
-Post functions execute in the order they're configured in Jira's workflow editor. Your post function should be placed after transitions complete.
-
-Common execution sequence:
-1. Workflow engine processes transition
-2. Update issue fields (if any)
-3. **Forge post function executes**
-4. Send notifications
-5. Log events
-
-## Error Handling Best Practices
-
-```javascript
-export const myPostFunction = async (args) => {
-  try {
-    // Do work
-    return { result: true };
-  } catch (error) {
-    console.error('[MyPostFunction] Error:', error);
-    
-    // Don't block transition for non-critical errors
-    return { 
-      result: true,
-      warnings: [
-        "External API returned warning - continuing"
-      ]
-    };
-  }
-};
-```
+1. **External System Sync**: Sync issue status or data to a CRM/ERP immediately after a transition.
+2. **Automated Task Creation**: Create sub-tasks or linked issues based on the transition performed.
+3. **Complex Field Updates**: Perform calculations or multi-field updates that exceed standard system post functions.
+4. **Notification/Integration**: Send custom messages to Slack, Microsoft Teams, or other external tools.
 
 ## Testing Post Functions
 
-1. **Test in development**: Use `forge tunnel` for local testing
-2. **Log extensively**: Check `forge logs` for output
-3. **Handle errors gracefully**: Ensure failures don't break workflows
-4. **Limit external calls**: Be mindful of API rate limits
+1. **Test in development**: Use `forge tunnel` to test your function logic locally.
+2. **Check logs**: Use `forge logs` to monitor your function's output and catch any errors.
+3. **Verify outcome**: Always check the Jira issue after the transition to ensure the intended changes were applied.
+4. **Robustness**: Since post functions run after the fact, ensure your code handles potential failures without leaving the system in an inconsistent state.
 
 ## Next Steps
 
-- **Workflow Validators**: Validate data before transition completes
-- **Events & Payloads**: Understand what data is available
-- **Jira REST APIs**: Learn how to modify issues and call other endpoints
+- **Workflow Validators**: Validate data before transition completes (uses `jira:workflowValidator`).
+- **Workflow Conditions**: Control visibility of transitions (uses `jira:workflowCondition`).
+- **Jira Expressions Guide**: Learn more about the expression syntax at Atlassian's documentation.
+
+**Remember**: Forge apps use the `jira:workflowPostFunction` module for complex logic after a transition, while system post functions handle simple tasks.

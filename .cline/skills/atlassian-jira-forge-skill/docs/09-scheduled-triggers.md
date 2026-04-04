@@ -17,7 +17,7 @@ This document provides code examples for implementing scheduled triggers in Atla
 
 ```yaml
 modules:
-  scheduledTrigger:
+  scheduledTriggers:
     - key: daily-report-trigger
       name: { value: 'Daily Report Generator' }
       description: { value: 'Generates and sends daily activity report' }
@@ -30,6 +30,8 @@ modules:
 ### Function Implementation
 
 ```javascript
+import api, { route } from '@forge/api';
+
 export const dailyReportFunction = async (event, context) => {
   console.log('Scheduled trigger executed:', event);
   
@@ -54,7 +56,7 @@ export const dailyReportFunction = async (event, context) => {
 
 const generateAndSendReport = async () => {
   // Example: Get issues created today
-  const response = await api.asApp().requestJira('/rest/api/3/search', {
+  const response = await api.asApp().requestJira(route`/rest/api/3/search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -76,7 +78,7 @@ Configure multiple scheduled triggers in the same app:
 
 ```yaml
 modules:
-  scheduledTrigger:
+  scheduledTriggers:
     - key: hourly-check-trigger
       name: { value: 'Hourly Service Check' }
       description: { value: 'Checks service status every hour' }
@@ -105,6 +107,8 @@ modules:
 ### Corresponding Functions
 
 ```javascript
+import api, { route } from '@forge/api';
+
 // Hourly check function
 export const hourlyCheckFunction = async (event, context) => {
   console.log('Hourly service check started');
@@ -141,7 +145,7 @@ export const weeklyReportFunction = async (event, context) => {
   console.log('Weekly analytics report started');
   
   // Get weekly metrics
-  const response = await api.asApp().requestJira('/rest/api/3/search', {
+  const response = await api.asApp().requestJira(route`/rest/api/3/search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -200,7 +204,7 @@ export const myScheduledFunction = async (event, context) => {
 
 ```yaml
 modules:
-  scheduledTrigger:
+  scheduledTriggers:
     - key: external-sync-trigger
       name: { value: 'External System Sync' }
       description: { value: 'Syncs data with external CRM system daily' }
@@ -250,7 +254,7 @@ const syncIssueToCrm = async (issueKey, fields) => {
 
 ```yaml
 modules:
-  scheduledTrigger:
+  scheduledTriggers:
     - key: cleanup-trigger
       name: { value: 'Data Cleanup' }
       description: { value: 'Cleans up old temporary data weekly' }
@@ -302,7 +306,7 @@ const cleanUpOldComments = async () => {
 
 ```yaml
 modules:
-  scheduledTrigger:
+  scheduledTriggers:
     - key: digest-trigger
       name: { value: 'Daily Activity Digest' }
       description: { value: 'Sends daily activity digest at noon' }
@@ -445,3 +449,5 @@ export const rateLimitedTrigger = async (event, context) => {
 
 - [Forge Scheduled Triggers](https://developer.atlassian.com/cloud/forge/application-structure/#scheduled-triggers)
 - [Jira REST API Reference](../api-endpoints/jira-rest-api-v2.md)
+
+**Note**: The correct module type is `scheduledTriggers` (plural), not `scheduledTrigger`.

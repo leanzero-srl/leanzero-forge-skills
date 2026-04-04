@@ -137,7 +137,7 @@ export const handler = resolver.getDefinitions();
 // src/CustomApp.js
 
 import React, { useState, useEffect } from 'react';
-import { bridge } from '@forge/bridge';
+import { invoke } from '@forge/bridge';
 
 function CustomApp() {
   const [data, setData] = useState(null);
@@ -149,8 +149,8 @@ function CustomApp() {
       try {
         setIsLoading(true);
         
-        // Call the resolver function
-        const result = await bridge.invoke('fetchData');
+         // Call the backend function using invoke
+         const result = await invoke('fetchData');
         
         setData(result);
       } catch (error) {
@@ -203,12 +203,12 @@ const myFunction = async ({
 
 ```javascript
 // Simple string/number payload
-await bridge.invoke('processIssue', { 
+await invoke('processIssue', { 
   payload: 'SVC-123' 
 });
 
 // Object payload with nested structure
-await bridge.invoke('updateUserPreferences', {
+await invoke('updateUserPreferences', {
   payload: {
     theme: 'dark',
     notifications: {
@@ -220,7 +220,7 @@ await bridge.invoke('updateUserPreferences', {
 });
 
 // Payload with configuration parameters
-await bridge.invoke('searchIssues', {
+await invoke('searchIssues', {
   payload: {
     jql: 'project = PROJ AND status = Open',
     maxResults: 50
