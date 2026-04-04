@@ -1,6 +1,10 @@
-# Bitbucket Merge Checks Code Examples
+# Jira Merge Checks Code Examples
 
 This document provides code examples for implementing merge checks in Atlassian Forge apps. Merge checks validate pull requests before merging, ensuring code quality and team standards are maintained.
+
+**Important**: The module type `bitbucket:mergeCheck` is from Connect apps and relates to Bitbucket merge checks. For Jira, there is no equivalent "merge check" module since Jira doesn't have merge functionality - this applies to Bitbucket repositories.
+
+For Jira Forge apps that need to validate work during workflow transitions, use **Jira expressions** instead (see `02-workflow-validators.md` and `03-workflow-conditions.md`).
 
 ## Table of Contents
 1. [Basic Merge Check](#basic-merge-check)
@@ -552,3 +556,6 @@ const checkCoverage = async (payload) => {
   // Your coverage checking logic
   return { name: 'Coverage', status: 'warning', message: 'No data available' };
 };
+```
+
+**Note**: For Jira workflow validation, use Jira expressions instead of merge checks. Merge checks are specific to Bitbucket pull request workflows.

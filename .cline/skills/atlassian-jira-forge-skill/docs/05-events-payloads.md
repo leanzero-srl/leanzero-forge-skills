@@ -4,6 +4,8 @@
 
 Forge apps respond to various events fired by Atlassian products. Understanding event structures is crucial for building robust applications that react correctly to user actions.
 
+**Important**: Forge apps use **trigger modules** (not workflow validators) to respond to events. The `jira:workflow_validation_failed` event mentioned in some documentation does not exist in Forge - failed Jira expressions are handled entirely within the workflow engine without triggering external events.
+
 ## Event Categories
 
 | Category | Product | Description |
@@ -134,6 +136,8 @@ Forge trigger modules use the `jira:<action>:<entity>` format (e.g., `jira:issue
 
 ## Trigger Module Configuration
 
+To listen for events, declare them in your `manifest.yml`:
+
 ```yaml
 modules:
   trigger:
@@ -142,7 +146,7 @@ modules:
         - jira:issue_created
         - jira:issue_updated
       function: handleIssueEvents
-      
+        
     - key: pr-merge-check
       events:
         - bitbucket:pullrequest_opened
@@ -170,28 +174,31 @@ export const handlePREvents = async (event, context) => {
 };
 ```
 
-## Failed Expression Event
+## Important: Failed Expression Events
 
-When a workflow condition/validator expression fails:
+**Critical**: There is **NO** `jira:workflow_validation_failed` or `jira:workflow_condition_failed` event in Forge.
 
-```javascript
-{
-  "eventType": "jira:workflow_validation_failed",
-  "extensionId": "ari:cloud:ecosystem::extension/appId/envId/static/forge-condition",
-  "workflowId": "workflow-uuid",
-  "workflowName": "Software Workflow",
-  "conditionId": "my-condition",  // or "validatorId"
-  "expression": "issue.assignee.unknown",
-  "errorMessages": [
-    "Evaluation failed: 'issue.assignee.unknown' - Unrecognized property"
-  ],
-  "context": {
-    "issue": { "id": "10000", "key": "TEST-1" },
-    "project": { "id": "10000", "key": "TEST" },
-    "user": { "accountId": "abc-123" },
-    "transition": { ... }
-  }
-}
+When a Jira expression (used for validators/conditions) fails:
+
+1. The workflow transition is blocked (for validators)
+2. The transition is hidden from users (for conditions)
+3. **NO external event is triggered**
+4. Your Forge app functions do NOT run
+
+This is a key difference between Connect and Forge:
+- **Connect**: Used custom validator modules with potential callback patterns
+- **Forge**: Uses Jira expressions that handle validation entirely within the workflow engine
+
+### What Actually Happens When Validation Fails
+
+```
+User clicks transition button
+    ↓
+Jira evaluates condition/validator expression
+    ↓
+Expression returns false?
+    ├─ YES → Transition blocked or hidden, NO event fired
+    └─ NO  → Transition proceeds normally
 ```
 
 ## Accessing Event Data
@@ -219,8 +226,20 @@ const customFieldValue = event.issue.fields.customfield_10001;
 3. **Error Recovery**: Don't let one failed event break your app
 4. **Rate Limiting**: External API calls should handle rate limits gracefully
 
+## Common Triggers Reference
+
+| Event | Trigger Module |
+|-------|----------------|
+| `jira:issue_created` | Issue created |
+| `jira:issue_updated` | Issue updated |
+| `jira:comment_created` | Comment added |
+| `jira:workflow_transitioned` | Workflow transition completed |
+| `scheduledTriggers` | Time-based execution |
+
 ## Next Steps
 
 - **Jira Modules**: Understand which modules respond to which events
 - **API Endpoints**: Learn how to query additional data from Jira REST API
 - **Storage**: Persist event-related data using Forge KVS
+
+**Remember**: Failed Jira expressions do NOT trigger external events - they're handled entirely within the workflow engine.

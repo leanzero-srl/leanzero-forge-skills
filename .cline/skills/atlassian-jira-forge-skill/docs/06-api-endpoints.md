@@ -4,16 +4,15 @@
 
 Forge apps use several APIs to interact with Atlassian products and external services. This document covers all major APIs available in the Forge platform.
 
+**Important Update**: The `@forge/jira-bridge` package and its `workflowRules` module are **NOT part of standard Forge** - they appear to be fictional or pre-release APIs. The official `@forge/api` provides all necessary Jira REST API interaction capabilities.
+
 ## API Categories
 
 | API | Purpose | Package |
 |-----|---------|---------|
 | **@forge/api** | Core Forge runtime, Jira/Confluence REST calls | `@forge/api` |
-| **@forge/resolver** | Frontend-to-backend communication | `@forge/resolver` |
-| **@forge/jira-bridge** | Custom UI configuration and UI modifications | `@forge/jira-bridge` |
+| **@forge/bridge** | Frontend-to-backend communication (Custom UI) | `@forge/bridge` |
 | **@forge/kvs** | Key-value storage | `@forge/kvs` |
-
----
 
 ## @forge/api - Core Functions API
 
@@ -42,18 +41,13 @@ await api.asApp().requestJira(route`/rest/api/3/issue`, {
 ### Query Parameters
 
 ```javascript
-// With single query param
-route`/rest/api/3/issue/${issueKey}?fields=${fieldsToDisplay}`;
-
-// Multiple parameters using URLSearchParams
+// With query parameters using URLSearchParams
 const params = new URLSearchParams({
   fields: 'summary,description,status',
   expand: 'changelog'
 });
-route`/rest/api/3/issue/${issueKey}?${params}`;
+await api.asApp().requestJira(route`/rest/api/3/issue/${issueKey}?${params}`);
 ```
-
----
 
 ## Jira REST API Endpoints
 
@@ -123,6 +117,7 @@ await api.asApp().requestJira(route`/rest/api/3/issue/${issueKey}/comment`, {
 ```javascript
 await api.asApp().requestJira(route`/rest/api/3/issue/${issueKey}/transitions`, {
   method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     transition: { id: "11" }  // Transition ID
   })
@@ -146,7 +141,7 @@ const project = await response.json();
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/rest/api/3/user` | Get current user |
+| GET | `/rest/api/3/myself` | Get current user |
 | POST | `/rest/api/3/user/bulk` | Get multiple users by accountId |
 
 **Get Current User:**
@@ -165,6 +160,7 @@ const customValue = issue.fields.customfield_10001;
 // Update custom field
 await api.asApp().requestJira(route`/rest/api/3/issue/${issueKey}`, {
   method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     fields: {
       "customfield_10001": { value: "New Value" }
@@ -173,52 +169,34 @@ await api.asApp().requestJira(route`/rest/api/3/issue/${issueKey}`, {
 });
 ```
 
----
+## @forge/bridge - Custom UI Communication
 
-## @forge/jira-bridge - UI Configuration API
+**Note**: `@forge/jira-bridge` is **NOT a standard Forge package**. The official package for frontend communication is `@forge/bridge`.
 
-### Workflow Rules Configuration
-
-```javascript
-import { workflowRules } from '@forge/jira-bridge';
-
-const onConfigureFn = async () => {
-  const config = {
-    fieldId: 'description',
-    prompt: 'Validate content quality'
-  };
-  return JSON.stringify(config);
-};
-
-await workflowRules.onConfigure(onConfigureFn);
-```
-
-### UI Modifications API
+### Basic Pattern
 
 ```javascript
-import { uiModificationsApi } from '@forge/jira-bridge';
+// Backend (index.js)
+import Resolver from '@forge/resolver';
 
-uiModificationsApi.onInit(
-  ({ api }) => {
-    // Get field by ID
-    const priority = api.getFieldById('priority');
-    
-    // Hide field
-    priority?.setVisible(false);
-    
-    // Change label
-    const summary = api.getFieldById('summary');
-    summary?.setName('Modified Label');
-    
-    // Get field value
-    const labels = api.getFieldById('labels');
-    const labelsData = labels?.getValue() || [];
-  },
-  () => ['priority', 'summary', 'labels']
-);
+const resolver = new Resolver();
+
+resolver.define('fetchData', async ({ payload }, context) => {
+  // Make Jira API calls with proper auth
+  return { data: await response.json() };
+});
+
+export const handler = resolver.getDefinitions();
 ```
 
----
+```javascript
+// Frontend (Custom UI)
+import { invoke } from '@forge/bridge';
+
+const result = await invoke('fetchData', {
+  payload: { projectId: '10000' }
+});
+```
 
 ## @forge/kvs - Key-Value Storage
 
@@ -267,39 +245,6 @@ const filtered = await kvs.entity('users')
   .getMany();
 ```
 
----
-
-## @forge/resolver - Frontend Communication
-
-### Backend Resolver Setup
-
-```javascript
-import Resolver from '@forge/resolver';
-
-const resolver = new Resolver();
-
-resolver.define('fetchIssues', async (request) => {
-  const { payload } = request;
-  // Make Jira API calls here
-  return { issues: [] };
-});
-
-export const handler = resolver.getDefinitions();
-```
-
-### Frontend Invocation
-
-```javascript
-// Using @forge/bridge in Custom UI
-import { invoke } from '@forge/bridge';
-
-const result = await invoke('fetchIssues', {
-  payload: { projectKey: 'PROJ' }
-});
-```
-
----
-
 ## External API Calls (from Forge Functions)
 
 ### Configure manifest.yml
@@ -318,16 +263,16 @@ permissions:
 ```javascript
 import api from '@forge/api';
 
-const response = await api.asApp().requestJira(route`/rest/api/3/myself`);
 // For external APIs, use standard fetch (with proper scopes configured)
 const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
   method: 'POST',
-  headers: { 'Authorization': `Bearer ${process.env.OPENAI_KEY}` },
+  headers: { 
+    'Authorization': `Bearer ${process.env.OPENAI_KEY}`,
+    'Content-Type': 'application/json'
+  },
   body: JSON.stringify({ model: "gpt-3.5-turbo", messages: [...] })
 });
 ```
-
----
 
 ## Available Scopes for API Access
 
@@ -340,13 +285,11 @@ const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
 | `read:user:jira` | Read user information |
 | `storage:app` | Access Forge KVS storage |
 
----
-
 ## Error Handling
 
 ```javascript
 try {
-  const response = await api.asApp().requestJira(route`/rest/api/3/issue/${issueKey}`);
+  const response = await api.asApp().requestJira('/rest/api/3/issue/${issueKey}');
   
   if (!response.ok) {
     console.error('API error:', response.status, await response.text());
@@ -360,9 +303,9 @@ try {
 }
 ```
 
----
-
 ## Next Steps
 
 - **Events & Payloads**: Understand what data is available in triggers
 - **Permissions**: Configure required scopes for your API access needs
+
+**Note on Non-existent APIs**: The `@forge/jira-bridge` package with `workflowRules`, `uiModificationsApi` modules mentioned in some documentation does not exist as a standard Forge package. Use `@forge/api` and `@forge/bridge` for all functionality.

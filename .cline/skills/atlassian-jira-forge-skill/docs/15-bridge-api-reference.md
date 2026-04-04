@@ -8,7 +8,7 @@ This document provides comprehensive reference for the Forge Bridge API, which e
 3. [API Access Methods](#api-access-methods)
 4. [Context Management](#context-management)
 5. [UI Operations](#ui-operations)
-6. [Router and Navigation](#router-and-navigation)
+6. [Best Practices](#best-practices)
 
 ---
 
@@ -21,23 +21,28 @@ The Forge Bridge API provides a connection between:
 - **Backend functions** - Your serverless JavaScript/TypeScript code
 
 The bridge enables:
-- Making authenticated API calls to Atlassian products
+- Making authenticated API calls to Atlassian products as the current user (`asUser`)
 - Passing data between frontend and backend
-- Managing user context and authentication
-- Controlling the Custom UI component lifecycle
+- Managing module-specific context and configuration
+- Controlling UI component lifecycle
+
+### Key Difference from @forge/api
+
+| Feature | `@forge/api` | `@forge/bridge` |
+|---------|-------------|-----------------|
+| Authentication | `asApp()` or `asUser()` | Only `asUser()` (current user) |
+| Location | Backend functions | Frontend Custom UI |
+| Use Case | Server-side logic with app credentials | Client-side API calls as current user |
 
 ### Importing the Bridge
 
 ```javascript
-// ES Module import
-import { bridge } from '@forge/bridge';
-
-// Or with destructuring for specific methods
-import {
+// ES Module import - direct destructuring preferred
+import { 
   requestJira,
   requestConfluence,
-  getContext,
-  configure
+  view,
+  dashboard
 } from '@forge/bridge';
 ```
 
@@ -45,17 +50,17 @@ import {
 
 ## Core Methods
 
-### `requestJira` - Jira REST API Access
+### `requestJira` - Jira REST API Access (asUser only)
 
-Make authenticated requests to the Jira REST API.
+**Important**: Bridge API requests are always made as the current user (`asUser`). For `asApp` functionality, you must use backend functions with `@forge/api`.
 
 ```javascript
+import { requestJira } from '@forge/bridge';
+
+// GET request example
 export const fetchIssue = async (issueKey) => {
   try {
-    // GET request
-    const response = await bridge.requestJira(
-      `/rest/api/3/issue/${issueKey}?expand=changelog`
-    );
+    const response = await requestJira(`/rest/api/3/issue/${issueKey}?expand=changelog`);
     
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -69,21 +74,16 @@ export const fetchIssue = async (issueKey) => {
   }
 };
 
-// POST request example
-export const createComment = async (issueKey, commentBody) => {
+// POST request example - Add watcher
+export const addWatcher = async (issueKey, accountId) => {
   try {
-    const response = await bridge.requestJira(
-      `/rest/api/3/issue/${issueKey}/comment`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          body: commentBody
-        })
-      }
-    );
+    const response = await requestJira(`/rest/api/3/issue/${issueKey}/watchers`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json' 
+      },
+      body: JSON.stringify(accountId)
+    });
     
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -91,7 +91,7 @@ export const createComment = async (issueKey, commentBody) => {
     
     return await response.json();
   } catch (error) {
-    console.error('Failed to create comment:', error);
+    console.error('Failed to add watcher:', error);
     throw error;
   }
 };
@@ -99,18 +99,13 @@ export const createComment = async (issueKey, commentBody) => {
 // PUT request example - Update issue
 export const updateIssue = async (issueKey, updates) => {
   try {
-    const response = await bridge.requestJira(
-      `/rest/api/3/issue/${issueKey}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          fields: updates
-        })
-      }
-    );
+    const response = await requestJira(`/rest/api/3/issue/${issueKey}`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json' 
+      },
+      body: JSON.stringify({ fields: updates })
+    });
     
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -126,12 +121,13 @@ export const updateIssue = async (issueKey, updates) => {
 
 ### `requestConfluence` - Confluence REST API Access
 
-Make authenticated requests to the Confluence REST API.
-
 ```javascript
+import { requestConfluence } from '@forge/bridge';
+
+// GET page example
 export const fetchPage = async (pageId) => {
   try {
-    const response = await bridge.requestConfluence(
+    const response = await requestConfluence(
       `/wiki/rest/api/content/${pageId}?expand=body.storage,version`
     );
     
@@ -146,36 +142,35 @@ export const fetchPage = async (pageId) => {
   }
 };
 
-// Create or update a page
-export const upsertPage = async (pageId, content) => {
+// PUT page example - Update content
+export const updatePage = async (pageId, title, content) => {
   try {
-    // Get current version first
-    const pageData = await bridge.requestConfluence(
+    // First get current version
+    const pageInfo = await requestConfluence(
       `/wiki/rest/api/content/${pageId}?expand=version`
-    );
+    ).then(r => r.json());
     
-    const versionNumber = (await pageData.json()).version.number + 1;
+    const versionNumber = pageInfo.version.number + 1;
     
     // Update the page
-    const response = await bridge.requestConfluence(
-      `/wiki/rest/api/content/${pageId}`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: pageId,
-          type: 'page',
-          title: 'Updated Page',
-          version: { number: versionNumber },
-          body: {
-            storage: {
-              representation: 'storage',
-              value: content
-            }
+    const response = await requestConfluence(`/wiki/rest/api/content/${pageId}`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json' 
+      },
+      body: JSON.stringify({
+        id: pageId,
+        type: 'page',
+        title: title,
+        version: { number: versionNumber },
+        body: {
+          storage: {
+            representation: 'storage',
+            value: content
           }
-        })
-      }
-    );
+        }
+      })
+    });
     
     return await response.json();
   } catch (error) {
@@ -185,20 +180,54 @@ export const upsertPage = async (pageId, content) => {
 };
 ```
 
-### `getContext` - Retrieve User Context
+---
 
-Get information about the current user and app context.
+## Context Management
+
+### Getting Context - Module-Specific APIs
+
+The bridge API doesn't have a generic `bridge.getContext()`. Instead, each module provides its own context access:
+
+- **UI Modifications**: Use `view.getContext()` 
+- **Dashboard Widgets**: Use `dashboard.getContext()`
+
+#### UI Modification Context (`view.getContext`)
 
 ```javascript
-export const getCurrentUser = async () => {
+import { view } from '@forge/bridge';
+
+export const getModuleContext = async () => {
   try {
-    const context = await bridge.getContext();
+    // For UI Modification modules, use view.getContext()
+    const context = await view.getContext();
+    
+    console.log('Full context:', context);
+    
+    // Access extension-specific configuration
+    if (context.extension?.validatorConfig) {
+      console.log('Saved validator config:', context.extension.validatorConfig);
+    }
+    
+    if (context.extension?.conditionConfig) {
+      console.log('Saved condition config:', context.extension.conditionConfig);
+    }
+    
+    if (context.extension?.postFunctionConfig) {
+      console.log('Saved post function config:', context.extension.postFunctionConfig);
+    }
+    
+    // Access module metadata
+    const { 
+      extension,  // Extension metadata
+      project,    // Current project info
+      issueType   // Current issue type info
+    } = context;
     
     return {
-      accountId: context.accountId,
-      accountType: context.accountType, // 'licensed', 'unlicensed', 'customer', 'anonymous'
-      cloudId: context.cloudId,
-      installContext: context.installContext
+      projectId: project?.id,
+      projectKey: project?.key,
+      issueTypeId: issueType?.id,
+      extensionConfig: context.extension
     };
   } catch (error) {
     console.error('Failed to get context:', error);
@@ -206,30 +235,68 @@ export const getCurrentUser = async () => {
   }
 };
 
-// Use context for conditional logic
-export const checkPermissions = async () => {
-  const context = await bridge.getContext();
-  
-  // Check if user is authenticated and licensed
-  const isLicensedUser = 
-    context.accountType === 'licensed' || 
-    context.accountType === 'customer';
-  
-  return {
-    isAuthorized: isLicensedUser,
-    accountType: context.accountType
-  };
+// Example: Check if current view is Issue Transition
+export const isTransitionView = async () => {
+  const context = await view.getContext();
+  return context.viewType === 'IssueTransition';
 };
 ```
 
-### `configure` - Open Configuration UI
-
-Open the configuration panel for your app.
+#### Dashboard Widget Context (`dashboard.getContext`)
 
 ```javascript
+import { dashboard, requestJira } from '@forge/bridge';
+
+export const getDashboardContext = async () => {
+  try {
+    const context = await dashboard.getContext();
+    
+    // Dashboard and user information
+    console.log('Dashboard:', context.dashboard);
+    console.log('User:', context.user);
+    
+    return context;
+  } catch (error) {
+    console.error('Failed to get dashboard context:', error);
+    throw error;
+  }
+};
+
+// Example: Fetch issues based on dashboard project context
+export const fetchProjectIssues = async () => {
+  try {
+    const { dashboard } = await dashboard.getContext();
+    
+    if (!dashboard?.project?.key) {
+      throw new Error('No project in dashboard context');
+    }
+    
+    // Make API call with proper auth
+    const response = await requestJira(
+      `/rest/api/3/search?jql=project=${dashboard.project.key}`
+    );
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Failed to fetch project issues:', error);
+    throw error;
+  }
+};
+```
+
+---
+
+## UI Operations
+
+### `view.configure` / `dashboard.configure` - Configure Module UI
+
+```javascript
+import { view, Modal, Button, Form, TextField } from '@forge/bridge';
+
+// For UI Modification modules
 export const openConfiguration = async () => {
   try {
-    await bridge.configure({
+    await view.configure({
       title: 'App Configuration',
       description: 'Configure your app settings',
       body: renderConfigForm()
@@ -240,78 +307,87 @@ export const openConfiguration = async () => {
   }
 };
 
-// With initial values
-export const editConfiguration = async (currentConfig) => {
+// For Dashboard widgets
+export const openDashboardConfig = async () => {
   try {
-    await bridge.configure({
-      title: 'Edit Settings',
-      body: renderEditableForm(currentConfig)
+    await dashboard.configure({
+      title: 'Widget Settings',
+      description: 'Configure widget display options',
+      body: renderDashboardSettings()
     });
-    
-    // After user saves, you can reload data
-    await fetchData();
   } catch (error) {
-    console.error('Failed to edit configuration:', error);
+    console.error('Failed to open dashboard config:', error);
     throw error;
   }
 };
+
+// Example configuration form component
+const renderConfigForm = () => (
+  <Modal>
+    <Form onSubmit={handleSubmit}>
+      <TextField
+        name="setting1"
+        label="Setting 1"
+        isRequired={true}
+      />
+      <TextField
+        name="setting2"
+        label="Setting 2"
+      />
+      <Button type="submit" appearance="primary">
+        Save
+      </Button>
+    </Form>
+  </Modal>
+);
 ```
 
-### `close` - Close Custom UI
-
-Close the current Custom UI component.
+### `view.close` / `dashboard.close` - Close Module UI
 
 ```javascript
+import { view } from '@forge/bridge';
+
 export const closeComponent = async () => {
   try {
-    await bridge.close();
+    // For UI Modification modules
+    await view.close();
     console.log('Component closed successfully');
   } catch (error) {
     console.error('Failed to close:', error);
     throw error;
   }
 };
-
-// With callback after close
-export const saveAndClose = async (dataToSave) => {
-  try {
-    // Save data first
-    await saveData(dataToSave);
-    
-    // Then close
-    await bridge.close();
-  } catch (error) {
-    console.error('Failed to save and close:', error);
-    throw error;
-  }
-};
 ```
 
-### `refresh` - Refresh Content
-
-Trigger a refresh of the component content.
+### `dashboard.refresh` - Refresh Dashboard Widget Content
 
 ```javascript
-export const refreshData = async () => {
+import { dashboard, requestJira } from '@forge/bridge';
+
+export const refreshWidgetData = async () => {
   try {
-    // Show loading state
-    setIsLoading(true);
-    
     // Fetch fresh data
     const newData = await fetchDataFromSource();
     
     // Update UI with new data
     updateUI(newData);
     
-    // Refresh the component to reflect changes
-    await bridge.refresh();
-    
-    setIsLoading(false);
+    // Refresh dashboard widget content
+    await dashboard.refresh();
   } catch (error) {
     console.error('Failed to refresh:', error);
-    setIsLoading(false);
     throw error;
   }
+};
+
+const fetchDataFromSource = async () => {
+  const { dashboard } = await dashboard.getContext();
+  
+  const response = await requestJira(
+    `/rest/api/3/search?jql=project=${dashboard.project.key}&maxResults=10`
+  );
+  
+  return await response.json();
 };
 ```
 
@@ -319,10 +395,11 @@ export const refreshData = async () => {
 
 ## API Access Methods
 
-### Making Complex Requests
+### Making Complex Requests with Query Parameters
 
 ```javascript
-// Request with custom headers and query parameters
+import { requestJira } from '@forge/bridge';
+
 export const searchIssues = async (jql, options = {}) => {
   try {
     const queryParams = new URLSearchParams({
@@ -335,7 +412,7 @@ export const searchIssues = async (jql, options = {}) => {
         : options.fields || '*all'
     });
     
-    const response = await bridge.requestJira(
+    const response = await requestJira(
       `/rest/api/3/search?${queryParams.toString()}`,
       {
         method: 'GET',
@@ -356,35 +433,18 @@ export const searchIssues = async (jql, options = {}) => {
   }
 };
 
-// POST with file upload
-export const uploadAttachment = async (issueKey, file) => {
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    const response = await bridge.requestJira(
-      `/rest/api/3/issue/${issueKey}/attachments`,
-      {
-        method: 'POST',
-        body: formData
-      }
-    );
-    
-    if (!response.ok) {
-      throw new Error(`Upload failed: ${response.status}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Failed to upload attachment:', error);
-    throw error;
-  }
-};
+// Usage
+const issues = await searchIssues('project = PROJ', {
+  maxResults: 25,
+  fields: ['summary', 'status', 'priority']
+});
 ```
 
 ### Handling API Errors
 
 ```javascript
+import { requestJira } from '@forge/bridge';
+
 // Centralized error handling
 const handleApiResponse = async (response, errorMessage) => {
   if (!response.ok) {
@@ -404,9 +464,7 @@ const handleApiResponse = async (response, errorMessage) => {
 // Example usage
 export const fetchProjectDetails = async (projectKey) => {
   try {
-    const response = await bridge.requestJira(
-      `/rest/api/3/project/${projectKey}`
-    );
+    const response = await requestJira(`/rest/api/3/project/${projectKey}`);
     
     await handleApiResponse(response, 'Failed to fetch project details');
     return await response.json();
@@ -426,11 +484,13 @@ export const fetchProjectDetails = async (projectKey) => {
 ### Batch Requests
 
 ```javascript
+import { requestJira } from '@forge/bridge';
+
 // Execute multiple requests in parallel
 export const fetchMultipleIssues = async (issueKeys) => {
   try {
     const requests = issueKeys.map(key =>
-      bridge.requestJira(`/rest/api/3/issue/${key}?expand=changelog`)
+      requestJira(`/rest/api/3/issue/${key}?expand=changelog`)
         .then(r => handleApiResponse(r, `Failed to fetch ${key}`))
         .then(r => r.json())
         .catch(e => ({ key, error: e.message }))
@@ -447,323 +507,32 @@ export const fetchMultipleIssues = async (issueKeys) => {
     throw error;
   }
 };
-
-// Execute requests sequentially with delay
-export const fetchSequentialWithDelay = async (urls, delayMs = 100) => {
-  try {
-    const results = [];
-    
-    for (let i = 0; i < urls.length; i++) {
-      // Wait between requests to avoid rate limiting
-      if (i > 0) {
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-      }
-      
-      const response = await bridge.requestJira(urls[i]);
-      results.push(await handleApiResponse(response, `Request ${i} failed`));
-    }
-    
-    return results;
-  } catch (error) {
-    console.error('Sequential request failed:', error);
-    throw error;
-  }
-};
-```
-
----
-
-## Context Management
-
-### Install Context vs User Context
-
-```javascript
-export const getContextDetails = async () => {
-  try {
-    // Get user context (who is currently using the app)
-    const userContext = await bridge.getContext();
-    
-    // Get install context (app installation information)
-    const installContext = JSON.parse(userContext.installContext);
-    
-    return {
-      user: {
-        accountId: userContext.accountId,
-        accountType: userContext.accountType
-      },
-      installation: {
-        cloudId: installContext.cloudId,
-        product: installContext.product,
-        hostUrl: installContext.hostUrl
-      }
-    };
-  } catch (error) {
-    console.error('Failed to get context details:', error);
-    throw error;
-  }
-};
-
-// Check if user is an admin
-export const isAdmin = async () => {
-  try {
-    const context = await bridge.getContext();
-    
-    // Admins typically have specific permission scopes
-    return context.accountType === 'licensed';
-  } catch (error) {
-    console.error('Admin check failed:', error);
-    return false;
-  }
-};
-```
-
-### Context Events
-
-```javascript
-// Listen for context changes (if supported by your app type)
-export const setupContextListener = (onContextChange) => {
-  // Note: Context listeners depend on your specific use case
-  // This is a pattern example
-  
-  let lastContext = null;
-  
-  const checkForChanges = async () => {
-    try {
-      const currentContext = await bridge.getContext();
-      
-      if (JSON.stringify(currentContext) !== JSON.stringify(lastContext)) {
-        lastContext = currentContext;
-        onContextChange(currentContext);
-      }
-      
-      // Check again after delay
-      setTimeout(checkForChanges, 5000);
-    } catch (error) {
-      console.error('Context check error:', error);
-      setTimeout(checkForChanges, 5000);
-    }
-  };
-  
-  checkForChanges();
-};
-```
-
----
-
-## UI Operations
-
-### Modal Dialogs
-
-```javascript
-import { Modal, Button, Form, TextField } from '@forge/ui';
-
-// Open modal with form
-export const openCreateModal = async () => {
-  try {
-    await bridge.configure({
-      title: 'Create New Item',
-      body: (
-        <Modal>
-          <Form onSubmit={handleSubmit}>
-            <TextField
-              name="title"
-              label="Title"
-              isRequired={true}
-            />
-            <TextField
-              name="description"
-              label="Description"
-            />
-            <Button type="submit" appearance="primary">
-              Create
-            </Button>
-          </Form>
-        </Modal>
-      )
-    });
-  } catch (error) {
-    console.error('Failed to open modal:', error);
-    throw error;
-  }
-};
-
-// Submit handler
-const handleSubmit = async (formData) => {
-  try {
-    // Process form data
-    await createItem(formData);
-    
-    // Close the modal
-    await bridge.close();
-  } catch (error) {
-    console.error('Form submission error:', error);
-    throw error;
-  }
-};
-```
-
-### Toast Notifications
-
-```javascript
-// Custom toast notification using bridge
-export const showToast = async (message, type = 'info') => {
-  try {
-    await bridge.configure({
-      title: '',
-      body: (
-        <div className={`toast toast-${type}`}>
-          <span>{message}</span>
-        </div>
-      ),
-      width: '300px'
-    });
-    
-    // Auto-close after delay
-    setTimeout(async () => {
-      try {
-        await bridge.close();
-      } catch (error) {
-        console.error('Failed to close toast:', error);
-      }
-    }, 3000);
-  } catch (error) {
-    console.error('Failed to show toast:', error);
-    throw error;
-  }
-};
-
-// Usage
-showToast('Operation completed successfully', 'success');
-```
-
----
-
-## Router and Navigation
-
-### Basic Routing Setup
-
-```javascript
-import { router } from '@forge/bridge';
-
-// Define routes
-const routes = {
-  '/': {
-    component: HomeView,
-    title: 'Home'
-  },
-  '/settings': {
-    component: SettingsView,
-    title: 'Settings'
-  },
-  '/issues/:key': {
-    component: IssueView,
-    title: 'Issue Details'
-  }
-};
-
-// Handle navigation
-export const navigateTo = async (path, params = {}) => {
-  try {
-    // Update the URL in the browser
-    window.history.pushState({}, '', path);
-    
-    // Render appropriate component
-    await renderRoute(path, params);
-    
-    // Refresh to reflect changes
-    await bridge.refresh();
-  } catch (error) {
-    console.error('Navigation error:', error);
-    throw error;
-  }
-};
-
-// Route handler
-const renderRoute = async (path, params) => {
-  const route = Object.entries(routes).find(([pattern]) => {
-    const regex = new RegExp(pattern.replace(':key', '(.+)'));
-    return regex.test(path);
-  });
-  
-  if (!route) {
-    throw new Error('Route not found');
-  }
-  
-  const [pattern, config] = route;
-  const match = path.match(new RegExp(pattern.replace(':key', '(.+)')));
-  
-  // Render the component
-  render(config.component, params, match ? match[1] : undefined);
-};
-```
-
-### Query Parameter Handling
-
-```javascript
-// Get query parameters from URL
-export const getQueryParams = () => {
-  const searchParams = new URLSearchParams(window.location.search);
-  return Object.fromEntries(searchParams.entries());
-};
-
-// Navigate with query parameters
-export const navigateWithQuery = async (path, params) => {
-  try {
-    const queryString = new URLSearchParams(params).toString();
-    const url = `${path}?${queryString}`;
-    
-    window.history.pushState({}, '', url);
-    await bridge.refresh();
-  } catch (error) {
-    console.error('Navigation with query error:', error);
-    throw error;
-  }
-};
-
-// Usage example
-const params = getQueryParams();
-if (params.view === 'settings') {
-  renderSettingsView();
-}
-```
-
-### Route Guards
-
-```javascript
-// Protect routes that require authentication
-export const navigateWithAuthCheck = async (path) => {
-  try {
-    const context = await bridge.getContext();
-    
-    // Check if user is authenticated
-    if (!['licensed', 'customer'].includes(context.accountType)) {
-      await showToast('Please log in to access this page');
-      
-      // Redirect to login or home
-      window.history.pushState({}, '', '/');
-      return;
-    }
-    
-    // User is authenticated, navigate normally
-    await navigateTo(path);
-  } catch (error) {
-    console.error('Auth check navigation error:', error);
-    throw error;
-  }
-};
 ```
 
 ---
 
 ## Best Practices
 
-1. **Error Handling** - Always handle API errors gracefully with user-friendly messages
-2. **Caching** - Cache frequently accessed data to reduce API calls
-3. **Pagination** - Handle paginated results properly for large datasets
-4. **Loading States** - Show loading indicators during async operations
-5. **Timeouts** - Implement timeouts for long-running requests
+1. **Use Bridge for User Context**: When you need to make API calls as the current user from Custom UI, use `@forge/bridge`.
+
+2. **Backend Functions for App Identity**: For server-side operations that need app-level permissions, use backend functions with `@forge/api.asApp()`.
+
+3. **Module-Specific Context**: Always use the correct context method:
+   - `view.getContext()` for UI Modifications
+   - `dashboard.getContext()` for Dashboard Widgets
+
+4. **Error Handling**: Always handle API errors gracefully with user-friendly messages in Custom UI.
+
+5. **Caching**: Cache frequently accessed data to reduce API calls and improve performance.
+
+6. **Pagination**: Handle paginated results properly for large datasets using `start` and `maxResults`.
+
+7. **Loading States**: Show loading indicators during async operations in the UI.
+
+---
 
 ## Related Documentation
 
+- [Forge Bridge API Docs](https://developer.atlassian.com/platform/forge/apis-reference/ui-api-bridge/)
 - [UI Kit Components](./17-ui-kit-components.md)
 - [Resolver Patterns](./16-resolver-patterns.md)

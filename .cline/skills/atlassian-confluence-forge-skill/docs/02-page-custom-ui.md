@@ -25,22 +25,44 @@ Confluence supports the following module types for custom UI extensions:
 
 ## Permission Scopes
 
-When using `confluence:pageCustomUi` or related modules, declare the appropriate scopes in your manifest:
+When using Confluence Forge modules, declare the appropriate scopes in your manifest. It is recommended to use granular scopes where available.
+
+### Content Access
+To interact with pages and blog posts, you typically need:
 
 ```yaml
 permissions:
   scopes:
-    - read:confluence-content.summary
-    - read:confluence-content:*
-    - write:confluence-content:*
+    # Classic scopes
+    - read:confluence-content.summary   # Read page/blogpost summaries
+    - read:confluence-content.all       # Read all content (needed for some task events)
+    - write:confluence-content           # Create/update content
+    
+    # Granular scopes (Preferred)
+    - read:page:confluence               # Read pages
+    - write:page:confluence              # Create/update pages
+    - read:blogpost:confluence           # Read blog posts
+    - write:blogpost:confluence          # Create/update blog posts
 ```
 
-For content properties API access:
+### Content Properties Access
+To manage content properties (storing app metadata on a page):
+
 ```yaml
 permissions:
   scopes:
     - read:confluence-content.summary
     - write:confluence-content.properties
+```
+
+### Space and User Information
+If your UI needs to display space details or user information:
+
+```yaml
+permissions:
+  scopes:
+    - read:space:confluence              # Read space information (e.g., for space context)
+    - read:confluence-user               # Read user information
 ```
 
 ---

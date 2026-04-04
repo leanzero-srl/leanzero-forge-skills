@@ -27,12 +27,12 @@ Forge is Atlassian's serverless development platform for building apps and integ
 │  │ Byline Item  │  │ (iframe)     │  │ Panel            │   │
 │  └─────────────┘  └──────────────┘  └──────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
-                              │
-                    ┌─────────┴─────────┐
-                    │  @forge/bridge     │
-                    │  (requestConfluence)│
-                    └─────────┬─────────┘
-                              │
+                               │
+                     ┌─────────┴─────────┐
+                     │  @forge/bridge     │
+                     │  (requestConfluence)│
+                     └─────────┬─────────┘
+                               │
 ┌─────────────────────────────────────────────────────────────┐
 │                   Forge Runtime                             │
 │  ┌───────────────────────────────────────────────────────┐  │
@@ -42,8 +42,8 @@ Forge is Atlassian's serverless development platform for building apps and integ
 │  │  - Scheduled triggers                                 │  │
 │  └───────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
+                               │
+                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │              Confluence REST API v2                         │
 │  https://{domain}.atlassian.net/wiki/api/v2                │
@@ -93,7 +93,7 @@ resources:
 
 ### 2. Modules
 
-Modules are the building blocks of your app. Below are the **verified** Confluence Forge modules:
+Modules are the building blocks of your app. Below are the **verified** Confluence modules:
 
 **UI modules:**
 

@@ -11,54 +11,69 @@ Forge triggers enable your app to receive notifications when specific events occ
 ```yaml
 modules:
   trigger:
-    - destination: page-created-handler
-      event: avi:confluence:page:created
-      
-  function.scheduled:
-    - key: fallback-checker
-      resource: scheduler
-      schedule: '0 */15 * * *'  # Every 15 minutes as backup
-      
-  resource:
-    - key: main
-      path: src/main.jsx
-    - key: page-handler
-      path: src/webhook-handlers/page-created.js
+    - key: page-created-handler
+      event: avi:confluence:created:page
+      function: onPageCreated
+  function:
+    - key: onPageCreated
+      handler: index.onPageCreated
 ```
 
 ---
 
 ## Available Events
 
-### Page Events
+The following event patterns are verified for Confluence Forge. The general pattern is `avi:confluence:<action>:<content-type>`.
 
-| Event | Description | When Triggered |
-|-------|-------------|----------------|
-| `avi:confluence:page:created` | New page created | Immediately after save |
-| `avi:confluence:page:updated` | Page content changed | On each save |
-| `avi:confluence:page:deleted` | Page moved to trash | When deleted/moved |
+### Page & Blog Post Events (Content)
 
-### Blog Post Events
+| Event | Description | Content Type |
+|-------|-------------|--------------|
+| `avi:confluence:created:page` | New page created | Page |
+| `avi:confluence:updated:page` | Page content changed | Page |
+| `avi:confluence:viewed:page` | Page viewed | Page |
+| `avi:confluence:trashed:page` | Page moved to trash | Page |
+| `avi:confluence:restored:page` | Page restored from trash | Page |
+| `avi:confluence:deleted:page` | Page permanently deleted | Page |
+| `avi:confluence:created:blogpost` | New blog post published | Blog Post |
+| `avi:confluence:updated:blogpost` | Blog post updated | Blog Post |
+| `avi:confluence:deleted:blogpost` | Blog post moved to trash | Blog Post |
 
-| Event | Description | When Triggered |
-|-------|-------------|----------------|
-| `avi:confluence:blogpost:created` | New blog post published | After publication |
-| `avi:confluence:blogpost:updated` | Blog post content changed | On save/update |
-| `avi:confluence:blogpost:deleted` | Blog post moved to trash | When deleted/moved |
+### Comment Events
 
-### Space Events
+| Event | Description |
+|-------|-------------|
+| `avi:confluence:created:comment` | Comment added |
+| `avi:confluence:updated:comment` | Comment edited |
+| `avi:confluence:liked:comment` | Comment liked |
+| `avi:confluence:deleted:comment` | Comment deleted |
 
-| Event | Description | When Triggered |
-|-------|-------------|----------------|
-| `avi:confluence:space:created` | New space created | After creation |
-| `avi:confluence:space:updated` | Space settings changed | On update |
-| `avi:confluence:space:deleted` | Space deleted/archived | When deleted |
+### Attachment Events
 
-### Attachment Events (via page updates)
+| Event | Description |
+|-------|-------------|
+| `avi:confluence:created:attachment` | Attachment uploaded |
+| `avi:confluence:updated:attachment` | Attachment updated |
+| `avi:confluence:viewed:attachment` | Attachment viewed |
+| `avi:confluence:deleted:attachment` | Attachment permanently deleted |
 
-| Event | Description | When Triggered |
-|-------|-------------|----------------|
-| `avi:confluence:page:updated` | Attachments added/removed | Via page update event |
+### Whiteboards, Databases & Smart Links
+
+| Event | Description | Content Type |
+|-------|-------------|--------------|
+| `avi:confluence:created:whiteboard` | Whiteboard created | Whiteboard |
+| `avi:confluence:created:database` | Database created | Database |
+| `avi:confluence:created:embed` | Smart link created in content tree | Embed |
+
+### Space & User Events
+
+| Event | Description | Scope Required |
+|-------|-------------|--------------|
+| `avi:confluence:created:space:V2` | New space created | `read:space:confluence` |
+| `avi:confluence:created:user` | User created | `read:confluence-user` |
+| `avi:confluence:created:group` | Group created | `read:confluence-groups` |
+
+
 
 ---
 
