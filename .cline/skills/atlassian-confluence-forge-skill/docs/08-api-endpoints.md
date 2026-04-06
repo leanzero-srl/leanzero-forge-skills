@@ -156,21 +156,40 @@ POST /pages
 Content-Type: application/json
 ```
 
-**Request Body:**
+**Request Body Schema:**
 ```json
 {
   "type": "page",
   "title": "New Page Title",
+  "space": {
+    "id": "987654"
+  },
+  "parentId": "123456", // Optional
+  "body": {
+    "representation": "storage",
+    "value": "<h1>Page Content</h1><p>This is the page body.</p>"
+  }
+}
+```
+
+**Successful Response (201 Created):**
+```json
+{
+  "id": "123456",
+  "status": "current",
+  "title": "New Page Title",
+  "spaceId": "987654",
+  "version": {
+    "number": 1,
+    "by": { "accountId": "..." },
+    "when": "2024-01-15T10:30:00.000Z"
+  },
   "body": {
     "storage": {
-      "value": "<h1>Page Content</h1><p>This is the page body.</p>",
+      "value": "<h1>Page Content</h1>...",
       "representation": "STORAGE"
     }
-  },
-  "space": {
-    "id": 987654
-  },
-  "parentId": 123456  // Optional: parent page ID
+  }
 }
 ```
 
@@ -181,21 +200,22 @@ PUT /pages/{id}
 Content-Type: application/json
 ```
 
-**Request Body:**
+**Request Body Schema:**
 ```json
 {
   "title": "Updated Title",
   "body": {
-    "storage": {
-      "value": "<h1>Updated Content</h1>",
-      "representation": "STORAGE"
-    }
+    "representation": "storage",
+    "value": "<h1>Updated Content</h1>"
   },
   "version": {
     "message": "Updated content via Forge app"
   }
 }
 ```
+
+**Successful Response (200 OK):**
+Returns the updated `PageSingle` object.
 
 ### Delete Page
 
@@ -224,22 +244,23 @@ POST /blogposts
 Content-Type: application/json
 ```
 
-**Request Body:**
+**Request Body Schema:**
 ```json
 {
   "type": "blogpost",
   "title": "Blog Post Title",
-  "body": {
-    "storage": {
-      "value": "<h1>Post Content</h1>",
-      "representation": "STORAGE"
-    }
-  },
   "space": {
-    "id": 987654
+    "id": "987654"
+  },
+  "body": {
+    "representation": "storage",
+    "value": "<h1>Post Content</h1>"
   }
 }
 ```
+
+**Successful Response (201 Created):**
+Returns the created blog post object.
 
 ---
 
