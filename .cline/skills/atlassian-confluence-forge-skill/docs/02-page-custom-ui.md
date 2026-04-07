@@ -123,6 +123,28 @@ Available via `useProductContext()` (UI Kit) or `view.getContext()` (Custom UI):
 
 ---
 
+## Custom UI Development Workflow
+
+Building a Custom UI extension involves several distinct steps across the frontend and backend. Use the checklist below to track your progress and ensure no critical step is missed.
+
+### Development Checklist
+
+Copy this checklist and track your progress:
+
+```
+Custom UI Progress:
+- [ ] Step 1: Scaffold the frontend (e.g., `npx create-react-app static/my-module`)
+- [ ] Step 2: Install required dependencies (`@forge/bridge`, `@atlaskit/*`)
+- [ ] Step 3: Implement the UI logic and context handling
+- [ ] Step 4: Build the production assets (`npm run build` in the static directory)
+- [ ] Step 5: Update `manifest.yml` to point to the built assets (e.g., `path: static/my-module/build`)
+- [ ] Step 6: Deploy the app (`forge deploy`)
+- [ ] Step 7: Install/Upgrade on site (`forge install --upgrade`)
+- [ ] Step 8: Verify in Confluence
+```
+
+---
+
 ## confluence:contentAction Module
 
 The `contentAction` module adds a menu item to the "more actions" (...) dropdown for pages and blog posts. Clicking the item triggers a modal dialog.

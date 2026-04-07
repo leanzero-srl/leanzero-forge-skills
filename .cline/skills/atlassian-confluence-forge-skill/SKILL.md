@@ -1,12 +1,29 @@
-# Atlassian Confluence Forge Skill
+---
+name: atlassian-confluence-forge-skill
+description: Provides guidance, patterns, and templates for developing Atlassian apps on the Forge platform for Confluence Cloud. Use when building custom UI extensions, handling webhooks, setting up scheduled triggers, or integrating with Confluence's REST API.
+---
 
-A comprehensive skill for developing Atlassian apps on the Forge platform for Confluence Cloud. This skill provides guidance, patterns, templates, and best practices for building custom UI extensions, webhooks, scheduled triggers, and integrations with Confluence's REST API.
+# Atlassian Confluence Forge Skill
 
 ---
 
 ## Trigger Description
 
 When you need to build an app or extension for **Confluence Cloud** using **Forge**, use this skill. It covers:
+
+## Boundaries
+
+**Use this skill when:**
+- You are developing apps specifically for **Confluence Cloud**.
+- You need to extend Confluence functionality using the Forge platform.
+- You are working with Confluence-specific modules (pages, spaces, blog posts).
+
+**Do NOT use this skill when:**
+- You are developing for **Jira Cloud** (use `atlassian-jira-forge-skill` instead).
+- You are building apps for Atlassian Connect or other platforms.
+- You need to perform complex Jira workflow automations.
+
+It covers:
 
 - **Custom UI**: Page extensions, blog post extensions, space settings, dashboard gadgets
 - **Webhooks**: Handling Confluence events (page created/updated/deleted, blog posts, spaces)
@@ -159,6 +176,21 @@ forge lint --fix
 - Use `confluence:contentAction` for menu items on pages/blogs
 
 ---
+
+## Failure Strategies
+
+When an error occurs during execution, follow these patterns:
+
+- **Manifest/Module Errors**: If a module is not recognized, verify the `manifest.yml` against the [Documentation Index](#documentation-index) and ensure you are using the correct Confluence module names (e.g., `confluence:pageBanner`).
+- **Permission Denied (403)**: Check if the required OAuth scopes are defined in the `permissions.scopes` section of your `manifest.yml`. Refer to [07-permissions-scopes.md](docs/07-permissions-scopes.md).
+- **API Errors (4xx/5xx)**: 
+  - For 404 errors, verify the resource ID (pageId, spaceId) exists.
+  - For 429 (Rate Limit), implement exponential backoff.
+- **Runtime Errors**: Use `forge logs` to inspect the error stack trace and ensure all required environment variables or dependencies are present.
+
+## Gotchas
+
+For common pitfalls and environment-specific facts, see [Gotchas](docs/gotchas.md).
 
 ## Support & Resources
 

@@ -9,6 +9,17 @@ This skill provides documentation for building Forge apps that extend Jira.
 
 ## When to Use This Skill
 
+**Use this skill when:**
+- You are developing apps specifically for **Jira Cloud**.
+- You need to extend Jira functionality using the Forge platform.
+- You are working with Jira-specific modules (validators, conditions, post-functions).
+
+**Do NOT use this skill when:**
+- You are developing for **Confluence Cloud** (use `atlassian-confluence-forge-skill` instead).
+- You are building apps for Atlassian Connect or other platforms.
+- You need to perform complex Confluence content management.
+
+It covers:
 - Creating workflow validators (validate fields before transition completes)
 - Creating workflow conditions (control transition visibility)
 - Creating workflow post-functions (execute logic after transition)
@@ -141,6 +152,25 @@ See [Problem Patterns](docs/problem-patterns.md) for:
 - How to sync Jira issues with external systems
 - Handling rate limits and batching operations
 
+## Available Scripts
+
+Use these scripts to automate common Forge development workflows. They are located in the `scripts/` directory.
+
+| Script | Description |
+|--------|-------------|
+| `validate-manifest.sh` | Validates `manifest.yml` for errors using `forge lint` |
+| `deploy-and-install.sh` | Automates `forge deploy` followed by `forge install --upgrade` |
+| `dev-setup.sh` | Starts the Forge development tunnel (supports `-e` for environment) |
+| `preflight-check.sh` | Runs a comprehensive environment and manifest validation check |
+
+### 🚀 Recommended Workflow: Plan-Validate-Execute
+
+For high-stakes operations (like deployment or manifest changes), follow this pattern to minimize errors:
+
+1.  **Plan**: Describe the intended changes or commands.
+2.  **Validate**: Run `./scripts/preflight-check.sh` and `./scripts/validate-manifest.sh` to ensure the environment and configuration are correct.
+3.  **Execute**: Perform the deployment or modification only after validation passes.
+
 ### Real-World Implementation Issues & Solutions
 
 **New!** See [Real-World Patterns](docs/24-real-world-patterns.md) for:
@@ -156,6 +186,10 @@ See [Problem Patterns](docs/problem-patterns.md) for:
 > This document aggregates real problems from Atlassian Community, GitHub issues, and production Forge apps with verified solutions. Structured for AI models to match user symptoms → solutions quickly.
 
 See [When to Use Which Module](docs/when-to-use-which.md) for choosing the right module type.
+
+## Gotchas
+
+For common pitfalls and environment-specific facts, see [Gotchas](docs/gotchas.md).
 
 ## Templates
 
@@ -200,6 +234,17 @@ Copy-paste templates are available in `templates/`:
 
 
 ---
+
+## Failure Strategies
+
+When an error occurs during execution, follow these patterns:
+
+- **Manifest/Module Errors**: If a module is not recognized, verify the `manifest.yml` against the [Advanced Documentation](#advanced-documentation) and ensure you are using the correct Jira module names (e.g., `jira:workflowValidator`).
+- **Permission Denied (403)**: Check if the required OAuth scopes are defined in the `permissions.scopes` section of your `manifest.yml`. Refer to [07-permissions-scopes.md](docs/07-permissions-scopes.md).
+- **API Errors (4xx/5xx)**: 
+  - For 404 errors, verify the issue key or project ID exists.
+  - For 429 (Rate Limit), implement exponential backoff.
+- **Runtime Errors**: Use `forge logs` to inspect the error stack trace and ensure all required environment variables or dependencies are present.
 
 ## API Integration
 
