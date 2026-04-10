@@ -340,10 +340,11 @@ The `docs/` directory contains detailed documentation:
 | Rate Limit Handling | `19-rate-limit-handling.md` |
 | Performance Optimization | `20-performance-optimization.md` |
 
-### Real-World Patterns (New)
+### Real-World Patterns
 | Topic | File |
 |-------|------|
 | **Implementation Issues & Solutions** | **`24-real-world-patterns.md`** |
+| **Production Patterns (PPM Pro)** | **`25-production-patterns-ppm.md`** |
 
 ### Jira Service Management (New)
 | Topic | File |
@@ -354,6 +355,7 @@ The `docs/` directory contains detailed documentation:
 - `problem-patterns.md` - Common code patterns with examples
 - `when-to-use-which.md` - Decision guide for module selection
 - **`24-real-world-patterns.md`** - Real-world issues & solutions from community/GitHub (CSP errors, rate limits, storage cleanup, tunnel fixes, migration pitfalls)
+- **`25-production-patterns-ppm.md`** - 24 production-proven patterns extracted from PPM Pro: KVS sharding, chunked write-back, retry with jitter, issue links (with critical outward/inward gotcha), ADF comments, screen configuration chain, trigger protection, concurrency (drafts/locks/conflicts), bridge invoke, Jira bridge modal, multi-module manifest, KVS cost control, modular resolver registration, issue transformer (two-pass with plan-scoped dep filtering), full indexing pipeline (sources → transform → shard → KVS), config-driven field payload builder, dependency extraction semantics, post-write verification, and Forge memory management. Every pattern includes working code and a verified Jira REST API endpoint reference table with required scopes.
 - Custom UI complete guide with working React code examples
 - CSP error troubleshooting and fixes
 - Rate limit handling with exponential backoff implementations
