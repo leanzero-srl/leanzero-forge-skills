@@ -8,6 +8,10 @@ The Spaces API allows you to manage Confluence spaces, including retrieving spac
 
 Spaces are the primary containers for content in Confluence. This API provides tools to manage the lifecycle of a space, its metadata (properties), permissions, and the various types of content (pages, blog posts, etc.) that reside within it.
 
+**API Version**: v2 (Current Standard)
+
+**Base URL**: `https://{domain}.atlassian.net/wiki/api/v2`
+
 ---
 
 ## Endpoint Breakdown
@@ -65,6 +69,15 @@ Manage space-level settings and properties.
 
 ---
 
+## Authentication
+
+Forge apps use automatic OAuth via manifest scopes:
+
+- **Custom UI (frontend)**: Use `requestConfluence()` from `@forge/bridge`
+- **Resolver functions (backend)**: Use `api.asUser().requestConfluence()` or `api.asApp().requestConfluence()` from `@forge/api`
+
+---
+
 ## Error Responses
 
 Common error codes for Space operations:
@@ -75,3 +88,12 @@ Common error codes for Space operations:
 | `401` | Unauthorized - Authentication is missing or invalid. |
 | `403` | Forbidden - Insufficient permissions to manage the space. |
 | `404` | Not Found - The specified space was not found. |
+
+---
+
+## Official Documentation References
+
+- [Confluence Cloud REST API v2](https://developer.atlassian.com/cloud/confluence/rest/)
+- [Spaces API Reference](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-space/)
+
+**Note**: The Confluence REST API v2 is the current standard. Version 1 APIs are being deprecated.

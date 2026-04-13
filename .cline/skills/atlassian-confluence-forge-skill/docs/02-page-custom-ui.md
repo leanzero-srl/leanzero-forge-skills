@@ -42,7 +42,7 @@ permissions:
     - read:page:confluence               # Read pages
     - write:page:confluence              # Create/update pages
     - read:blogpost:confluence           # Read blog posts
-    - write:blogpost:confluence          # Create/update blog posts
+    - write:blogpost:confluence          # Create/update blogposts
 ```
 
 ### Content Properties Access
@@ -757,3 +757,7 @@ Common Confluence scopes for Forge apps:
 - [Space Settings](03-space-settings.md) - Space-level configuration panels
 - [Content Properties](06-content-properties.md) - Storing app data with pages
 - [API Endpoints](08-api-endpoints.md) - Complete Confluence REST API reference
+
+**Official Documentation References:**
+- [Confluence Cloud REST API v2](https://developer.atlassian.com/cloud/confluence/rest/)
+- [Forge Events Reference](https://developer.atlassian.com/platform/forge/events-reference/confluence/)
