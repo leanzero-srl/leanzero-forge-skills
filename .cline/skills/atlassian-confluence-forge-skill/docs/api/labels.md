@@ -8,6 +8,10 @@ The Labels API allows you to retrieve and manage labels used to organize and cat
 
 Labels are lightweight tags that can be applied to content to make it easily searchable and categorizable. This API provides endpoints to discover labels associated with specific spaces, attachments, or content within a space.
 
+**API Version**: v2 (Current Standard)
+
+**Base URL**: `https://{domain}.atlassian.net/wiki/api/v2`
+
 ---
 
 ## Endpoint Breakdown
@@ -60,6 +64,15 @@ These endpoints allow you to fetch lists of labels associated with different ent
 
 ---
 
+## Authentication
+
+Forge apps use automatic OAuth via manifest scopes:
+
+- **Custom UI (frontend)**: Use `requestConfluence()` from `@forge/bridge`
+- **Resolver functions (backend)**: Use `api.asUser().requestConfluence()` or `api.asApp().requestConfluence()` from `@forge/api`
+
+---
+
 ## Error Responses
 
 Common error codes for Label operations:
@@ -69,3 +82,12 @@ Common error codes for Label operations:
 | `400` | Bad Request - Invalid request parameters. |
 | `401` | Unauthorized - Authentication is missing or invalid. |
 | `404` | Not Found - The specified space, attachment, or label was not found. |
+
+---
+
+## Official Documentation References
+
+- [Confluence Cloud REST API v2](https://developer.atlassian.com/cloud/confluence/rest/)
+- [Labels API Reference](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-label/)
+
+**Note**: The Confluence REST API v2 is the current standard. Version 1 APIs are being deprecated.

@@ -204,3 +204,11 @@ forge trigger-webhook \
 **Viewing Logs:**
 ```bash
 forge logs --app <app-id> --function <function-key>
+```
+
+---
+
+## Official Documentation References
+
+- [Forge Events Reference](https://developer.atlassian.com/platform/forge/events-reference/confluence/)
+- [Confluence REST API v2](https://developer.atlassian.com/cloud/confluence/rest/)

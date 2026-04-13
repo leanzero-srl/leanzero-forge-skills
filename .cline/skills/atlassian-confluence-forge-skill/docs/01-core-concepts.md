@@ -6,18 +6,50 @@ This guide covers the fundamental concepts needed to build apps on Atlassian's F
 
 ## What is Forge?
 
-Forge is Atlassian's serverless development platform for building apps and integrations for Atlassian cloud products (Jira, Confluence, Bitbucket, Compass). Unlike the old Connect framework, Forge:
+Forge is Atlassian's **serverless development platform** for building apps and integrations for Atlassian Cloud products (Jira, Confluence, Bitbucket, Compass).
 
-- **Serverless**: No infrastructure to manage — Atlassian handles everything
-- **Managed runtime**: Your code runs in a secure, isolated environment (Node.js)
+Unlike the legacy Connect framework, Forge provides:
+
+- **Serverless**: No infrastructure to manage — Atlassian handles everything via AWS Lambda
+- **Managed runtime**: Your code runs in a secure, isolated Node.js environment
 - **Built-in authentication**: OAuth handled automatically via manifest permissions
 - **Rate-limited APIs**: Built-in rate limiting protection
 - **Modern tooling**: CLI-based development with `forge` commands
-- **Secure by default**: Apps run in a sandboxed environment with no direct internet access unless explicitly configured via `permissions.external`
+- **Secure by design**: Apps run in a sandboxed environment with egress restrictions
+
+> **Important**: Connect is being deprecated. From September 17, 2025, only Forge apps can be submitted to the Atlassian Marketplace. All new extensibility features are delivered only on Forge.
 
 ---
 
-## Confluence Forge Architecture
+### Runtime Versions
+
+Forge supports multiple Node.js runtime versions:
+
+| Version | Description |
+|---------|-------------|
+| `nodejs24.x` | Latest recommended version (Node.js 24) |
+| `nodejs22.x` | Stable version (Node.js 22) |
+| `nodejs20.x` | Legacy version (Node.js 20) |
+
+**Note**: The legacy JavaScript sandbox runtime is deprecated. From February 28, 2025, all apps still running on it will no longer function.
+
+---
+
+## Connect vs Forge Comparison
+
+| Feature | Connect | Forge |
+|---------|---------|-------|
+| Hosting | Developer-managed (AWS, GCP, Heroku) | Atlassian-hosted (AWS Lambda) |
+| Security | JWT tokens + OAuth 1.0a/2.0 | Automatic OAuth via manifest scopes |
+| Runtime | Any language (Node.js, Java, etc.) | Node.js serverless functions |
+| UI Options | HTML/CSS/JS in iframes | UI Kit (native) or Custom UI (iframe) |
+| Marketplace | Still supported until Sep 2025 | **Only option after Sep 2025** |
+
+---
+
+### Architecture Overview
+
+Forge apps communicate with Atlassian products through this flow:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -147,6 +179,10 @@ Forge offers two UI approaches for Confluence modules:
 | Manifest | `resource: main` (points to build dir) | `resource: main` + `render: native` (points to source file) |
 | Flexibility | Full control over UI | Constrained to Atlassian design system |
 
+**Official Documentation References:**
+- [Custom UI Overview](https://developer.atlassian.com/platform/forge/custom-ui/)
+- [UI Kit Overview](https://developer.atlassian.com/platform/forge/ui-kit/)
+
 ---
 
 ## Custom UI Lifecycle
@@ -244,11 +280,16 @@ Apps can create their own custom content types using Forge's custom content modu
 
 ## REST API v2 Overview
 
-The Confluence REST API v2 is the current standard:
+The Confluence REST API v2 is the current standard with improvements over v1:
 
 ```
 Base URL: https://{domain}.atlassian.net/wiki/api/v2
 ```
+
+**Key Improvements in v2:**
+- Granular endpoints for specific operations (up to 30x faster)
+- Cursor-based pagination instead of offset-based
+- Better organization by content type
 
 **Key endpoints:**
 
@@ -281,6 +322,10 @@ Base URL: https://{domain}.atlassian.net/wiki/api/v2
 - **Custom UI (frontend)**: Use `requestConfluence()` from `@forge/bridge` — Forge proxy handles OAuth automatically
 - **Resolver functions (backend)**: Use `api.asUser()` or `api.asApp()` from `@forge/api` — token exchange handled automatically
 - **External apps**: OAuth 2.0 (3LO) with explicit token management
+
+**Official Documentation References:**
+- [Confluence Cloud REST API v2](https://developer.atlassian.com/cloud/confluence/rest/)
+- [Blog Post API](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-blog-post/)
 
 ---
 
@@ -435,6 +480,9 @@ modules:
 
 **Required scope for most content events:** `read:confluence-content.summary`
 
+**Official Documentation References:**
+- [Confluence Events Reference](https://developer.atlassian.com/platform/forge/events-reference/confluence/)
+
 ---
 
 ## Development Workflow
@@ -478,3 +526,8 @@ forge lint --fix
 - [Page Custom UI](02-page-custom-ui.md) - Build page extensions
 - [Webhooks & Events](07-webhooks-events.md) - Handle Confluence events  
 - [CLI Commands](08-cli-commands.md) - Complete CLI reference
+
+**Official Atlassian Resources:**
+- [Forge Platform Overview](https://developer.atlassian.com/platform/forge/)
+- [Confluence REST API v2 Reference](https://developer.atlassian.com/cloud/confluence/rest/)
+- [Atlassian Developer Community](https://community.developer.atlassian.com/)

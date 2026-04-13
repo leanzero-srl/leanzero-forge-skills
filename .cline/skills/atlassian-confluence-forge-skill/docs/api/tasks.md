@@ -8,6 +8,10 @@ The Tasks API allows you to manage tasks created within Confluence content, such
 
 Tasks in Confluence are actionable items embedded within the content of a page or blog post. This API provides powerful filtering capabilities to help you track task progress across your entire site or within specific contexts.
 
+**API Version**: v2 (Current Standard)
+
+**Base URL**: `https://{domain}.atlassian.net/wiki/api/v2`
+
 ---
 
 ## Endpoint Breakdown
@@ -66,6 +70,15 @@ The list endpoint is highly flexible, allowing you to filter tasks by various cr
 
 ---
 
+## Authentication
+
+Forge apps use automatic OAuth via manifest scopes:
+
+- **Custom UI (frontend)**: Use `requestConfluence()` from `@forge/bridge`
+- **Resolver functions (backend)**: Use `api.asUser().requestConfluence()` or `api.asApp().requestConfluence()` from `@forge/api`
+
+---
+
 ## Error Responses
 
 Common error codes for Task operations:
@@ -75,3 +88,12 @@ Common error codes for Task operations:
 | `400` | Bad Request - Invalid request parameters or body. |
 | `401` | Unauthorized - Authentication is missing or invalid. |
 | `404` | Not Found - The specified task or its parent content was not found. |
+
+---
+
+## Official Documentation References
+
+- [Confluence Cloud REST API v2](https://developer.atlassian.com/cloud/confluence/rest/)
+- [Tasks API Reference](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-task/)
+
+**Note**: The Confluence REST API v2 is the current standard. Version 1 APIs are being deprecated.

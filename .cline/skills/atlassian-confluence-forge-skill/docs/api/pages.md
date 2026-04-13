@@ -8,6 +8,15 @@ The Pages API provides comprehensive tools for creating, retrieving, updating, a
 
 Pages are the fundamental building blocks of Confluence. This API allows you to manage the entire lifecycle of a page, from its initial creation and title management to complex operations like version control, redaction, and hierarchical organization.
 
+**API Version**: v2 (Current Standard)
+
+**Base URL**: `https://{domain}.atlassian.net/wiki/api/v2`
+
+**Key Improvements in v2:**
+- Granular endpoints for specific operations (up to 30x faster than v1)
+- Cursor-based pagination instead of offset-based
+- Better organization by content type
+
 ---
 
 ## Endpoint Breakdown
@@ -79,6 +88,15 @@ Manage how users interact with the page and what files are attached to it.
 
 ---
 
+## Authentication
+
+Forge apps use automatic OAuth via manifest scopes:
+
+- **Custom UI (frontend)**: Use `requestConfluence()` from `@forge/bridge`
+- **Resolver functions (backend)**: Use `api.asUser().requestConfluence()` or `api.asApp().requestConfluence()` from `@forge/api`
+
+---
+
 ## Error Responses
 
 Common error codes for Page operations:
@@ -89,3 +107,13 @@ Common error codes for Page operations:
 | `401` | Unauthorized - Authentication is missing or invalid. |
 | `403` | Forbidden - Insufficient permissions to perform the action. |
 | `404` | Not Found - The specified page was not found. |
+
+---
+
+## Official Documentation References
+
+- [Confluence Cloud REST API v2](https://developer.atlassian.com/cloud/confluence/rest/)
+- [Pages API Reference](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/)
+- [Blog Post API](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-blog-post/)
+
+**Note**: The Confluence REST API v2 is the current standard. Version 1 APIs are being deprecated.

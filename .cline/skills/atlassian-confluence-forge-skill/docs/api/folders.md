@@ -8,6 +8,10 @@ The Folders API allows you to manage folders within the Confluence content tree,
 
 Folders provide a way to group and organize content (like pages or smart links) into a structured hierarchy. This API enables programmatic creation, retrieval, and management of these organizational units.
 
+**API Version**: v2 (Current Standard)
+
+**Base URL**: `https://{domain}.atlassian.net/wiki/api/v2`
+
 ---
 
 ## Endpoint Breakdown
@@ -86,6 +90,15 @@ Traverse the content tree relative to a folder.
 
 ---
 
+## Authentication
+
+Forge apps use automatic OAuth via manifest scopes:
+
+- **Custom UI (frontend)**: Use `requestConfluence()` from `@forge/bridge`
+- **Resolver functions (backend)**: Use `api.asUser().requestConfluence()` or `api.asApp().requestConfluence()` from `@forge/api`
+
+---
+
 ## Error Responses
 
 Common error codes for Folder operations:
@@ -96,3 +109,12 @@ Common error codes for Folder operations:
 | `401` | Unauthorized - Authentication is missing or invalid. |
 | `404` | Not Found - The specified folder or space was not found. |
 | `413` | Payload Too Large - The request body exceeds the 5 MB limit. |
+
+---
+
+## Official Documentation References
+
+- [Confluence Cloud REST API v2](https://developer.atlassian.com/cloud/confluence/rest/)
+- [Folders API Reference](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-folder/)
+
+**Note**: The Confluence REST API v2 is the current standard. Version 1 APIs are being deprecated.
