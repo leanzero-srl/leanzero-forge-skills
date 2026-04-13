@@ -1,673 +1,2157 @@
-# Confluence Cloud REST API v2 - Comprehensive Endpoints
+# Confluence Cloud REST API v2 - Specialized Endpoints
 
-This document contains detailed documentation for all Confluence Cloud REST API v2 endpoints, including path parameters, query parameters, request bodies, response codes, required OAuth scopes for Forge apps, and permission requirements.
-
----
-
-## Base URL
-
-```
-https://{domain}.atlassian.net/wiki/api/v2
-```
-
-**API Version**: v2 (Current Standard)
-
-All endpoints use OAuth 2.0 authentication via Forge's `@forge/bridge` or `@forge/api` packages.
-
----
-
-## Table of Contents
-
-1. [Attachments API](#attachments-api)
-2. [Blog Posts API](#blog-posts-api)
-3. [Classification Levels API](#classification-levels-api)
-4. [Comments API](#comments-api)
-5. [Content Properties API](#content-properties-api)
-6. [Custom Content API](#custom-content-api)
-7. [Data Policies API](#data-policies-api)
-8. [Databases API](#databases-api)
-9. [Embeds/Smart Links API](#embedssmart-links-api)
-10. [Folders API](#folders-api)
-11. [Labels API](#labels-api)
-12. [Pages API](#pages-api)
-13. [Spaces API](#spaces-api)
-14. [Tasks API](#tasks-api)
-15. [Users API](#users-api)
-16. [Whiteboards API](#whiteboards-api)
-
----
-
-## Attachments API
-
-### Overview
-Manage files attached to Confluence content (pages, blog posts, whiteboards, etc.).
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/attachments` | List all attachments with filtering. |
-| `GET` | `/attachments/{id}` | Get a specific attachment by ID. |
-| `DELETE` | `/attachments/{id}` | Delete an attachment. |
-
-### Query Parameters
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `filename` | string | No | Filter by filename. |
-| `media-type` | string | No | Filter by media type (MIME type). |
-| `expand` | array<string> | No | Expand related content (e.g., versions, properties). |
-| `limit` | integer | No | Maximum number of results per page. |
-
-### Response Codes
-
-| Code | Description |
-|------|-------------|
-| `200` | Attachments successfully retrieved. |
-| `401` | Authentication credentials are incorrect or missing. |
-| `404` | Attachment not found. |
-
-### OAuth Scopes (Forge)
-
-- `read:confluence-content.summary` - List and view attachments
-
----
-
-## Blog Posts API
-
-### Overview
-Create, retrieve, update, and delete blog posts in Confluence spaces.
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/blogposts` | List all blog posts with filtering. |
-| `POST` | `/blogposts` | Create a new blog post. |
-| `GET` | `/blogposts/{id}` | Get a specific blog post by ID. |
-| `PUT` | `/blogposts/{id}` | Update an existing blog post. |
-| `DELETE` | `/blogposts/{id}` | Delete a blog post. |
-
-### Query Parameters (List Blog Posts)
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `space-id` | integer | No | Filter by space ID. |
-| `title` | string | No | Filter by title. |
-| `status` | string | No | Filter by status (current, draft). |
-| `expand` | array<string> | No | Expand related content. |
-| `limit` | integer | No | Maximum number of results per page. |
-
-### Request Body (Create Blog Post)
-
-```json
-{
-  "title": "My Blog Post",
-  "spaceId": 178263459270,
-  "body": {
-    "storage": {
-      "value": "<p>Blog post content</p>",
-      "representation": "storage"
-    }
-  },
-  "status": "current"
-}
-```
-
-### Response Codes
-
-| Code | Description |
-|------|-------------|
-| `201` | Blog post created successfully. |
-| `400` | Invalid request body or missing required fields. |
-| `401` | Authentication credentials are incorrect or missing. |
-
-### OAuth Scopes (Forge)
-
-- `read:blogpost:confluence` - View blog posts
-- `write:blogpost:confluence` - Create/update blog posts
-
----
-
-## Classification Levels API
-
-### Overview
-Manage data classification levels for Confluence content.
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/classification-levels` | List all available classification levels. |
-
-### Query Parameters
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `limit` | integer | No | Maximum number of results per page. |
-
-### Response Example
-
-```json
-{
-  "results": [
-    {
-      "id": "classification-level-1",
-      "name": "Internal",
-      "description": "Content for internal use only"
-    }
-  ]
-}
-```
-
----
-
-## Comments API
-
-### Overview
-Manage footer comments and inline comments on content.
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/comments` | List all comments with filtering. |
-| `POST` | `/comments` | Create a new comment. |
-| `GET` | `/comments/{id}` | Get a specific comment by ID. |
-| `PUT` | `/comments/{id}` | Update an existing comment. |
-| `DELETE` | `/comments/{id}` | Delete a comment. |
-
-### Query Parameters (List Comments)
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `container-id` | string | No | Filter by content container ID. |
-| `container-type` | string | No | Filter by container type (page, blogpost). |
-| `expand` | array<string> | No | Expand user information. |
-| `limit` | integer | No | Maximum number of results per page. |
-
-### Request Body (Create Comment)
-
-```json
-{
-  "container": {
-    "id": "123456789",
-    "type": "page"
-  },
-  "body": {
-    "storage": {
-      "value": "<p>This is a comment</p>",
-      "representation": "storage"
-    }
-  }
-}
-```
-
-### Response Codes
-
-| Code | Description |
-|------|-------------|
-| `201` | Comment created successfully. |
-| `400` | Invalid request body or missing required fields. |
-| `401` | Authentication credentials are incorrect or missing. |
-
-### OAuth Scopes (Forge)
-
-- `read:confluence-content.summary` - View comments
-- `write:confluence-content` - Create/update comments
-
----
-
-## Content Properties API
-
-### Overview
-Store and retrieve custom metadata on Confluence content.
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/pages/{id}/properties` | List properties for a page. |
-| `POST` | `/pages/{id}/properties` | Create a property for a page. |
-| `GET` | `/pages/{id}/properties/{property-id}` | Get a specific property by ID. |
-| `PUT` | `/pages/{id}/properties/{property-id}` | Update a property. |
-| `DELETE` | `/pages/{id}/properties/{property-id}` | Delete a property. |
-
-### Request Body (Create Property)
-
-```json
-{
-  "key": "myPropertyKey",
-  "value": {
-    "foo": "bar"
-  }
-}
-```
-
-### Response Codes
-
-| Code | Description |
-|------|-------------|
-| `200` | Properties successfully retrieved or created. |
-| `401` | Authentication credentials are incorrect or missing. |
-
-### OAuth Scopes (Forge)
-
-- `read:confluence-content.summary` - Read properties
-- `write:confluence-content.properties` - Write properties
-
----
-
-## Custom Content API
-
-### Overview
-Manage custom content types defined by apps.
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/custom-content` | List all custom content. |
-| `POST` | `/custom-content` | Create a new custom content item. |
-| `GET` | `/custom-content/{id}` | Get a specific custom content by ID. |
-
----
-
-## Data Policies API
-
-### Overview
-Manage data policies that apply to Confluence content.
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/data-policies/metadata` | Get data policy metadata. |
-| `GET` | `/data-policies/spaces` | List spaces with data policies applied. |
-
----
-
-## Databases API
-
-### Overview
-Create, retrieve, update, and delete Confluence databases.
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/databases` | Create a new database. |
-| `GET` | `/databases/{id}` | Get a specific database by ID. |
-| `DELETE` | `/databases/{id}` | Delete a database. |
-
-### Query Parameters (Create Database)
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `private` | boolean | No | Create as private database. |
-
-### Request Body (Create Database)
-
-```json
-{
-  "name": "Project Inventory",
-  "description": "Track project assets"
-}
-```
-
-### Content Properties Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/databases/{id}/properties` | List database properties. |
-| `POST` | `/databases/{id}/properties` | Create a property. |
-| `GET` | `/databases/{database-id}/properties/{property-id}` | Get property by ID. |
-| `PUT` | `/databases/{database-id}/properties/{property-id}` | Update property. |
-| `DELETE` | `/databases/{database-id}/properties/{property-id}` | Delete property. |
-
-### Response Codes
-
-| Code | Description |
-|------|-------------|
-| `200` | Database successfully retrieved or created. |
-| `204` | Database successfully deleted. |
-| `401` | Authentication credentials are incorrect or missing. |
-| `404` | Database not found. |
-
-### OAuth Scopes (Forge)
-
-- `read:database:confluence` - View databases
-- `write:database:confluence` - Create/update databases
-- `delete:database:confluence` - Delete databases
-
----
-
-## Embeds/Smart Links API
-
-### Overview
-Manage smart links embedded in Confluence content.
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/embeds` | List all smart links. |
-| `GET` | `/embeds/{id}` | Get a specific smart link by ID. |
-
----
-
-## Folders API
-
-### Overview
-Create, retrieve, update, and delete folders in the content tree.
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/folders` | Create a new folder. |
-| `GET` | `/folders/{id}` | Get a specific folder by ID. |
-| `PUT` | `/folders/{id}` | Update an existing folder. |
-| `DELETE` | `/folders/{id}` | Delete a folder. |
-
-### Request Body (Create Folder)
-
-```json
-{
-  "name": "Marketing Assets",
-  "description": "Folder containing marketing content"
-}
-```
-
-### Response Codes
-
-| Code | Description |
-|------|-------------|
-| `201` | Folder created successfully. |
-| `401` | Authentication credentials are incorrect or missing. |
-
----
-
-## Labels API
-
-### Overview
-Manage labels applied to Confluence content.
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/labels` | List all labels. |
-| `GET` | `/spaces/{space-id}/labels` | List labels in a space. |
-
-### Query Parameters (List Labels)
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `prefix` | string | No | Filter by label prefix (my, team, global, system). |
-| `limit` | integer | No | Maximum number of results per page. |
-
----
-
-## Pages API
-
-### Overview
-Create, retrieve, update, and delete Confluence pages.
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/pages` | List all pages with filtering. |
-| `POST` | `/pages` | Create a new page. |
-| `GET` | `/pages/{id}` | Get a specific page by ID. |
-| `PUT` | `/pages/{id}` | Update an existing page. |
-| `DELETE` | `/pages/{id}` | Delete a page. |
-
-### Query Parameters (List Pages)
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `space-id` | integer | No | Filter by space ID. |
-| `title` | string | No | Filter by page title. |
-| `status` | string | No | Filter by status (current, draft). |
-| `expand` | array<string> | No | Expand content body and metadata. |
-| `limit` | integer | No | Maximum number of results per page. |
-
-### Request Body (Create Page)
-
-```json
-{
-  "title": "My Page",
-  "spaceId": 178263459270,
-  "body": {
-    "storage": {
-      "value": "<p>Page content</p>",
-      "representation": "storage"
-    }
-  },
-  "status": "current"
-}
-```
-
-### Response Codes
-
-| Code | Description |
-|------|-------------|
-| `201` | Page created successfully. |
-| `400` | Invalid request body or missing required fields. |
-| `401` | Authentication credentials are incorrect or missing. |
-
-### OAuth Scopes (Forge)
-
-- `read:page:confluence` - View pages
-- `write:page:confluence` - Create/update pages
-
----
-
-## Spaces API
-
-### Overview
-Manage Confluence spaces and their metadata.
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/spaces` | List all spaces. |
-| `POST` | `/spaces` | Create a new space. |
-| `GET` | `/spaces/{id}` | Get a specific space by ID. |
-| `PUT` | `/spaces/{id}` | Update an existing space. |
-| `DELETE` | `/spaces/{id}` | Delete a space. |
-
-### Query Parameters (List Spaces)
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `expand` | array<string> | No | Expand space properties and metadata. |
-| `limit` | integer | No | Maximum number of results per page. |
-
-### Response Codes
-
-| Code | Description |
-|------|-------------|
-| `200` | Spaces successfully retrieved. |
-| `401` | Authentication credentials are incorrect or missing. |
-
-### OAuth Scopes (Forge)
-
-- `read:space:confluence` - View spaces
-- `write:space:confluence` - Create/update spaces
-
----
-
-## Tasks API
-
-### Overview
-Manage tasks embedded in Confluence content.
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/tasks` | List all tasks with filtering. |
-| `GET` | `/tasks/{id}` | Get a specific task by ID. |
-| `PUT` | `/tasks/{id}` | Update a task status. |
-
-### Query Parameters (List Tasks)
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `status` | string | No | Filter by status (complete, incomplete). |
-| `space-id` | array<integer> | No | Filter by space IDs. |
-| `page-id` | array<integer> | No | Filter by page IDs. |
-| `assigned-to` | array<string> | No | Filter by assignee Account ID. |
-| `limit` | integer | No | Maximum number of results per page (1-250). |
-
-### Response Example
-
-```json
-{
-  "results": [
-    {
-      "id": "5566778899",
-      "status": "incomplete",
-      "title": "Review the project proposal",
-      "page": {
-        "id": "123456789"
-      },
-      "assignee": {
-        "accountId": "user-abc-123",
-        "displayName": "Jane Smith"
-      }
-    }
-  ]
-}
-```
-
----
-
-## Users API
-
-### Overview
-Manage user access to Confluence content.
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/users` | List all users. |
-| `GET` | `/users/permission-check` | Check user permissions. |
+This document contains detailed documentation for specialized Confluence Cloud REST API v2 endpoints.
 
 ---
 
 ## Whiteboards API
 
-### Overview
-Create, retrieve, update, and delete Confluence whiteboards.
+### `POST /whiteboards`
 
-### Endpoints
+**Operation:** `createWhiteboard`
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/whiteboards` | Create a new whiteboard. |
-| `GET` | `/whiteboards/{id}` | Get a specific whiteboard by ID. |
-| `DELETE` | `/whiteboards/{id}` | Delete a whiteboard. |
+**Summary:** Create whiteboard
 
-### Query Parameters (Create Whiteboard)
+**Description:**
+Creates a whiteboard in the space.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the corresponding space. Permission to create a whiteboard in the space.
+
+**Query Parameters:**
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `private` | boolean | No | Create as private whiteboard. |
+| private | boolean | No | The whiteboard will be private. Only the user who creates this whiteboard will have permission to view and edit one. |
 
-### Content Properties Endpoints
+**Request Body:**
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/whiteboards/{id}/properties` | List whiteboard properties. |
-| `POST` | `/whiteboards/{id}/properties` | Create a property. |
-| `GET` | `/whiteboards/{whiteboard-id}/properties/{property-id}` | Get property by ID. |
-| `PUT` | `/whiteboards/{whiteboard-id}/properties/{property-id}` | Update property. |
-| `DELETE` | `/whiteboards/{whiteboard-id}/properties/{property-id}` | Delete property. |
 
-### Hierarchy Endpoints
+**Required OAuth Scopes (Forge):**
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/whiteboards/{id}/direct-children` | Get direct children of a whiteboard. |
-| `GET` | `/whiteboards/{id}/descendants` | Get all descendants in the content tree. |
-| `GET` | `/whiteboards/{id}/ancestors` | Get all ancestors in the content tree. |
+- `write:whiteboard:confluence`
 
-### Response Codes
+**Response Formats:**
 
-| Code | Description |
-|------|-------------|
-| `200` | Whiteboard successfully retrieved or created. |
-| `204` | Whiteboard successfully deleted. |
-| `401` | Authentication credentials are incorrect or missing. |
-| `404` | Whiteboard not found. |
+- **200:** Returned if the whiteboard was successfully created.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing from the request.
+- **413:** Returned if the request is too large in size (over 5 MB).
 
-### OAuth Scopes (Forge)
+**Permission Requirements:**
 
-- `read:whiteboard:confluence` - View whiteboards
-- `write:whiteboard:confluence` - Create/update whiteboards
-- `delete:whiteboard:confluence` - Delete whiteboards
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the corresponding space. Permission to create a whiteboard in the space.
+
+### `GET /whiteboards/{id}`
+
+**Operation:** `getWhiteboardById`
+
+**Summary:** Get whiteboard by id
+
+**Description:**
+Returns a specific whiteboard.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the whiteboard and its corresponding space.
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| include-collaborators | boolean | No | Includes collaborators on the whiteboard. |
+| include-direct-children | boolean | No | Includes direct children of the whiteboard, as defined in the `ChildrenResponse` object. |
+| include-operations | boolean | No | Includes operations associated with this whiteboard in the response, as defined in the `Operation` object.
+The number of results will be limited to 50 and sorted in the default sort order.
+A `meta` and `_links` property will be present to indicate if more results are available and a link to retrieve the rest of the results. |
+| include-properties | boolean | No | Includes content properties associated with this whiteboard in the response.
+The number of results will be limited to 50 and sorted in the default sort order.
+A `meta` and `_links` property will be present to indicate if more results are available and a link to retrieve the rest of the results. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the whiteboard to be returned |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:whiteboard:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested whiteboard is returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+requested whiteboard or the whiteboard was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the whiteboard and its corresponding space.
+
+### `DELETE /whiteboards/{id}`
+
+**Operation:** `deleteWhiteboard`
+
+**Summary:** Delete whiteboard
+
+**Description:**
+Delete a whiteboard by id.
+
+Deleting a whiteboard moves the whiteboard to the trash, where it can be restored later
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the whiteboard and its corresponding space.
+Permission to delete whiteboards in the space.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the whiteboard to be deleted. |
+
+**Required OAuth Scopes (Forge):**
+
+- `delete:whiteboard:confluence`
+
+**Response Formats:**
+
+- **204:** Returned if the whiteboard was successfully deleted.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the whiteboard and its corresponding space.
+Permission to delete whiteboards in the space.
+
+### `GET /whiteboards/{id}/properties`
+
+**Operation:** `getWhiteboardContentProperties`
+
+**Summary:** Get content properties for whiteboard
+
+**Description:**
+Retrieves Content Properties tied to a specified whiteboard.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the whiteboard.
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| key | string | No | Filters the response to return a specific content property with matching key (case sensitive). |
+| sort | string | No | Used to sort the result by a particular field. |
+| cursor | string | No | Used for pagination, this opaque cursor will be returned in the `next` URL in the `Link` response header. Use the relative URL in the `Link` header to retrieve the `next` set of results. |
+| limit | integer | No | Maximum number of attachments per result to return. If more results exist, use the `Link` header to retrieve a relative URL that will return the next set of results. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the whiteboard for which content properties should be returned. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:whiteboard:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested content properties are successfully retrieved.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified whiteboard or the whiteboard was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the whiteboard.
+
+### `POST /whiteboards/{id}/properties`
+
+**Operation:** `createWhiteboardProperty`
+
+**Summary:** Create content property for whiteboard
+
+**Description:**
+Creates a new content property for a whiteboard.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to update the whiteboard.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the whiteboard to create a property for. |
+
+**Request Body:**
+
+*Schema: `#/components/schemas/ContentPropertyCreateRequest`*
+
+**Required OAuth Scopes (Forge):**
+
+- `read:whiteboard:confluence`
+- `write:whiteboard:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the content property was created successfully. (see `#/components/schemas/ContentProperty`)
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified whiteboard or the whiteboard was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to update the whiteboard.
+
+### `GET /whiteboards/{whiteboard-id}/properties/{property-id}`
+
+**Operation:** `getWhiteboardContentPropertiesById`
+
+**Summary:** Get content property for whiteboard by id
+
+**Description:**
+Retrieves a specific Content Property by ID that is attached to a specified whiteboard.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the whiteboard.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| whiteboard-id | integer | Yes | The ID of the whiteboard for which content properties should be returned. |
+| property-id | integer | Yes | The ID of the content property being requested. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:whiteboard:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested content property is successfully retrieved. (see `#/components/schemas/ContentProperty`)
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified whiteboard, the whiteboard was not found, or the property was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the whiteboard.
+
+### `PUT /whiteboards/{whiteboard-id}/properties/{property-id}`
+
+**Operation:** `updateWhiteboardPropertyById`
+
+**Summary:** Update content property for whiteboard by id
+
+**Description:**
+Update a content property for a whiteboard by its id. 
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the whiteboard.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| whiteboard-id | integer | Yes | The ID of the whiteboard the property belongs to. |
+| property-id | integer | Yes | The ID of the property to be updated. |
+
+**Request Body:**
+
+*Schema: `#/components/schemas/ContentPropertyUpdateRequest`*
+
+**Required OAuth Scopes (Forge):**
+
+- `read:whiteboard:confluence`
+- `write:whiteboard:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the content property was updated successfully. (see `#/components/schemas/ContentProperty`)
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified whiteboard or the whiteboard was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the whiteboard.
+
+### `DELETE /whiteboards/{whiteboard-id}/properties/{property-id}`
+
+**Operation:** `deleteWhiteboardPropertyById`
+
+**Summary:** Delete content property for whiteboard by id
+
+**Description:**
+Deletes a content property for a whiteboard by its id. 
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the whiteboard.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| whiteboard-id | integer | Yes | The ID of the whiteboard the property belongs to. |
+| property-id | integer | Yes | The ID of the property to be deleted. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:whiteboard:confluence`
+- `write:whiteboard:confluence`
+
+**Response Formats:**
+
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified whiteboard or the whiteboard was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the whiteboard.
+
+### `GET /whiteboards/{id}/operations`
+
+**Operation:** `getWhiteboardOperations`
+
+**Summary:** Get permitted operations for a whiteboard
+
+**Description:**
+Returns the permitted operations on specific whiteboard.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the whiteboard and its corresponding space.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the whiteboard for which operations should be returned. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:whiteboard:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested operations are returned. (see `#/components/schemas/PermittedOperationsResponse`)
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+requested whiteboard or the whiteboard was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the whiteboard and its corresponding space.
+
+### `GET /whiteboards/{id}/direct-children`
+
+**Operation:** `getWhiteboardDirectChildren`
+
+**Summary:** Get direct children of a whiteboard
+
+**Description:**
+Returns all children for given whiteboard id in the content tree. The number of results is limited by the `limit` parameter and additional results (if available)
+will be available through the `next` URL present in the `Link` response header.
+
+The following types of content will be returned:
+- Database
+- Embed
+- Folder
+- Page
+- Whiteboard
+
+This endpoint returns minimal information about each child. To fetch more details, use a related endpoint based on the content type, such
+as:
+
+- [Get database by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-database/#api-databases-id-get)
+- [Get embed by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-smart-link/#api-embeds-id-get)
+- [Get folder by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-folder/#api-folders-id-get)
+- [Get page by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-pages-id-get)
+- [Get whiteboard by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-whiteboard/#api-whiteboards-id-get).
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Only content that the user has permission to view will be returned.
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| cursor | string | No | Used for pagination, this opaque cursor will be returned in the `next` URL in the `Link` response header. Use the relative URL in the `Link` header to retrieve the `next` set of results. |
+| limit | integer | No | Maximum number of items per result to return. If more results exist, use the `Link` header to retrieve a relative URL that will return the next set of results. |
+| sort | string | No | Used to sort the result by a particular field. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the parent whiteboard. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:hierarchical-content:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested children are returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Only content that the user has permission to view will be returned.
+
+### `GET /whiteboards/{id}/descendants`
+
+**Operation:** `getWhiteboardDescendants`
+
+**Summary:** Get descendants of a whiteboard
+
+**Description:**
+Returns descendants in the content tree for a given whiteboard by ID in top-to-bottom order (that is, the highest descendant is the first
+item in the response payload). The number of results is limited by the `limit` parameter and additional results (if available)
+will be available by calling this endpoint with the cursor in the response payload. There is also a `depth` parameter specifying depth
+of descendants to be fetched.
+
+The following types of content will be returned:
+- Database
+- Embed
+- Folder
+- Page
+- Whiteboard
+
+This endpoint returns minimal information about each descendant. To fetch more details, use a related endpoint based on the content type, such
+as:
+
+- [Get database by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-database/#api-databases-id-get)
+- [Get embed by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-smart-link/#api-embeds-id-get)
+- [Get folder by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-folder/#api-folders-id-get)
+- [Get page by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-pages-id-get)
+- [Get whiteboard by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-whiteboard/#api-whiteboards-id-get).
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Permission to view the whiteboard and its corresponding space
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| limit | integer | No | Maximum number of items per result to return. If more results exist, call the endpoint with the cursor to fetch the next set of results. |
+| depth | integer | No | Maximum depth of descendants to return. If more results are required, use the endpoint corresponding to the content type of the deepest descendant to fetch more descendants. |
+| cursor | string | No | Used for pagination, this opaque cursor will be returned in the `next` URL in the `Link` response header. Use the relative URL in the `Link` header to retrieve the `next` set of results. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the whiteboard. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:hierarchical-content:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested descendants are returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Permission to view the whiteboard and its corresponding space
+
+### `GET /whiteboards/{id}/ancestors`
+
+**Operation:** `getWhiteboardAncestors`
+
+**Summary:** Get all ancestors of whiteboard
+
+**Description:**
+Returns all ancestors for a given whiteboard by ID in top-to-bottom order (that is, the highest ancestor is the first
+item in the response payload). The number of results is limited by the `limit` parameter and additional results (if available)
+will be available by calling this endpoint with the ID of first ancestor in the response payload.
+
+This endpoint returns minimal information about each ancestor. To fetch more details, use a related endpoint, such
+as [Get whiteboard by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-whiteboard/#api-whiteboards-id-get).
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Permission to view the whiteboard and its corresponding space
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| limit | integer | No | Maximum number of items per result to return. If more results exist, call the endpoint with the highest ancestor's ID to fetch the next set of results. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the whiteboard. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:content.metadata:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested ancestors are returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Permission to view the whiteboard and its corresponding space
 
 ---
 
-## Authentication & Forge Integration
+## Database API
 
-### Using @forge/bridge (Custom UI)
+### `POST /databases`
 
-```javascript
-import { requestConfluence } from '@forge/bridge';
+**Operation:** `createDatabase`
 
-// GET request
-const response = await requestConfluence('/wiki/api/v2/pages');
+**Summary:** Create database
 
-// POST request
-const response = await requestConfluence('/wiki/api/v2/pages', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ title: 'My Page' })
-});
-```
+**Description:**
+Creates a database in the space.
 
-### Using @forge/api (Resolver Functions)
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the corresponding space. Permission to create a database in the space.
 
-```javascript
-import api, { route } from '@forge/api';
+**Query Parameters:**
 
-// GET request as user
-const response = await api.asUser().requestConfluence(
-  route`/wiki/api/v2/pages/${pageId}`
-);
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| private | boolean | No | The database will be private. Only the user who creates this database will have permission to view and edit one. |
 
-// POST request as app
-const response = await api.asApp().requestConfluence(
-  route`/wiki/api/v2/spaces`,
-  { method: 'POST', body: JSON.stringify({ name: 'New Space' }) }
-);
-```
+**Request Body:**
+
+
+**Required OAuth Scopes (Forge):**
+
+- `write:database:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the database was successfully created.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing from the request.
+- **413:** Returned if the request is too large in size (over 5 MB).
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the corresponding space. Permission to create a database in the space.
+
+### `GET /databases/{id}`
+
+**Operation:** `getDatabaseById`
+
+**Summary:** Get database by id
+
+**Description:**
+Returns a specific database.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the database and its corresponding space.
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| include-collaborators | boolean | No | Includes collaborators on the database. |
+| include-direct-children | boolean | No | Includes direct children of the database, as defined in the `ChildrenResponse` object. |
+| include-operations | boolean | No | Includes operations associated with this database in the response, as defined in the `Operation` object.
+The number of results will be limited to 50 and sorted in the default sort order.
+A `meta` and `_links` property will be present to indicate if more results are available and a link to retrieve the rest of the results. |
+| include-properties | boolean | No | Includes content properties associated with this database in the response.
+The number of results will be limited to 50 and sorted in the default sort order.
+A `meta` and `_links` property will be present to indicate if more results are available and a link to retrieve the rest of the results. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the database to be returned |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:database:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested database is returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+requested database or the database was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the database and its corresponding space.
+
+### `DELETE /databases/{id}`
+
+**Operation:** `deleteDatabase`
+
+**Summary:** Delete database
+
+**Description:**
+Delete a database by id.
+
+Deleting a database moves the database to the trash, where it can be restored later
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the database and its corresponding space.
+Permission to delete databases in the space.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the database to be deleted. |
+
+**Required OAuth Scopes (Forge):**
+
+- `delete:database:confluence`
+
+**Response Formats:**
+
+- **204:** Returned if the database was successfully deleted.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the database and its corresponding space.
+Permission to delete databases in the space.
+
+### `GET /databases/{id}/properties`
+
+**Operation:** `getDatabaseContentProperties`
+
+**Summary:** Get content properties for database
+
+**Description:**
+Retrieves Content Properties tied to a specified database.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the database.
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| key | string | No | Filters the response to return a specific content property with matching key (case sensitive). |
+| sort | string | No | Used to sort the result by a particular field. |
+| cursor | string | No | Used for pagination, this opaque cursor will be returned in the `next` URL in the `Link` response header. Use the relative URL in the `Link` header to retrieve the `next` set of results. |
+| limit | integer | No | Maximum number of attachments per result to return. If more results exist, use the `Link` header to retrieve a relative URL that will return the next set of results. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the database for which content properties should be returned. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:database:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested content properties are successfully retrieved.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified database or the database was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the database.
+
+### `POST /databases/{id}/properties`
+
+**Operation:** `createDatabaseProperty`
+
+**Summary:** Create content property for database
+
+**Description:**
+Creates a new content property for a database.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to update the database.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the database to create a property for. |
+
+**Request Body:**
+
+*Schema: `#/components/schemas/ContentPropertyCreateRequest`*
+
+**Required OAuth Scopes (Forge):**
+
+- `read:database:confluence`
+- `write:database:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the content property was created successfully. (see `#/components/schemas/ContentProperty`)
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified database or the database was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to update the database.
+
+### `GET /databases/{database-id}/properties/{property-id}`
+
+**Operation:** `getDatabaseContentPropertiesById`
+
+**Summary:** Get content property for database by id
+
+**Description:**
+Retrieves a specific Content Property by ID that is attached to a specified database.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the database.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| database-id | integer | Yes | The ID of the database for which content properties should be returned. |
+| property-id | integer | Yes | The ID of the content property being requested. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:database:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested content property is successfully retrieved. (see `#/components/schemas/ContentProperty`)
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified database, the database was not found, or the property was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the database.
+
+### `PUT /databases/{database-id}/properties/{property-id}`
+
+**Operation:** `updateDatabasePropertyById`
+
+**Summary:** Update content property for database by id
+
+**Description:**
+Update a content property for a database by its id. 
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the database.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| database-id | integer | Yes | The ID of the database the property belongs to. |
+| property-id | integer | Yes | The ID of the property to be updated. |
+
+**Request Body:**
+
+*Schema: `#/components/schemas/ContentPropertyUpdateRequest`*
+
+**Required OAuth Scopes (Forge):**
+
+- `read:database:confluence`
+- `write:database:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the content property was updated successfully. (see `#/components/schemas/ContentProperty`)
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified database or the database was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the database.
+
+### `DELETE /databases/{database-id}/properties/{property-id}`
+
+**Operation:** `deleteDatabasePropertyById`
+
+**Summary:** Delete content property for database by id
+
+**Description:**
+Deletes a content property for a database by its id. 
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the database.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| database-id | integer | Yes | The ID of the database the property belongs to. |
+| property-id | integer | Yes | The ID of the property to be deleted. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:database:confluence`
+- `write:database:confluence`
+
+**Response Formats:**
+
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified database or the database was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the database.
+
+### `GET /databases/{id}/operations`
+
+**Operation:** `getDatabaseOperations`
+
+**Summary:** Get permitted operations for a database
+
+**Description:**
+Returns the permitted operations on specific database.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the database and its corresponding space.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the database for which operations should be returned. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:database:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested operations are returned. (see `#/components/schemas/PermittedOperationsResponse`)
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+requested database or the database was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the database and its corresponding space.
+
+### `GET /databases/{id}/direct-children`
+
+**Operation:** `getDatabaseDirectChildren`
+
+**Summary:** Get direct children of a database
+
+**Description:**
+Returns all children for given database id in the content tree. The number of results is limited by the `limit` parameter and additional results (if available)
+will be available through the `next` URL present in the `Link` response header.
+
+The following types of content will be returned:
+- Database
+- Embed
+- Folder
+- Page
+- Whiteboard
+
+This endpoint returns minimal information about each child. To fetch more details, use a related endpoint based on the content type, such
+as:
+
+- [Get database by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-database/#api-databases-id-get)
+- [Get embed by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-smart-link/#api-embeds-id-get)
+- [Get folder by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-folder/#api-folders-id-get)
+- [Get page by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-pages-id-get)
+- [Get whiteboard by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-whiteboard/#api-whiteboards-id-get).
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Only content that the user has permission to view will be returned.
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| cursor | string | No | Used for pagination, this opaque cursor will be returned in the `next` URL in the `Link` response header. Use the relative URL in the `Link` header to retrieve the `next` set of results. |
+| limit | integer | No | Maximum number of items per result to return. If more results exist, use the `Link` header to retrieve a relative URL that will return the next set of results. |
+| sort | string | No | Used to sort the result by a particular field. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the parent database. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:hierarchical-content:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested children are returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified database or the database was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Only content that the user has permission to view will be returned.
+
+### `GET /databases/{id}/descendants`
+
+**Operation:** `getDatabaseDescendants`
+
+**Summary:** Get descendants of a database
+
+**Description:**
+Returns descendants in the content tree for a given database by ID in top-to-bottom order (that is, the highest descendant is the first
+item in the response payload). The number of results is limited by the `limit` parameter and additional results (if available)
+will be available by calling this endpoint with the cursor in the response payload. There is also a `depth` parameter specifying depth
+of descendants to be fetched.
+
+The following types of content will be returned:
+- Database
+- Embed
+- Folder
+- Page
+- Whiteboard
+
+This endpoint returns minimal information about each descendant. To fetch more details, use a related endpoint based on the content type, such
+as:
+
+- [Get database by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-database/#api-databases-id-get)
+- [Get embed by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-smart-link/#api-embeds-id-get)
+- [Get folder by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-folder/#api-folders-id-get)
+- [Get page by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-pages-id-get)
+- [Get whiteboard by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-whiteboard/#api-whiteboards-id-get).
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Permission to view the database and its corresponding space
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| limit | integer | No | Maximum number of items per result to return. If more results exist, call the endpoint with the cursor to fetch the next set of results. |
+| depth | integer | No | Maximum depth of descendants to return. If more results are required, use the endpoint corresponding to the content type of the deepest descendant to fetch more descendants. |
+| cursor | string | No | Used for pagination, this opaque cursor will be returned in the `next` URL in the `Link` response header. Use the relative URL in the `Link` header to retrieve the `next` set of results. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the database. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:hierarchical-content:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested descendants are returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified database or the database was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Permission to view the database and its corresponding space
+
+### `GET /databases/{id}/ancestors`
+
+**Operation:** `getDatabaseAncestors`
+
+**Summary:** Get all ancestors of database
+
+**Description:**
+Returns all ancestors for a given database by ID in top-to-bottom order (that is, the highest ancestor is the first
+item in the response payload). The number of results is limited by the `limit` parameter and additional results (if available)
+will be available by calling this endpoint with the ID of first ancestor in the response payload.
+
+This endpoint returns minimal information about each ancestor. To fetch more details, use a related endpoint, such
+as [Get database by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-database/#api-databases-id-get).
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Permission to view the database and its corresponding space
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| limit | integer | No | Maximum number of items per result to return. If more results exist, call the endpoint with the highest ancestor's ID to fetch the next set of results. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the database. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:content.metadata:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested ancestors are returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Permission to view the database and its corresponding space
 
 ---
 
-## Error Responses
+## Smart Links/Embeds API
 
-Common error codes across all endpoints:
+### `POST /embeds`
 
-| Code | Description |
-|------|-------------|
-| `400` | Bad Request - Invalid request parameters or body. |
-| `401` | Unauthorized - Authentication is missing or invalid. |
-| `403` | Forbidden - Insufficient permissions to perform the action. |
-| `404` | Not Found - The requested resource was not found. |
-| `413` | Payload Too Large - Request body exceeds 5 MB limit. |
-| `429` | Too Many Requests - Rate limit exceeded. |
+**Operation:** `createSmartLink`
+
+**Summary:** Create Smart Link in the content tree
+
+**Description:**
+Creates a Smart Link in the content tree in the space.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the corresponding space. Permission to create a Smart Link in the content tree in the space.
+
+**Request Body:**
+
+
+**Required OAuth Scopes (Forge):**
+
+- `write:embed:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the Smart Link was successfully created in the content tree.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing from the request.
+- **413:** Returned if the request is too large in size (over 5 MB).
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the corresponding space. Permission to create a Smart Link in the content tree in the space.
+
+### `GET /embeds/{id}`
+
+**Operation:** `getSmartLinkById`
+
+**Summary:** Get Smart Link in the content tree by id
+
+**Description:**
+Returns a specific Smart Link in the content tree.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the Smart Link in the content tree and its corresponding space.
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| include-collaborators | boolean | No | Includes collaborators on the Smart Link. |
+| include-direct-children | boolean | No | Includes direct children of the Smart Link, as defined in the `ChildrenResponse` object. |
+| include-operations | boolean | No | Includes operations associated with this Smart Link in the response, as defined in the `Operation` object.
+The number of results will be limited to 50 and sorted in the default sort order.
+A `meta` and `_links` property will be present to indicate if more results are available and a link to retrieve the rest of the results. |
+| include-properties | boolean | No | Includes content properties associated with this Smart Link in the response.
+The number of results will be limited to 50 and sorted in the default sort order.
+A `meta` and `_links` property will be present to indicate if more results are available and a link to retrieve the rest of the results. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the Smart Link in the content tree to be returned. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:embed:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested Smart Link in the content tree is returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+requested Smart Link in the content tree or the Smart Link was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the Smart Link in the content tree and its corresponding space.
+
+### `DELETE /embeds/{id}`
+
+**Operation:** `deleteSmartLink`
+
+**Summary:** Delete Smart Link in the content tree
+
+**Description:**
+Delete a Smart Link in the content tree by id.
+
+Deleting a Smart Link in the content tree moves the Smart Link to the trash, where it can be restored later
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the Smart Link in the content tree and its corresponding space.
+Permission to delete Smart Links in the content tree in the space.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the Smart Link in the content tree to be deleted. |
+
+**Required OAuth Scopes (Forge):**
+
+- `delete:embed:confluence`
+
+**Response Formats:**
+
+- **204:** Returned if the Smart Link in the content tree was successfully deleted.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the Smart Link in the content tree and its corresponding space.
+Permission to delete Smart Links in the content tree in the space.
+
+### `GET /embeds/{id}/properties`
+
+**Operation:** `getSmartLinkContentProperties`
+
+**Summary:** Get content properties for Smart Link in the content tree
+
+**Description:**
+Retrieves Content Properties tied to a specified Smart Link in the content tree.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the Smart Link in the content tree.
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| key | string | No | Filters the response to return a specific content property with matching key (case sensitive). |
+| sort | string | No | Used to sort the result by a particular field. |
+| cursor | string | No | Used for pagination, this opaque cursor will be returned in the `next` URL in the `Link` response header. Use the relative URL in the `Link` header to retrieve the `next` set of results. |
+| limit | integer | No | Maximum number of Smart Links per result to return. If more results exist, use the `Link` header to retrieve a relative URL that will return the next set of results. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the Smart Link in the content tree for which content properties should be returned. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:embed:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested content properties are successfully retrieved.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified Smart Link in the content tree or the Smart Link was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the Smart Link in the content tree.
+
+### `POST /embeds/{id}/properties`
+
+**Operation:** `createSmartLinkProperty`
+
+**Summary:** Create content property for Smart Link in the content tree
+
+**Description:**
+Creates a new content property for a Smart Link in the content tree.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to update the Smart Link in the content tree.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the Smart Link in the content tree to create a property for. |
+
+**Request Body:**
+
+*Schema: `#/components/schemas/ContentPropertyCreateRequest`*
+
+**Required OAuth Scopes (Forge):**
+
+- `read:embed:confluence`
+- `write:embed:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the content property was created successfully. (see `#/components/schemas/ContentProperty`)
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified Smart Link in the content tree or the Smart Link was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to update the Smart Link in the content tree.
+
+### `GET /embeds/{embed-id}/properties/{property-id}`
+
+**Operation:** `getSmartLinkContentPropertiesById`
+
+**Summary:** Get content property for Smart Link in the content tree by id
+
+**Description:**
+Retrieves a specific Content Property by ID that is attached to a specified Smart Link in the content tree.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the Smart Link in the content tree.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| embed-id | integer | Yes | The ID of the Smart Link in the content tree for which content properties should be returned. |
+| property-id | integer | Yes | The ID of the content property being requested. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:embed:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested content property is successfully retrieved. (see `#/components/schemas/ContentProperty`)
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified Smart Link in the content tree, the Smart Link was not found, or the property was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the Smart Link in the content tree.
+
+### `PUT /embeds/{embed-id}/properties/{property-id}`
+
+**Operation:** `updateSmartLinkPropertyById`
+
+**Summary:** Update content property for Smart Link in the content tree by id
+
+**Description:**
+Update a content property for a Smart Link in the content tree by its id. 
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the Smart Link in the content tree.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| embed-id | integer | Yes | The ID of the Smart Link in the content tree the property belongs to. |
+| property-id | integer | Yes | The ID of the property to be updated. |
+
+**Request Body:**
+
+*Schema: `#/components/schemas/ContentPropertyUpdateRequest`*
+
+**Required OAuth Scopes (Forge):**
+
+- `read:embed:confluence`
+- `write:embed:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the content property was updated successfully. (see `#/components/schemas/ContentProperty`)
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified Smart Link in the content tree or the Smart Link was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the Smart Link in the content tree.
+
+### `DELETE /embeds/{embed-id}/properties/{property-id}`
+
+**Operation:** `deleteSmartLinkPropertyById`
+
+**Summary:** Delete content property for Smart Link in the content tree by id
+
+**Description:**
+Deletes a content property for a Smart Link in the content tree by its id. 
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the Smart Link in the content tree.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| embed-id | integer | Yes | The ID of the Smart Link in the content tree the property belongs to. |
+| property-id | integer | Yes | The ID of the property to be deleted. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:embed:confluence`
+- `write:embed:confluence`
+
+**Response Formats:**
+
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified Smart Link in the content tree or the Smart Link was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the Smart Link in the content tree.
+
+### `GET /embeds/{id}/operations`
+
+**Operation:** `getSmartLinkOperations`
+
+**Summary:** Get permitted operations for a Smart Link in the content tree
+
+**Description:**
+Returns the permitted operations on specific Smart Link in the content tree.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the Smart Link in the content tree and its corresponding space.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the Smart Link in the content tree for which operations should be returned. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:embed:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested operations are returned. (see `#/components/schemas/PermittedOperationsResponse`)
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+requested Smart Link in the content tree or the Smart Link was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the Smart Link in the content tree and its corresponding space.
+
+### `GET /embeds/{id}/direct-children`
+
+**Operation:** `getSmartLinkDirectChildren`
+
+**Summary:** Get direct children of a Smart Link
+
+**Description:**
+Returns all children for given smart link id in the content tree. The number of results is limited by the `limit` parameter and additional results (if available)
+will be available through the `next` URL present in the `Link` response header.
+
+The following types of content will be returned:
+- Database
+- Embed
+- Folder
+- Page
+- Whiteboard
+
+This endpoint returns minimal information about each child. To fetch more details, use a related endpoint based on the content type, such
+as:
+
+- [Get database by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-database/#api-databases-id-get)
+- [Get embed by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-smart-link/#api-embeds-id-get)
+- [Get folder by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-folder/#api-folders-id-get)
+- [Get page by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-pages-id-get)
+- [Get whiteboard by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-whiteboard/#api-whiteboards-id-get).
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Only content that the user has permission to view will be returned.
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| cursor | string | No | Used for pagination, this opaque cursor will be returned in the `next` URL in the `Link` response header. Use the relative URL in the `Link` header to retrieve the `next` set of results. |
+| limit | integer | No | Maximum number of items per result to return. If more results exist, use the `Link` header to retrieve a relative URL that will return the next set of results. |
+| sort | string | No | Used to sort the result by a particular field. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the parent smart link. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:hierarchical-content:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested children are returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified smart link or the smart link was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Only content that the user has permission to view will be returned.
+
+### `GET /embeds/{id}/descendants`
+
+**Operation:** `getSmartLinkDescendants`
+
+**Summary:** Get descendants of a smart link
+
+**Description:**
+Returns descendants in the content tree for a given smart link by ID in top-to-bottom order (that is, the highest descendant is the first
+item in the response payload). The number of results is limited by the `limit` parameter and additional results (if available)
+will be available by calling this endpoint with the cursor in the response payload. There is also a `depth` parameter specifying depth
+of descendants to be fetched.
+
+The following types of content will be returned:
+- Database
+- Embed
+- Folder
+- Page
+- Whiteboard
+
+
+This endpoint returns minimal information about each descendant. To fetch more details, use a related endpoint based on the content type, such
+as:
+
+- [Get database by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-database/#api-databases-id-get)
+- [Get embed by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-smart-link/#api-embeds-id-get)
+- [Get folder by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-folder/#api-folders-id-get)
+- [Get page by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-pages-id-get)
+- [Get whiteboard by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-whiteboard/#api-whiteboards-id-get).
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Permission to view the smart link and its corresponding space
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| limit | integer | No | Maximum number of items per result to return. If more results exist, call the endpoint with the cursor to fetch the next set of results. |
+| depth | integer | No | Maximum depth of descendants to return. If more results are required, use the endpoint corresponding to the content type of the deepest descendant to fetch more descendants. |
+| cursor | string | No | Used for pagination, this opaque cursor will be returned in the `next` URL in the `Link` response header. Use the relative URL in the `Link` header to retrieve the `next` set of results. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the smart link. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:hierarchical-content:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested descendants are returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified smart link or the smart link was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Permission to view the smart link and its corresponding space
+
+### `GET /embeds/{id}/ancestors`
+
+**Operation:** `getSmartLinkAncestors`
+
+**Summary:** Get all ancestors of Smart Link in content tree
+
+**Description:**
+Returns all ancestors for a given Smart Link in the content tree by ID in top-to-bottom order (that is, the highest ancestor is
+the first item in the response payload). The number of results is limited by the `limit` parameter and additional results 
+(if available) will be available by calling this endpoint with the ID of first ancestor in the response payload.
+
+This endpoint returns minimal information about each ancestor. To fetch more details, use a related endpoint, such
+as [Get Smart Link in the content tree by id](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-smart-link/#api-embeds-id-get).
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Permission to view the Smart Link in the content tree and its corresponding space
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| limit | integer | No | Maximum number of items per result to return. If more results exist, call the endpoint with the highest ancestor's ID to fetch the next set of results. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the Smart Link in the content tree. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:content.metadata:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested ancestors are returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to access the Confluence site ('Can use' global permission).
+Permission to view the Smart Link in the content tree and its corresponding space
 
 ---
 
-## Official Documentation References
+## Custom Content API
 
-- [Confluence Cloud REST API v2](https://developer.atlassian.com/cloud/confluence/rest/)
-- [Forge Events Reference](https://developer.atlassian.com/platform/forge/events-reference/confluence/)
+### `GET /custom-content`
+
+**Operation:** `getCustomContentByType`
+
+**Summary:** Get custom content by type
+
+**Description:**
+Returns all custom content for a given type. The number of results is limited by the `limit` parameter and additional results (if available)
+will be available through the `next` URL present in the `Link` response header.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the custom content, the container of the custom content, and the corresponding space (if different from the container).
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| type | string | Yes | The type of custom content being requested. See: https://developer.atlassian.com/cloud/confluence/custom-content/ for additional details on custom content. |
+| id | array | No | Filter the results based on custom content ids. Multiple custom content ids can be specified as a comma-separated list. |
+| space-id | array | No | Filter the results based on space ids. Multiple space ids can be specified as a comma-separated list. |
+| sort | string | No | Used to sort the result by a particular field. |
+| cursor | string | No | Used for pagination, this opaque cursor will be returned in the `next` URL in the `Link` response header. Use the relative URL in the `Link` header to retrieve the `next` set of results. |
+| limit | integer | No | Maximum number of pages per result to return. If more results exist, use the `Link` header to retrieve a relative URL that will return the next set of results. |
+| body-format | string | No | The content format types to be returned in the `body` field of the response. If available, the representation will be available under a response field of the same name under the `body` field.
+
+Note: If the custom content body type is `storage`, the `storage` and `atlas_doc_format` body formats are able to be returned. If the custom content body type is `raw`, only the `raw` body format is able to be returned. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:custom-content:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested custom content is returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the custom content, the container of the custom content, and the corresponding space (if different from the container).
+
+### `POST /custom-content`
+
+**Operation:** `createCustomContent`
+
+**Summary:** Create custom content
+
+**Description:**
+Creates a new custom content in the given space, page, blogpost or other custom content.
+
+Only one of `spaceId`, `pageId`, `blogPostId`, or `customContentId` is required in the request body.
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the content of the page or blogpost and its corresponding space. Permission to create custom content in the space.
+
+**Request Body:**
+
+
+**Required OAuth Scopes (Forge):**
+
+- `write:custom-content:confluence`
+
+**Response Formats:**
+
+- **201:** Returned if the requested custom content is created successfully.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the content of the page or blogpost and its corresponding space. Permission to create custom content in the space.
+
+### `GET /custom-content/{id}`
+
+**Operation:** `getCustomContentById`
+
+**Summary:** Get custom content by id
+
+**Description:**
+Returns a specific piece of custom content. 
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the custom content, the container of the custom content, and the corresponding space (if different from the container).
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| body-format | string | No | The content format types to be returned in the `body` field of the response. If available, the representation will be available under a response field of the same name under the `body` field.
+
+Note: If the custom content body type is `storage`, the `storage` and `atlas_doc_format` body formats are able to be returned. If the custom content body type is `raw`, only the `raw` body format is able to be returned. |
+| version | integer | No | Allows you to retrieve a previously published version. Specify the previous version's number to retrieve its details. |
+| include-labels | boolean | No | Includes labels associated with this custom content in the response.
+The number of results will be limited to 50 and sorted in the default sort order. 
+A `meta` and `_links` property will be present to indicate if more results are available and a link to retrieve the rest of the results. |
+| include-properties | boolean | No | Includes content properties associated with this custom content in the response.
+The number of results will be limited to 50 and sorted in the default sort order. 
+A `meta` and `_links` property will be present to indicate if more results are available and a link to retrieve the rest of the results. |
+| include-operations | boolean | No | Includes operations associated with this custom content in the response, as defined in the `Operation` object.
+The number of results will be limited to 50 and sorted in the default sort order. 
+A `meta` and `_links` property will be present to indicate if more results are available and a link to retrieve the rest of the results. |
+| include-versions | boolean | No | Includes versions associated with this custom content in the response.
+The number of results will be limited to 50 and sorted in the default sort order. 
+A `meta` and `_links` property will be present to indicate if more results are available and a link to retrieve the rest of the results. |
+| include-version | boolean | No | Includes the current version associated with this custom content in the response.
+By default this is included and can be omitted by setting the value to `false`. |
+| include-collaborators | boolean | No | Includes collaborators on the custom content. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the custom content to be returned. If you don't know the custom content ID, use Get Custom Content by Type and filter the results. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:custom-content:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested custom content is returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+requested custom content or the custom content was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the custom content, the container of the custom content, and the corresponding space (if different from the container).
+
+### `PUT /custom-content/{id}`
+
+**Operation:** `updateCustomContent`
+
+**Summary:** Update custom content
+
+**Description:**
+Update a custom content by id.
+At most one of `spaceId`, `pageId`, `blogPostId`, or `customContentId` is allowed in the request body.
+Note that if `spaceId` is specified, it must be the same as the `spaceId` used for creating the custom content
+as moving custom content to a different space is not supported.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the content of the page or blogpost and its corresponding space. Permission to update custom content in the space.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the custom content to be updated. If you don't know the custom content ID, use Get Custom Content by Type and filter the results. |
+
+**Request Body:**
+
+
+**Required OAuth Scopes (Forge):**
+
+- `write:custom-content:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested custom content is updated successfully.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the content of the page or blogpost and its corresponding space. Permission to update custom content in the space.
+
+### `DELETE /custom-content/{id}`
+
+**Operation:** `deleteCustomContent`
+
+**Summary:** Delete custom content
+
+**Description:**
+Delete a custom content by id.
+
+Deleting a custom content will either move it to the trash or permanently delete it (purge it), depending on the apiSupport.
+To permanently delete a **trashed** custom content, the endpoint must be called with the following param `purge=true`.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the content of the page or blogpost and its corresponding space.
+Permission to delete custom content in the space.
+Permission to administer the space (if attempting to purge).
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| purge | boolean | No | If attempting to purge the custom content. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| id | integer | Yes | The ID of the custom content to be deleted. |
+
+**Required OAuth Scopes (Forge):**
+
+- `delete:custom-content:confluence`
+
+**Response Formats:**
+
+- **204:** Returned if the custom content was deleted.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the content of the page or blogpost and its corresponding space.
+Permission to delete custom content in the space.
+Permission to administer the space (if attempting to purge).
+
+### `/custom-content/{id}/properties`
+
+*No documentation found for this endpoint.*
+
+### `GET /custom-content/{custom-content-id}/properties/{property-id}`
+
+**Operation:** `getCustomContentContentPropertiesById`
+
+**Summary:** Get content property for custom content by id
+
+**Description:**
+Retrieves a specific Content Property by ID that is attached to a specified custom content.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the page.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| custom-content-id | integer | Yes | The ID of the custom content for which content properties should be returned. |
+| property-id | integer | Yes | The ID of the content property being requested. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:custom-content:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested content property is successfully retrieved. (see `#/components/schemas/ContentProperty`)
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified custom content, the custom content was not found, or the property was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the page.
+
+### `PUT /custom-content/{custom-content-id}/properties/{property-id}`
+
+**Operation:** `updateCustomContentPropertyById`
+
+**Summary:** Update content property for custom content by id
+
+**Description:**
+Update a content property for a piece of custom content by its id. 
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the custom content.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| custom-content-id | integer | Yes | The ID of the custom content the property belongs to. |
+| property-id | integer | Yes | The ID of the property to be updated. |
+
+**Request Body:**
+
+*Schema: `#/components/schemas/ContentPropertyUpdateRequest`*
+
+**Required OAuth Scopes (Forge):**
+
+- `read:custom-content:confluence`
+- `write:custom-content:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the content property was updated successfully. (see `#/components/schemas/ContentProperty`)
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified custom content or the custom content was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the custom content.
+
+### `DELETE /custom-content/{custom-content-id}/properties/{property-id}`
+
+**Operation:** `deleteCustomContentPropertyById`
+
+**Summary:** Delete content property for custom content by id
+
+**Description:**
+Deletes a content property for a piece of custom content by its id. 
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the custom content.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| custom-content-id | integer | Yes | The ID of the custom content the property belongs to. |
+| property-id | integer | Yes | The ID of the property to be deleted. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:custom-content:confluence`
+- `write:custom-content:confluence`
+
+**Response Formats:**
+
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified custom content or the custom content was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to edit the custom content.
+
+### `GET /custom-content/{custom-content-id}/versions`
+
+**Operation:** `getCustomContentVersions`
+
+**Summary:** Get custom content versions
+
+**Description:**
+Returns the versions of specific custom content.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the custom content and its corresponding page and space.
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| body-format | string | No | The content format types to be returned in the `body` field of the response. If available, the representation will be available under a response field of the same name under the `body` field.
+
+Note: If the custom content body type is `storage`, the `storage` and `atlas_doc_format` body formats are able to be returned. If the custom content body type is `raw`, only the `raw` body format is able to be returned. |
+| cursor | string | No | Used for pagination, this opaque cursor will be returned in the `next` URL in the `Link` response header. Use the relative URL in the `Link` header to retrieve the `next` set of results. |
+| limit | integer | No | Maximum number of versions per result to return. If more results exist, use the `Link` header to retrieve a relative URL that will return the next set of results. |
+| sort | string | No | Used to sort the result by a particular field. |
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| custom-content-id | integer | Yes | The ID of the custom content to be queried for its versions. If you don't know the custom content ID, use Get custom-content by type and filter the results. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:custom-content:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested custom content versions are returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+requested custom content or the custom content was not found.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the custom content and its corresponding page and space.
+
+### `GET /custom-content/{custom-content-id}/versions/{version-number}`
+
+**Operation:** `getCustomContentVersionDetails`
+
+**Summary:** Get version details for custom content version
+
+**Description:**
+Retrieves version details for the specified custom content and version number.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the page.
+
+**Path Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| custom-content-id | integer | Yes | The ID of the custom content for which version details should be returned. |
+| version-number | integer | Yes | The version number of the custom content to be returned. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:custom-content:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested version details are successfully retrieved. (see `#/components/schemas/DetailedVersion`)
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+- **404:** Returned if the calling user does not have permission to view the
+specified custom content, the custom content was not found, or the version number does not exist.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Permission to view the page.
+
+---
+
+## Classifications API
+
+### `GET /classification-levels`
+
+**Operation:** `getClassificationLevels`
+
+**Summary:** Get list of classification levels
+
+**Description:**
+Returns a list of [classification levels](https://developer.atlassian.com/cloud/admin/dlp/rest/intro/#Classification%20level) 
+available.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+'Permission to access the Confluence site ('Can use' global permission).
+
+**Required OAuth Scopes (Forge):**
+
+- `read:configuration:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if classifications levels are returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+'Permission to access the Confluence site ('Can use' global permission).
+
+---
+
+## Data Policies API
+
+### `GET /data-policies/metadata`
+
+**Operation:** `getDataPolicyMetadata`
+
+**Summary:** Get data policy metadata for the workspace
+
+**Description:**
+Returns data policy metadata for the workspace.
+
+**[Permissions](#permissions) required:**
+Only apps can make this request.
+Permission to access the Confluence site ('Can use' global permission).
+
+**Required OAuth Scopes (Forge):**
+
+- `read:configuration:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the request is successful. (see `#/components/schemas/DataPolicyMetadata`)
+
+**Permission Requirements:**
+
+**[Permissions](#permissions) required:**
+Only apps can make this request.
+Permission to access the Confluence site ('Can use' global permission).
+
+### `GET /data-policies/spaces`
+
+**Operation:** `getDataPolicySpaces`
+
+**Summary:** Get spaces with data policies
+
+**Description:**
+Returns all spaces. The results will be sorted by id ascending. The number of results is limited by the `limit` parameter and
+additional results (if available) will be available through the `next` URL present in the `Link` response header.
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Only apps can make this request.
+Permission to access the Confluence site ('Can use' global permission).
+Only spaces that the app has permission to view will be returned.
+
+**Query Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| ids | array | No | Filter the results to spaces based on their IDs. Multiple IDs can be specified as a comma-separated list. |
+| keys | array | No | Filter the results to spaces based on their keys. Multiple keys can be specified as a comma-separated list. |
+| sort | string | No | Used to sort the result by a particular field. |
+| cursor | string | No | Used for pagination, this opaque cursor will be returned in the `next` URL in the `Link` response header. Use the relative URL in the `Link` header to retrieve the `next` set of results. |
+| limit | integer | No | Maximum number of spaces per result to return. If more results exist, use the `Link` response header to retrieve a relative URL that will return the next set of results. |
+
+**Required OAuth Scopes (Forge):**
+
+- `read:space:confluence`
+
+**Response Formats:**
+
+- **200:** Returned if the requested spaces are returned.
+- **400:** Returned if an invalid request is provided.
+- **401:** Returned if the authentication credentials are incorrect or missing
+from the request.
+
+**Permission Requirements:**
+
+**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:
+Only apps can make this request.
+Permission to access the Confluence site ('Can use' global permission).
+Only spaces that the app has permission to view will be returned.
+
+---
+
