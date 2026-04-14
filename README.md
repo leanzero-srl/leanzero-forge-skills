@@ -1,6 +1,6 @@
 # LeanZero Forge Skills
 
-A **skill** for [Cline](https://github.com/cline) is a collection of documentation, guides, and reference materials that provide specialized knowledge to help Cline (and human developers) work more effectively on specific types of projects. Skills are activated automatically when working in relevant directories or when the context suggests they should be used.
+A **skill** is a collection of documentation, guides, and reference materials that provide specialized knowledge to help AI assistants (and human developers) work more effectively on specific types of projects. These skills are compatible with multiple AI assistant platforms including Cline, Qwen Code, and Claude Code.
 
 ## Available Skills
 
@@ -9,13 +9,17 @@ This repository contains **two comprehensive skills** for building Atlassian For
 ### 1. Atlassian Jira Forge Skill
 A complete documentation suite for building Forge apps that extend Jira, including workflow validators, conditions, post-functions, and integrations with Jira REST APIs.
 
-- **Location**: `.cline/skills/atlassian-jira-forge-skill/`
+- **Cline**: `.cline/skills/atlassian-jira-forge-skill/`
+- **Qwen Code**: `.qwen/skills/atlassian-jira-forge-skill/SKILL.md`
+- **Claude Code**: `.claude/skills/atlassian-jira-forge-skill/SKILL.md`
 - **Use when**: Creating workflow validators, conditions, post-functions, custom UIs for workflow rules, or integrating with Jira REST APIs from a Forge app
 
 ### 2. Atlassian Confluence Forge Skill
 A complete documentation suite for building Forge apps that extend Confluence Cloud, including page extensions, blog post extensions, space settings panels, dashboard gadgets, and integrations with Confluence REST API v2.
 
-- **Location**: `.cline/skills/atlassian-confluence-forge-skill/`
+- **Cline**: `.cline/skills/atlassian-confluence-forge-skill/`
+- **Qwen Code**: `.qwen/skills/atlassian-confluence-forge-skill/SKILL.md`
+- **Claude Code**: `.claude/skills/atlassian-confluence-forge-skill/SKILL.md`
 - **Use when**: Building custom UIs for pages/blog posts, creating space configuration panels, handling Confluence webhooks, or integrating with Confluence REST API from a Forge app
 
 ---
@@ -25,23 +29,36 @@ A complete documentation suite for building Forge apps that extend Confluence Cl
 ### Purpose
 
 Skills provide:
-- **Context-aware guidance**: When Cline detects Forge development work (e.g., working with `manifest.yml`), it activates the relevant skill to provide relevant documentation
+- **Context-aware guidance**: When Cline, Qwen Code, or Claude Code detects Forge development work (e.g., working with `manifest.yml`), they activate the relevant skill to provide relevant documentation
 - **Module-specific references**: Complete documentation for all module types
 - **API endpoint documentation**: Comprehensive reference for Jira REST API (v3) and Confluence REST API (v2)
 - **Best practices**: Proven patterns for Forge app development including resolver patterns, bridge API usage, and UI development
 
-### How Skills Work in Cline
+### How Skills Work in Cline, Qwen Code, and Claude Code
+
+All three platforms use similar skill patterns:
 
 1. **Automatic Activation**: Skills are activated based on file context (e.g., working with `manifest.yml` triggers the relevant skill)
 2. **Context Integration**: The skill's documentation is integrated into the AI's knowledge base for the current session
 3. **Persistent Access**: Once activated, the skill remains active for related tasks in that session
-4. **Skill Definition**: Skills are defined in a `SKILL.md` file with metadata (name, description) that Cline uses to identify when to activate
+4. **Skill Definition**: Skills are defined in a `SKILL.md` file with metadata (name, description) that each platform uses to identify when to activate
+
+### Platform-Specific Details
+
+| Feature | Cline | Qwen Code | Claude Code |
+|---------|-------|-----------|-------------|
+| Skill Directory | `.cline/skills/` | `.qwen/skills/` or `~/.qwen/skills/` | `.claude/skills/` or `~/.claude/skills/` |
+| Activation | File context detection | AI model automatic + `/skill-name` | AI model automatic + `/skill-name` |
+| User-invocable | Manual via file context | `/skill-name` command | `/skill-name` command |
+| Configuration | None required | Automatic discovery | YAML frontmatter optional |
 
 ---
 
 ## Installation
 
 To install both skills on your system:
+
+### For Cline
 
 ```bash
 # Create the skills directory if it doesn't exist
@@ -56,6 +73,149 @@ cp -r .cline/skills/* ~/.cline/skills/
 ```
 
 Cline automatically detects skills in `~/.cline/skills/` and activates them when appropriate based on file context.
+
+### For Qwen Code
+
+Qwen Code supports Agent Skills that can be loaded from either user-level or project-level directories. Skills are activated automatically by the AI model when context suggests they should be used, or manually via `/skill-name` command.
+
+### Skill Locations
+
+| Scope | Path | Purpose |
+|-------|------|---------|
+| **User (Global)** | `~/.qwen/skills/<skill-name>/SKILL.md` | Available across all projects for the current user |
+| **Project** | `.qwen/skills/<skill-name>/SKILL.md` | Project-specific skills, shared via git |
+
+### Installation for Qwen Code
+
+```bash
+# Option 1: User-level (all projects)
+mkdir -p ~/.qwen/skills/atlassian-jira-forge-skill
+cp atlassian-jira-forge-skill/SKILL.md ~/.qwen/skills/atlassian-jira-forge-skill/
+
+mkdir -p ~/.qwen/skills/atlassian-confluence-forge-skill
+cp atlassian-confluence-forge-skill/SKILL.md ~/.qwen/skills/atlassian-confluence-forge-skill/
+
+# Option 2: Project-level (current project only)
+mkdir -p .qwen/skills/atlassian-jira-forge-skill
+cp atlassian-jira-forge-skill/SKILL.md .qwen/skills/atlassian-jira-forge-skill/
+
+mkdir -p .qwen/skills/atlassian-confluence-forge-skill
+cp atlassian-confluence-forge-skill/SKILL.md .qwen/skills/atlassian-confluence-forge-skill/
+```
+
+### Configuration
+
+Qwen Code automatically discovers skills in the configured locations. No additional configuration is required beyond placing the `SKILL.md` file in the correct directory.
+
+Skills can be shared with your team by committing the `.qwen/skills/` directory to version control - teammates who pull the changes will automatically have access to the skills.
+
+### Using Skills
+
+1. **Automatic Invocation**: Qwen Code will automatically use a skill when context suggests it's relevant
+2. **Manual Invocation**: Use `/skill-name` in your conversation (e.g., `/atlassian-jira-forge-skill`)
+3. **View Available Skills**: Use the `/skills` command to see all available skills
+
+### Frontmatter Reference
+
+Each `SKILL.md` file should begin with YAML frontmatter:
+
+```markdown
+---
+name: atlassian-jira-forge-skill
+description: Complete documentation for building Atlassian Jira Forge apps including workflow validators, conditions, post-functions, and REST API integration
+---
+
+# Your skill content here...
+```
+
+**Best Practices for Qwen Code Skills:**
+- Use lowercase letters, numbers, and hyphens in the `name`
+- Make `description` specific - include both what the Skill does and when to use it (key words users will naturally mention)
+- Keep skills focused - "PDF form filling" is good; "Document processing" is too broad
+
+---
+
+## Using Skills with Claude Code
+
+Claude Code supports Agent Skills that can be loaded from user-level, project-level, or plugin directories. Skills are automatically discovered at startup and invoked by the AI model based on context.
+
+### Skill Locations
+
+| Scope | Path | Purpose |
+|-------|------|---------|
+| **User (Global)** | `~/.claude/skills/<skill-name>/SKILL.md` | Available across all projects for the current user |
+| **Project** | `.claude/skills/<skill-name>/SKILL.md` | Project-specific skills, shared via git |
+| **Plugin** | Plugin's `skills/` directory | Bundled with installed Claude Code plugins |
+
+### Installation for Claude Code
+
+```bash
+# Option 1: User-level (all projects)
+mkdir -p ~/.claude/skills/atlassian-jira-forge-skill
+cp atlassian-jira-forge-skill/SKILL.md ~/.claude/skills/atlassian-jira-forge-skill/
+
+mkdir -p ~/.claude/skills/atlassian-confluence-forge-skill
+cp atlassian-confluence-forge-skill/SKILL.md ~/.claude/skills/atlassian-confluence-forge-skill/
+
+# Option 2: Project-level (current project only)
+mkdir -p .claude/skills/atlassian-jira-forge-skill
+cp atlassian-jira-forge-skill/SKILL.md .claude/skills/atlassian-jira-forge-skill/
+
+mkdir -p .claude/skills/atlassian-confluence-forge-skill
+cp atlassian-confluence-forge-skill/SKILL.md .claude/skills/atlassian-confluence-forge-skill/
+```
+
+### Configuration
+
+Claude Code automatically discovers skills in configured locations. The directory is scanned when Claude starts and when settings change.
+
+Skills can be shared with your team by committing the `.claude/skills/` directory to version control - teammates who pull the changes will automatically have access to the skills.
+
+### Frontmatter Reference
+
+Each `SKILL.md` file should begin with YAML frontmatter:
+
+```markdown
+---
+name: atlassian-jira-forge-skill
+description: Complete documentation for building Atlassian Jira Forge apps including workflow validators, conditions, post-functions, and REST API integration
+---
+
+# Your skill content here...
+```
+
+### Advanced Configuration
+
+Claude Code supports additional skill configuration options:
+
+| Setting | Description |
+|---------|-------------|
+| `disable-model-invocation: true` | Only humans can invoke the skill (useful for actions with side effects) |
+| `user-invocable: false` | Only Claude can invoke the skill (useful for background knowledge) |
+
+Example with configuration:
+
+```markdown
+---
+name: atlassian-jira-forge-skill
+description: Complete documentation for building Atlassian Jira Forge apps including workflow validators, conditions, post-functions, and REST API integration
+disable-model-invocation: false
+user-invocable: true
+---
+
+# Your skill content here...
+```
+
+### Troubleshooting
+
+**Skill not triggering:**
+- Check the description includes keywords users would naturally say
+- Verify the skill appears in "What skills are available?"
+- Try rephrasing your request to match the description more closely
+
+**Skill triggers too often:**
+- Make the description more specific
+- Add `disable-model-invocation: true` if only manual invocation is desired
 
 ---
 
@@ -86,7 +246,7 @@ modules:
 
 | File | Description |
 |------|-------------|
-| `SKILL.md` | Main entry point with trigger description for Cline |
+| `SKILL.md` | Main entry point with trigger description for Cline, Qwen Code, and Claude Code |
 | `docs/01-core-concepts.md` | Core Forge concepts, manifest structure |
 | `docs/02-workflow-validators.md` | Complete validator documentation with examples |
 | `docs/03-workflow-conditions.md` | Complete condition documentation |
@@ -234,7 +394,7 @@ modules:
 
 | File | Description |
 |------|-------------|
-| `SKILL.md` | Main entry point with trigger description for Cline |
+| `SKILL.md` | Main entry point with trigger description for Cline, Qwen Code, and Claude Code |
 | `docs/01-core-concepts.md` | Core Forge concepts, manifest structure |
 | `docs/02-page-custom-ui.md` | Page extensions implementation guide |
 | `docs/03-space-settings.md` | Space configuration panels |
@@ -344,6 +504,14 @@ Use this skill when:
 
 ## Quick Reference
 
+### Cross-Platform Skill Locations
+
+| Platform | Jira Skill Path | Confluence Skill Path |
+|----------|-----------------|----------------------|
+| **Cline** | `.cline/skills/atlassian-jira-forge-skill/` | `.cline/skills/atlassian-confluence-forge-skill/` |
+| **Qwen Code** | `.qwen/skills/atlassian-jira-forge-skill/SKILL.md` | `.qwen/skills/atlassian-confluence-forge-skill/SKILL.md` |
+| **Claude Code** | `.claude/skills/atlassian-jira-forge-skill/SKILL.md` | `.claude/skills/atlassian-confluence-forge-skill/SKILL.md` |
+
 ### Jira Tasks
 | Task | Module Type / API |
 |------|-------------------|
@@ -395,8 +563,6 @@ The skills document these critical Forge runtime libraries:
 3. Handle errors gracefully in components
 4. Test across different screen sizes
 
----
-
 ## Troubleshooting
 
 ### Common Errors
@@ -406,6 +572,14 @@ The skills document these critical Forge runtime libraries:
 | "Function not found" | Function key mismatch in manifest.yml | Check function references match |
 | "Permission denied" | Missing scopes in manifest.yml | Add required scope to permissions.scopes |
 | "Expression evaluation failed" | Invalid Jira expression syntax | Test expressions in workflow editor |
+
+#### Platform-Specific Issues
+
+| Issue | Cline | Qwen Code | Claude Code |
+|-------|-------|-----------|-------------|
+| Skill not triggering | Check file context matches skill triggers | Verify SKILL.md is in correct location and has valid frontmatter | Verify SKILL.md is in correct location and has valid frontmatter |
+| Skill not found | Ensure directory structure matches `.cline/skills/<skill-name>/` | Check `~/.qwen/skills/` or project's `.qwen/skills/` | Check `~/.claude/skills/` or project's `.claude/skills/` |
+| Manual invocation | N/A (auto-activated) | Use `/skill-name` command | Use `/skill-name` command |
 
 ### Debugging Commands
 
@@ -426,9 +600,11 @@ The skill references external documentation in the following directories (not in
 
 ## Related Documentation
 
-For more information about Cline skills:
+For more information about skills across platforms:
 - [Cline GitHub Repository](https://github.com/cline)
 - [Cline Skills Documentation](https://github.com/cline/tree/main/skills)
+- [Qwen Code Agent Skills](https://qwenlm.github.io/qwen-code-docs/en/users/features/skills/)
+- [Claude Code Skills Guide](https://code.claude.com/docs/en/skills)
 
 ---
 
