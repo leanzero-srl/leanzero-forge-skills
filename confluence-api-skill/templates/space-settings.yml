@@ -1,0 +1,172 @@
+---
+
+# Confluence Space REST API Template
+# Manage spaces and space-level configuration using the REST API
+
+## Overview
+
+Spaces are containers for content in Confluence. This template shows how to:
+- Get space information
+- Update space settings
+- List pages within a space
+- Get space permissions
+
+---
+
+## Get Space Information
+
+```http
+GET /wiki/api/v2/spaces/{spaceKey} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": 987654,
+  "key": "PROJ",
+  "name": "Project Space",
+  "type": "space",
+  "status": "current",
+  "description": {
+    "plain": "Space description",
+    "representation": "plain"
+  },
+  "_links": {
+    "webui": "/spaces/PROJ",
+    "self": "https://my.atlassian.net/wiki/api/v2/spaces/987654"
+  }
+}
+```
+
+---
+
+## Update Space
+
+```http
+PUT /wiki/api/v2/spaces/{spaceKey} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "Updated Space Name",
+  "description": {
+    "plain": "Updated space description"
+  }
+}
+```
+
+---
+
+## Get Pages in a Space
+
+```http
+GET /wiki/api/v2/spaces/{spaceKey}/pages?expand=body.storage&limit=50 HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "results": [
+    {
+      "id": "123456",
+      "type": "page",
+      "title": "Page Title"
+    }
+  ],
+  "start": 0,
+  "limit": 50
+}
+```
+
+---
+
+## Get Space Permissions
+
+```http
+GET /wiki/api/v2/spaces/{spaceKey}/permissions HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "results": [
+    {
+      "id": 1,
+      "subject": {
+        "type": "user",
+        "accountId": "5b10a28b42e45d37d8c5b123"
+      },
+      "permission": "read"
+    }
+  ],
+  "_links": {
+    "self": "https://my.atlassian.net/wiki/api/v2/spaces/PROJ/permissions"
+  }
+}
+```
+
+---
+
+## Get Space Homepage
+
+```http
+GET /wiki/api/v2/spaces/{spaceKey}?expand=homepage HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": 987654,
+  "key": "PROJ",
+  "homepage": {
+    "id": "111111",
+    "type": "page",
+    "title": "Project Home"
+  }
+}
+```
+
+---
+
+## cURL Examples
+
+```bash
+# Get space info
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/spaces/PROJ
+
+# Get pages in space
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/spaces/PROJ/pages?limit=50
+
+# Get space permissions
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/spaces/PROJ/permissions
+
+# Get space homepage
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/spaces/PROJ?expand=homepage
+```
+
+---
+
+## Notes
+
+- Space keys are uppercase alphanumeric (e.g., PROJ, DOC)
+- Use `spaceId` (numeric) for some API endpoints instead of `spaceKey`
+- Permissions endpoint requires appropriate admin scopes
+- The `description` field supports multiple representations: plain, storage, view

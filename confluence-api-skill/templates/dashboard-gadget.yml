@@ -1,0 +1,135 @@
+---
+
+# Confluence Dashboard Gadget REST API Template
+# Create and manage dashboard gadgets using the REST API
+
+## Overview
+
+Dashboard gadgets in Confluence can be created via the `dashboardGadget` module in Forge apps, but you can also:
+
+1. **Query existing gadgets** via the REST API
+2. **Create custom widgets** that display on dashboards using external services
+3. **Embed gadget content** via REST API calls
+
+This template shows how to work with dashboard-related data.
+
+---
+
+## Get Dashboard Gadgets (Forge App)
+
+For Forge apps, gadget information is retrieved from the app manifest. Use this endpoint to get installed gadgets:
+
+```http
+GET /wiki/rest/gadgets/1.0/dashboard/{dashboardId}/gadgets HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "gadgets": [
+    {
+      "id": "gadget-123",
+      "title": "My Gadget",
+      "description": "Gadget description",
+      "width": 300,
+      "height": 400
+    }
+  ]
+}
+```
+
+---
+
+## Create a Dashboard Gadget via REST
+
+```http
+POST /wiki/rest/gadgets/1.0/dashboard/{dashboardId}/gadgets HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+Accept: application/json
+
+{
+  "title": "My Custom Gadget",
+  "description": "A custom data visualization gadget",
+  "width": 300,
+  "height": 400,
+  "gadgetResource": {
+    "url": "https://myapp.com/gadget.xml"
+  }
+}
+```
+
+---
+
+## Get Space Information (for Dashboard Display)
+
+```http
+GET /wiki/api/v2/spaces/{spaceKey} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": 987654,
+  "key": "PROJ",
+  "name": "Project Space",
+  "type": "space",
+  "status": "current",
+  "_links": {
+    "webui": "/spaces/PROJ",
+    "self": "https://my.atlassian.net/wiki/api/v2/spaces/987654"
+  }
+}
+```
+
+---
+
+## Get Pages in a Space (for Gadget Content)
+
+```http
+GET /wiki/api/v2/spaces/{spaceKey}/pages?expand=body.storage&limit=10 HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+---
+
+## cURL Examples
+
+```bash
+# Get dashboard gadgets
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/rest/gadgets/1.0/dashboard/123456/gadgets
+
+# Create gadget
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "My Gadget",
+    "description": "Custom data gadget",
+    "width": 300,
+    "height": 400
+  }' \
+  https://{your-domain}.atlassian.net/wiki/rest/gadgets/1.0/dashboard/123456/gadgets
+
+# Get space info
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/spaces/PROJ
+```
+
+---
+
+## Notes
+
+- Dashboard gadgets are typically created via Forge apps using the `dashboardGadget` module
+- The REST API approach is for managing external gadget definitions
+- For custom data visualization, consider using Confluence's page banners instead (via `confluence:pageBanner`)

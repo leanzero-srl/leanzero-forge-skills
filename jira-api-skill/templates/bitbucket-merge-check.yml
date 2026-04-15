@@ -1,0 +1,110 @@
+---
+
+# Bitbucket Merge Check via REST API Template
+# Query and manage merge checks using the REST API
+
+## Overview
+
+Merge checks in Bitbucket validate pull requests before merging. You can:
+
+1. **Query existing merge checks**
+2. **Get merge check configuration**
+3. **Manage PR validation**
+
+Note: Creating custom merge checks typically requires Forge apps.
+
+---
+
+## Get Merge Checks for a Repository
+
+```http
+GET /rest/merge-checks/1.0/repos/{projectKey}/{repoSlug}/merge-config HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "mergeChecks": [
+    {
+      "id": "required-reviewers",
+      "name": "Required Reviewers",
+      "enabled": true,
+      "config": {
+        "minReviewers": 1
+      }
+    },
+    {
+      "id": "build-status",
+      "name": "Build Status",
+      "enabled": true,
+      "config": {}
+    }
+  ]
+}
+```
+
+---
+
+## Get Merge Check Details
+
+```http
+GET /rest/merge-checks/1.0/repos/{projectKey}/{repoSlug}/merge-config/checks/{checkId} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+---
+
+## Get Pull Request Merge Status
+
+```http
+GET /rest/api/1.0/projects/{projectKey}/repos/{repoSlug}/pull-requests/{prId}/merge HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "canMerge": true,
+  "conflict": false,
+  "mergeChecks": [
+    {
+      "id": "required-reviewers",
+      "status": "PASS"
+    },
+    {
+      "id": "build-status",
+      "status": "PASS"
+    }
+  ]
+}
+```
+
+---
+
+## cURL Examples
+
+```bash
+# Get merge checks for repo
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/rest/merge-checks/1.0/repos/PROJ/my-repo/merge-config
+
+# Get PR merge status
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/rest/api/1.0/projects/PROJ/repos/my-repo/pull-requests/123/merge
+```
+
+---
+
+## Notes
+
+- Merge checks are typically created via Forge apps using `bitbucket:mergeCheck` module
+- REST API approach is for querying and checking merge status
+- Common merge checks: required reviewers, build status, commit limits
+- For custom validation logic, use Forge's merge check module

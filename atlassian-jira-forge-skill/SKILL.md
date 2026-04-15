@@ -20,13 +20,15 @@ This skill provides documentation for building Forge apps that extend Jira.
 - You need to perform complex Confluence content management.
 
 It covers:
-- Creating workflow validators (validate fields before transition completes)
-- Creating workflow conditions (control transition visibility)
-- Creating workflow post-functions (execute logic after transition)
+- Creating workflow validators (Preview) - validate fields before transition completes
+- Creating workflow conditions (Preview) - control visibility of transitions
+- Creating workflow post-functions (Preview) - execute logic after transition
 - Building custom UIs for workflow rule configuration
 - Making Jira REST API calls from a Forge app
 - Setting up scheduled triggers and automation actions
 - Configuring dashboard widgets or Bitbucket merge checks
+
+**Note**: `jira:workflowValidator`, `jira:workflowCondition`, and `jira:workflowPostFunction` modules are in **Preview** status per Atlassian's official documentation.
 
 ## Quick Reference
 

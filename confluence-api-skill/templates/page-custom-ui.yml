@@ -1,0 +1,142 @@
+---
+
+# Confluence Pages REST API Template
+# Create, read, update, or delete pages using the /wiki/api/v2/pages endpoint
+
+## GET: Retrieve a Page by ID
+
+```http
+GET /wiki/api/v2/pages/{pageId} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "123456",
+  "type": "page",
+  "status": "current",
+  "title": "My Page",
+  "space": {
+    "id": 987654,
+    "key": "PROJ",
+    "name": "Project Space"
+  },
+  "body": {
+    "storage": {
+      "value": "<p>Page content</p>",
+      "representation": "storage"
+    }
+  }
+}
+```
+
+## POST: Create a Page
+
+```http
+POST /wiki/api/v2/pages HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+Accept: application/json
+
+{
+  "spaceId": 987654,
+  "title": "New Page Title",
+  "body": {
+    "storage": {
+      "value": "<p>This is the page content in storage format</p>",
+      "representation": "storage"
+    }
+  },
+  "ancestors": [
+    {"id": 111111}
+  ],
+  "status": "current"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "id": "789012",
+  "type": "page",
+  "status": "current",
+  "title": "New Page Title",
+  "_links": {
+    "webui": "/spaces/PROJ/pages/789012/New+Page+Title",
+    "self": "https://my.atlassian.net/wiki/api/v2/pages/789012"
+  }
+}
+```
+
+## PUT: Update a Page
+
+```http
+PUT /wiki/api/v2/pages/{pageId} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+Accept: application/json
+
+{
+  "spaceId": 987654,
+  "title": "Updated Page Title",
+  "body": {
+    "storage": {
+      "value": "<p>Updated content</p>",
+      "representation": "storage"
+    }
+  },
+  "version": {"number": 2, "message": "Update page title"}
+}
+```
+
+## DELETE: Delete a Page
+
+```http
+DELETE /wiki/api/v2/pages/{pageId} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+```
+
+**Response (204 No Content)**
+
+---
+
+### Common cURL Examples
+
+```bash
+# Get page
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/123456
+
+# Create page
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "spaceId": 987654,
+    "title": "New Page",
+    "body": {"storage": {"value": "<p>Content</p>", "representation": "storage"}}
+  }' \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages
+
+# Update page
+curl -X PUT \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Updated Title","body":{"storage":{"value":"<p>New content</p>","representation":"storage"}},"version":{"number":2}}' \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/123456
+```
+
+---
+
+### Notes
+
+- Use `spaceId` (numeric) not `spaceKey` for most operations
+- The `ancestors` array creates parent-child relationships between pages
+- Always include the current version number when updating
+- Deleted pages go to the trash; use `?force=true` to permanently delete

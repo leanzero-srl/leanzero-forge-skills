@@ -1,0 +1,145 @@
+---
+
+# Jira Workflow Post Function via REST API Template
+# Create and manage workflow post functions using the REST API
+
+## Overview
+
+Workflow post functions in Jira execute logic after a transition. They are typically created via Forge apps using the `jira:workflowPostFunction` module. This template shows:
+
+1. **Querying workflows** to understand existing post functions
+2. **Managing transitions with post functions**
+3. **External post-transition actions**
+
+---
+
+## Get Workflow Transition with Post Functions
+
+```http
+GET /rest/api/3/workflow/transitions/{transitionId} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "10001",
+  "name": "Start Progress",
+  "to": {"id": "3", "name": "In Progress"},
+  "postFunctions": [
+    {
+      "type": "update-issue-field",
+      "params": {
+        "field": "status",
+        "value": "In Progress"
+      }
+    },
+    {
+      "type": "fire-event",
+      "params": {
+        "eventId": "1"
+      }
+    }
+  ]
+}
+```
+
+---
+
+## Get Post Function Details
+
+```http
+GET /rest/api/3/workflow/postFunction/{postFunctionId} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+---
+
+## Execute External Logic After Transition (Webhook)
+
+For external post-transition actions:
+
+```javascript
+// webhook-handler.js
+
+async function handleIssueTransitioned(issue, fromStatus, toStatus) {
+  // Your external logic here
+  
+  if (toStatus === 'Done') {
+    // Issue resolved - update external system
+    await syncToExternalSystem(issue.key);
+  }
+  
+  if (fromStatus === 'To Do' && toStatus === 'In Progress') {
+    // Start work notification
+    await sendStartWorkNotification(issue);
+  }
+}
+
+// Called from webhook handler
+app.post('/jira-webhook', async (req, res) => {
+  const { event } = req.body;
+  
+  if (event.type === 'jira:issue_updated' && event.changes.status) {
+    const oldStatus = event.changes.status.from;
+    const newStatus = event.changes.status.to;
+    
+    await handleIssueTransitioned(event.issue, oldStatus, newStatus);
+  }
+  
+  res.status(200).json({ status: 'ok' });
+});
+```
+
+---
+
+## Get Workflow Details
+
+```http
+GET /rest/api/3/workflow/{workflowId} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "10000",
+  "name": "Basic Software Development",
+  "description": "A basic workflow for software development",
+  "transitions": [
+    {
+      "id": "21",
+      "name": "Resolve Issue"
+    }
+  ]
+}
+```
+
+---
+
+## cURL Examples
+
+```bash
+# Get workflow with post functions
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/rest/api/3/workflow/transitions/10001
+
+# Get workflow details
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/rest/api/3/workflow/10000
+```
+
+---
+
+## Notes
+
+- Workflow post functions are primarily created via Forge apps
+- REST API approach is for querying and understanding workflows
+- For custom post-function logic, use Forge's `jira:workflowPostFunction` module
+- External webhooks can replicate most post-function behavior

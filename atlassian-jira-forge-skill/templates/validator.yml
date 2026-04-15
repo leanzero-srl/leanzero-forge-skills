@@ -1,6 +1,8 @@
-# Jira Workflow Validator Template
+# Jira Workflow Validator Template (Preview)
 
 Copy this file and modify for your specific use case.
+
+**Note**: The `jira:workflowValidator` module is in **Preview** status per Atlassian's official documentation. Preview features are deemed stable but remain under active development.
 
 ## File: manifest.yml (add to modules section)
 

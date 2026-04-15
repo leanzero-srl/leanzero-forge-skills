@@ -1,0 +1,156 @@
+---
+
+# Confluence Attachments REST API Template
+# Work with page attachments - upload, list, download using the REST API
+
+## Overview
+
+Attachments in Confluence are managed via the `/wiki/api/v2/pages/{id}/attachments` endpoints.
+
+---
+
+## List Attachments on a Page
+
+```http
+GET /wiki/api/v2/pages/123456/attachments?expand=mediaThumbUrl&limit=50 HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "results": [
+    {
+      "id": "att123",
+      "title": "screenshot.png",
+      "mediaType": "image/png",
+      "size": 12345,
+      "_links": {
+        "download": "/wiki/download/attachments/123456/screenshot.png",
+        "webui": "/pages/viewpage.action?pageId=123456&source=alt"
+      }
+    }
+  ],
+  "start": 0,
+  "limit": 50,
+  "_links": {
+    "self": "https://my.atlassian.net/wiki/api/v2/pages/123456/attachments"
+  }
+}
+```
+
+---
+
+## Upload an Attachment
+
+```http
+POST /wiki/api/v2/pages/123456/attachments HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="screenshot.png"
+Content-Type: image/png
+
+[binary data]
+--boundary--
+```
+
+**Response (200 OK):**
+```json
+{
+  "results": [
+    {
+      "id": "att123",
+      "title": "screenshot.png",
+      "mediaType": "image/png",
+      "size": 12345,
+      "_links": {
+        "download": "/wiki/download/attachments/123456/screenshot.png"
+      }
+    }
+  ],
+  "start": 0,
+  "limit": 1
+}
+```
+
+---
+
+## Download an Attachment
+
+```http
+GET /wiki/api/v2/pages/123456/attachments/att123 HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+To download the actual file content:
+
+```http
+GET /wiki/download/attachments/123456/screenshot.png HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+```
+
+---
+
+## Delete an Attachment
+
+```http
+DELETE /wiki/api/v2/pages/123456/attachments/att123 HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+```
+
+**Response (204 No Content)**
+
+---
+
+## Get Attachment by ID
+
+```http
+GET /wiki/api/v2/pages/123456/attachments/att123 HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+---
+
+## cURL Examples
+
+```bash
+# List attachments
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/123456/attachments
+
+# Upload attachment (multipart form data)
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -F "file=@screenshot.png" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/123456/attachments
+
+# Download attachment
+curl -H "Authorization: Bearer <token>" \
+  -o downloaded_file.png \
+  https://{your-domain}.atlassian.net/wiki/download/attachments/123456/screenshot.png
+
+# Delete attachment
+curl -X DELETE \
+  -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/123456/attachments/att123
+```
+
+---
+
+## Notes
+
+- Attachments are tied to specific pages via page ID
+- The `mediaType` field indicates the file type (MIME type)
+- Large files may require chunked upload or direct download links
+- Use `expand=mediaThumbUrl` to get thumbnail URLs for images

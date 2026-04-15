@@ -1,0 +1,167 @@
+---
+
+# Confluence Space Properties REST API Template
+# Store app configuration at space level using the REST API
+
+## Overview
+
+Space properties allow you to store key-value data associated with a space. This is useful for:
+- Storing space-level configuration
+- Tracking sync status per space
+- Saving custom metadata about spaces
+
+---
+
+## Get Space Property
+
+```http
+GET /wiki/api/v2/spaces/{spaceKey}/properties/{propertyKey} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": 987654,
+  "key": "syncConfig",
+  "value": {"enabled": true, "interval": 3600},
+  "version": 1,
+  "_links": {
+    "self": "https://my.atlassian.net/wiki/api/v2/spaces/PROJ/properties/syncConfig"
+  }
+}
+```
+
+---
+
+## Create or Update Space Property
+
+```http
+PUT /wiki/api/v2/spaces/{spaceKey}/properties/{propertyKey} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "value": {"enabled": true, "interval": 3600}
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": 987654,
+  "key": "syncConfig",
+  "value": {"enabled": true, "interval": 3600},
+  "version": 1
+}
+```
+
+---
+
+## Delete Space Property
+
+```http
+DELETE /wiki/api/v2/spaces/{spaceKey}/properties/{propertyKey} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+```
+
+**Response (204 No Content)**
+
+---
+
+## List All Space Properties
+
+```http
+GET /wiki/api/v2/spaces/{spaceKey}/properties HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "results": [
+    {
+      "id": 987654,
+      "key": "syncConfig",
+      "value": {"enabled": true},
+      "version": 1
+    },
+    {
+      "id": 987654,
+      "key": "customMetadata",
+      "value": {"tags": ["important"]},
+      "version": 1
+    }
+  ],
+  "_links": {
+    "self": "https://my.atlassian.net/wiki/api/v2/spaces/PROJ/properties"
+  }
+}
+```
+
+---
+
+## Get Space Information
+
+```http
+GET /wiki/api/v2/spaces/{spaceKey}?expand=homepage HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": 987654,
+  "key": "PROJ",
+  "name": "Project Space",
+  "type": "space",
+  "status": "current",
+  "_links": {
+    "webui": "/spaces/PROJ",
+    "self": "https://my.atlassian.net/wiki/api/v2/spaces/987654"
+  }
+}
+```
+
+---
+
+## cURL Examples
+
+```bash
+# Get space property
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/spaces/PROJ/properties/syncConfig
+
+# Set space property
+curl -X PUT \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"value":{"enabled":true,"interval":3600}}' \
+  https://{your-domain}.atlassian.net/wiki/api/v2/spaces/PROJ/properties/syncConfig
+
+# Delete space property
+curl -X DELETE \
+  -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/spaces/PROJ/properties/syncConfig
+
+# List all properties
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/spaces/PROJ/properties
+```
+
+---
+
+## Notes
+
+- Property keys can only contain letters, numbers, and underscores
+- The maximum size of a property value is 1 MB
+- Use `spaceId` (numeric) in some endpoints instead of `spaceKey`
+- For page-level properties, use `/wiki/api/v2/pages/{id}/properties`

@@ -370,24 +370,25 @@ The skill includes extensive documentation for Jira Cloud REST API v3 endpoints:
 ```yaml
 # manifest.yml - Basic Forge app for Confluence
 modules:
-  confluence:pageCustomUi:
+  confluence:pageBanner:
     - key: my-page-extension
       resource: main
       icon: icon.png
       title: My Extension Title
-      
+      location: confluence-page-custom-ui-top
+
   webhook:
     - destination: page-webhook
       event: confluence:page:created
-      
+
   scheduledTrigger:
     - key: daily-sync
       cron: "0 2 * * *"
       function: runDailySync
-      
+
   resource:
     - key: main
-      path: src/page-custom-ui.jsx
+      path: src/page-banner.jsx
 ```
 
 ### Documentation Index
@@ -434,9 +435,9 @@ modules:
 
 | Module Type | Documentation |
 |-------------|---------------|
-| `confluence:pageCustomUi` | [Page Extensions](./docs/02-page-custom-ui.md) |
+| `confluence:pageBanner` | [Page Extensions](./docs/02-page-custom-ui.md) |
 | `confluence:spaceSettings` | [Space Settings Panels](./docs/03-space-settings.md) |
-| `confluence:blogPostCustomUi` | [Blog Post Extensions](./docs/04-blogpost-custom-ui.md) |
+| `confluence:contentAction` | [Content Menu Actions](./docs/04-blogpost-custom-ui.md) |
 | `dashboardGadget` | [Dashboard Gadgets](./docs/05-dashboard-widgets.md) |
 
 ### Confluence REST API v2
@@ -525,9 +526,9 @@ Use this skill when:
 ### Confluence Tasks
 | Task | Module Type / API |
 |------|-------------------|
-| Add UI to pages | `confluence:pageCustomUi` |
+| Add UI to pages (banner) | `confluence:pageBanner` |
 | Space configuration | `confluence:spaceSettings` |
-| Blog post extensions | `confluence:blogPostCustomUi` |
+| Menu items in "more actions" | `confluence:contentAction` |
 | Dashboard gadgets | `dashboardGadget` |
 | Webhook handlers | `webhook` |
 | Confluence REST API | `/wiki/api/v2/*` |

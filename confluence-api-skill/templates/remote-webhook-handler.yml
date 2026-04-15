@@ -1,0 +1,156 @@
+---
+
+# Confluence Remote Webhook Handler Template
+# Receive and process Confluence events via external webhooks
+
+## Overview
+
+To receive Confluence events in your external service:
+
+1. **Set up a webhook endpoint** in Confluence that POSTs to your service
+2. **Handle the payload** from Confluence
+3. **Process the event** (sync, notify, etc.)
+
+---
+
+## Webhook Endpoint Setup
+
+### In Confluence Admin
+
+1. Go to https://{your-domain}.atlassian.net/jira/settings/developer/make-api-request
+2. Create a new webhook with:
+   - **Name**: Your App Name Webhook
+   - **URL**: https://your-external-service.com/confluence-webhook
+   - **Events**: Select events (page created, updated, deleted)
+   - **Filters**: Optional (e.g., `data.space.key == "PROJ"`)
+
+### Sample Endpoint Implementation
+
+```javascript
+// server.js (Node.js/Express example)
+const express = require('express');
+const app = express();
+
+app.use(express.json({ verify: verifySignature }));
+
+app.post('/confluence-webhook', (req, res) => {
+  const { event, data } = req.body;
+  
+  console.log(`Received ${event.type} event`);
+  
+  switch (event.type) {
+    case 'confluence:page:created':
+      handlePageCreated(data);
+      break;
+    case 'confluence:page:updated':
+      handlePageUpdated(data);
+      break;
+    case 'confluence:space:created':
+      handleSpaceCreated(data);
+      break;
+  }
+  
+  res.status(200).json({ status: 'ok' });
+});
+
+function handlePageCreated(data) {
+  const { content, space } = data;
+  console.log(`New page created: ${content.title} in ${space.name}`);
+}
+
+// Add other handlers...
+
+app.listen(3000);
+```
+
+---
+
+## Webhook Payload Format
+
+```json
+{
+  "event": {
+    "type": "confluence:page-created"
+  },
+  "data": {
+    "content": {
+      "id": "123456",
+      "type": "page",
+      "title": "New Page",
+      "status": "current"
+    },
+    "space": {
+      "id": 987654,
+      "key": "PROJ",
+      "name": "Project Space"
+    },
+    "actor": {
+      "accountId": "5b10a28b42e45d37d8c5b123",
+      "displayName": "John Doe"
+    },
+    "timestamp": 1612345678901
+  }
+}
+```
+
+---
+
+## Event Types
+
+| Event Type | Description |
+|------------|-------------|
+| `confluence:page:created` | A page was created |
+| `confluence:page:updated` | A page was updated |
+| `confluence:page:deleted` | A page was deleted |
+| `confluence:blogpost:created` | A blog post was created |
+| `confluence:space:created` | A space was created |
+
+---
+
+## Security
+
+Confluence webhooks use HMAC signature verification:
+
+```javascript
+const crypto = require('crypto');
+
+function verifySignature(req, res, buf) {
+  const signature = req.headers['x-atlassian-webhook-signature'];
+  const secret = process.env.WEBHOOK_SECRET;
+  
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(buf)
+    .digest('hex');
+  
+  if (signature !== expectedSignature) {
+    throw new Error('Invalid signature');
+  }
+}
+```
+
+---
+
+## cURL Test Webhook
+
+```bash
+# Send a test payload to your endpoint
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event": {"type": "confluence:page:created"},
+    "data": {
+      "content": {"id": "123", "title": "Test Page"},
+      "space": {"key": "PROJ", "name": "Project"}
+    }
+  }' \
+  https://your-external-service.com/confluence-webhook
+```
+
+---
+
+## Notes
+
+- Webhooks are best-effort; implement idempotent handlers
+- Consider using a queue system for high-volume events
+- Test webhooks with tools like ngrok or Forge tunnel for local development

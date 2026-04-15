@@ -1,0 +1,128 @@
+---
+
+# Jira Scheduled Task Template (REST API)
+# Run periodic background jobs via external scheduler calling Jira REST API
+
+## Overview
+
+For scheduled tasks in Jira integration, you have two options:
+
+### Option 1: External Scheduler (Recommended for API integrations)
+Use your own scheduler (cron job, GitHub Actions, AWS Lambda, etc.) to call the Jira REST API:
+
+```bash
+# Example: Daily sync via cron
+0 2 * * * curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/rest/api/3/search?jql=project%3DPROJ > /dev/null 2>&1
+```
+
+### Option 2: Forge Scheduled Trigger (For Forge apps only)
+Use `scheduledTrigger` module in Forge apps.
+
+This template focuses on **Option 1** - external schedulers calling REST API.
+
+---
+
+## Example: Daily Issue Sync
+
+```javascript
+// sync-issues.js
+const { execSync } = require('child_process');
+
+async function getIssuesUpdatedSince(lastSync) {
+  const response = await fetch(
+    `https://{your-domain}.atlassian.net/rest/api/3/search?jql=project%3DPROJ%20AND%20updated>%22${lastSync}%22`,
+    {
+      headers: {
+        'Authorization': `Bearer ${process.env.JIRA_TOKEN}`,
+        'Accept': 'application/json'
+      }
+    }
+  );
+  
+  const data = await response.json();
+  return data.issues;
+}
+
+async function syncIssue(issue) {
+  // Your sync logic here
+  console.log(`Syncing issue: ${issue.key}`);
+}
+
+async function main() {
+  const lastSync = process.env.LAST_SYNC || '2024-01-01T00:00:00.000Z';
+  
+  const issues = await getIssuesUpdatedSince(lastSync);
+  console.log(`Found ${issues.length} issues to sync`);
+  
+  for (const issue of issues) {
+    await syncIssue(issue);
+  }
+  
+  process.env.LAST_SYNC = new Date().toISOString();
+}
+
+main().catch(console.error);
+```
+
+---
+
+## Example: Hourly Webhook Reconciliation
+
+```javascript
+// reconcile-webhooks.js
+async function getIssuesUpdatedSince(sinceTime) {
+  // Query for recent changes to reconcile missed webhook events
+  const response = await fetch(
+    `https://{your-domain}.atlassian.net/rest/api/3/search?jql=project%3DPROJ%20AND%20updated>%22${sinceTime}%22`,
+    {
+      headers: {
+        'Authorization': `Bearer ${process.env.JIRA_TOKEN}`,
+        'Accept': 'application/json'
+      }
+    }
+  );
+  
+  return await response.json();
+}
+
+async function processIssue(issue) {
+  // Process the issue (same logic as webhook handler)
+  console.log(`Processing: ${issue.key}`);
+}
+
+async function main() {
+  const lastCheck = process.env.LAST_CHECK || '2024-01-01T00:00:00.000Z';
+  
+  const result = await getIssuesUpdatedSince(lastCheck);
+  
+  for (const issue of result.issues) {
+    await processIssue(issue);
+  }
+  
+  process.env.LAST_CHECK = new Date().toISOString();
+}
+
+main().catch(console.error);
+```
+
+---
+
+## Cron Schedule Examples
+
+| Frequency | Cron Expression |
+|-----------|-----------------|
+| Every 15 minutes | `*/15 * * * *` |
+| Every hour | `0 * * * *` |
+| Daily at 2 AM | `0 2 * * *` |
+| Weekly (Sunday midnight) | `0 0 * * 0` |
+| Monthly (1st day) | `0 0 1 * *` |
+
+---
+
+## Notes
+
+- For production, use a proper scheduler (GitHub Actions, AWS Lambda + CloudWatch, etc.)
+- Implement idempotent handlers to handle duplicate events
+- Combine webhooks + scheduled reconciliation for reliability
+- Use environment variables for tokens and domain configuration

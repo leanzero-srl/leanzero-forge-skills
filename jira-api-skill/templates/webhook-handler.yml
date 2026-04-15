@@ -1,0 +1,160 @@
+---
+
+# Jira Event Webhook Handler Template (REST API)
+# Receive and process Jira events via external webhooks
+
+## Overview
+
+To receive Jira events in your external service:
+
+1. **Set up a webhook endpoint** in Jira that POSTs to your service
+2. **Handle the payload** from Jira
+3. **Process the event** (sync, notify, etc.)
+
+---
+
+## Webhook Endpoint Setup
+
+### In Jira Admin
+
+1. Go to https://{your-domain}.atlassian.net/jira/settings/developer/make-api-request
+2. Create a new webhook with:
+   - **Name**: Your App Name Webhook
+   - **URL**: https://your-external-service.com/jira-webhook
+   - **Events**: Select events (issue created, updated, deleted)
+   - **Filters**: Optional (e.g., `project = "PROJ"`)
+
+### Sample Endpoint Implementation
+
+```javascript
+// server.js (Node.js/Express example)
+const express = require('express');
+const app = express();
+
+app.use(express.json({ verify: verifySignature }));
+
+app.post('/jira-webhook', (req, res) => {
+  const { event } = req.body;
+  
+  console.log(`Received ${event.type} event`);
+  
+  switch (event.type) {
+    case 'jira:issue_created':
+      handleIssueCreated(event.issue);
+      break;
+    case 'jira:issue_updated':
+      handleIssueUpdated(event.issue, event.changes);
+      break;
+    case 'jira:issue_deleted':
+      handleIssueDeleted(event.issue);
+      break;
+  }
+  
+  res.status(200).json({ status: 'ok' });
+});
+
+function handleIssueCreated(issue) {
+  const { key, fields } = issue;
+  console.log(`New issue created: ${key} - ${fields.summary}`);
+}
+
+// Add other handlers...
+
+app.listen(3000);
+```
+
+---
+
+## Webhook Payload Format
+
+```json
+{
+  "event": {
+    "type": "jira:issue_created",
+    "timestamp": 1612345678901,
+    "actor": {
+      "accountId": "5b10a28b42e45d37d8c5b123"
+    }
+  },
+  "issue": {
+    "id": "123456",
+    "key": "PROJ-123",
+    "fields": {
+      "summary": "New Issue",
+      "status": {"name": "To Do"},
+      "assignee": null,
+      "labels": []
+    }
+  },
+  "changes": [
+    {
+      "field": "status",
+      "from": null,
+      "to": "10000"
+    }
+  ]
+}
+```
+
+---
+
+## Event Types
+
+| Event Type | Description |
+|------------|-------------|
+| `jira:issue_created` | An issue was created |
+| `jira:issue_updated` | An issue was updated |
+| `jira:issue_deleted` | An issue was deleted |
+| `jira:comment_created` | A comment was added |
+| `jira:issue_linked` | Issues were linked |
+
+---
+
+## Security
+
+Jira webhooks use HMAC signature verification:
+
+```javascript
+const crypto = require('crypto');
+
+function verifySignature(req, res, buf) {
+  const signature = req.headers['x-atlassian-webhook-signature'];
+  const secret = process.env.WEBHOOK_SECRET;
+  
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(buf)
+    .digest('hex');
+  
+  if (signature !== expectedSignature) {
+    throw new Error('Invalid signature');
+  }
+}
+```
+
+---
+
+## cURL Test Webhook
+
+```bash
+# Send a test payload to your endpoint
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event": {"type": "jira:issue_created"},
+    "issue": {
+      "id": "123",
+      "key": "PROJ-123",
+      "fields": {"summary": "Test Issue"}
+    }
+  }' \
+  https://your-external-service.com/jira-webhook
+```
+
+---
+
+## Notes
+
+- Webhooks are best-effort; implement idempotent handlers
+- Consider using a queue system for high-volume events
+- Test webhooks with tools like ngrok or Forge tunnel for local development

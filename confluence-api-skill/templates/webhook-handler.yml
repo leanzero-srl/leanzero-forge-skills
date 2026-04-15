@@ -1,0 +1,132 @@
+---
+
+# Confluence Webhook Handler Template
+# Handle real-time events from Confluence via webhooks
+
+## Setting up a Webhook
+
+To receive Confluence events, you need to:
+
+1. **Create the webhook in Confluence admin**
+   - Go to https://{your-domain}.atlassian.net/jira/settings/developer/make-api-request
+   - Create a new webhook with your endpoint URL
+   
+2. **Your endpoint must be publicly accessible**
+   - Use `forge tunnel` for local testing
+   - Or deploy to a public server
+
+## Webhook Payload Example
+
+```json
+{
+  "event": {
+    "type": "confluence:page-created"
+  },
+  "data": {
+    "content": {
+      "id": "123456",
+      "type": "page",
+      "title": "New Page",
+      "status": "current"
+    },
+    "space": {
+      "id": 987654,
+      "key": "PROJ",
+      "name": "Project Space"
+    },
+    "actor": {
+      "accountId": "5b10a28b42e45d37d8c5b123",
+      "displayName": "John Doe"
+    },
+    "timestamp": 1612345678901
+  }
+}
+```
+
+## Sample Handler Implementation
+
+```javascript
+// webhook-handler.js
+export default async function handler(req, res) {
+  const { event, data } = req.body;
+
+  try {
+    switch (event.type) {
+      case 'confluence:page:created':
+        await handlePageCreated(data);
+        break;
+        
+      case 'confluence:page:updated':
+        await handlePageUpdated(data);
+        break;
+        
+      case 'confluence:page:deleted':
+        await handlePageDeleted(data);
+        break;
+        
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
+    }
+    
+    res.status(200).json({ status: 'ok' });
+  } catch (error) {
+    console.error('Error handling webhook:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+async function handlePageCreated(data) {
+  const { content, space } = data;
+  
+  // Your logic here
+  console.log(`Page created: ${content.title} in space ${space.key}`);
+  
+  // Example: Get page details via REST API
+  // await get_page_details(content.id);
+}
+
+async function handlePageUpdated(data) {
+  const { content, space, version } = data;
+  
+  console.log(`Page updated: ${content.title} (version ${version.number})`);
+}
+
+async function handlePageDeleted(data) {
+  const { content, space } = data;
+  
+  console.log(`Page deleted: ${content.title}`);
+}
+```
+
+## Event Types
+
+| Event | Description |
+|-------|-------------|
+| `confluence:page:created` | A page was created |
+| `confluence:page:updated` | A page was updated |
+| `confluence:page:deleted` | A page was deleted (moved to trash) |
+| `confluence:blogpost:created` | A blog post was created |
+| `confluence:blogpost:updated` | A blog post was updated |
+| `confluence:space:created` | A space was created |
+
+## Filtering Webhook Events
+
+You can filter events based on:
+
+- **Space key**: Only receive events from specific spaces
+- **Content type**: Only pages or only blog posts
+- **User activity**: Filter by author or actor
+
+Example filter (in webhook configuration):
+```
+data.space.key == "PROJ" &&
+!contains(data.content.labels, 'skip-sync')
+```
+
+---
+
+### Notes
+
+- Webhooks require the `read:confluence-content.summary` scope
+- Event delivery is best-effort; implement idempotent handlers
+- Consider using a queue system for high-volume event processing

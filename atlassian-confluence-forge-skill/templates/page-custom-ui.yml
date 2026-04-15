@@ -1,9 +1,9 @@
-# Page Custom UI Module Template
-# Add custom React components to Confluence pages
-# Location: https://developer.atlassian.com/cloud/confluence/modules/confluence-page-custom-ui/
+# Page Banner Module Template
+# Add custom React components to Confluence pages (appears as a banner at top)
+# Location: https://developer.atlassian.com/cloud/confluence/modules/confluence-page-banner/
 
 modules:
-  confluence:pageCustomUi:
+  confluence:pageBanner:
     - key: {{APP_KEY}}-page-extension
       resource: main
       icon: icon.png
@@ -15,11 +15,11 @@ modules:
   #   - key: {{APP_KEY}}-menu-item
   #     resource: menu
   #     title: Open {{EXTENSION_TITLE}}
-      
+
   resources:
     - key: main
-      path: src/page-custom-ui.jsx
-      
+      path: src/page-banner.jsx
+
     # Optional icon for the extension
     # - key: icon
     #   path: static/icon.png
@@ -31,7 +31,7 @@ modules:
 #   id: ari:cloud:ecosystem::app/{{APP_ID}}
 #   name: {{APP_NAME}}
 #   description: Adds custom UI to Confluence pages
-# 
+#
 # permissions:
 #   scopes:
 #     - read:confluence-content:*
@@ -45,7 +45,7 @@ modules:
 # Usage Example:
 # 1. Replace {{APP_KEY}} with your app's unique key
 # 2. Replace {{EXTENSION_TITLE}} with display title
-# 3. Create src/page-custom-ui.jsx with your React component
+# 3. Create src/page-banner.jsx with your React component
 # 4. Deploy: forge deploy --verbose
 # 5. Register in Confluence: forge register
 

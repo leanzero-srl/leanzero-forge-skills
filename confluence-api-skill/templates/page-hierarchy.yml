@@ -1,0 +1,169 @@
+---
+
+# Confluence Page Hierarchy REST API Template
+# Navigate parent-child relationships between pages using the REST API
+
+## Overview
+
+Confluence pages can be organized in a hierarchy. Use these endpoints to:
+- Get parent pages (ancestors)
+- Get child pages (descendants)
+- Reorder pages within a hierarchy
+
+---
+
+## Get Parent Page (Ancestors)
+
+```http
+GET /wiki/api/v2/pages/123456?expand=ancestors HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "123456",
+  "type": "page",
+  "title": "Child Page",
+  "ancestors": [
+    {
+      "id": "111111",
+      "type": "page",
+      "title": "Parent Page"
+    },
+    {
+      "id": "222222",
+      "type": "page",
+      "title": "Grandparent Page"
+    }
+  ]
+}
+```
+
+---
+
+## Get Child Pages (Descendants)
+
+```http
+GET /wiki/api/v2/pages/111111/descendants HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "results": [
+    {
+      "id": "123456",
+      "type": "page",
+      "title": "Child Page 1"
+    },
+    {
+      "id": "789012",
+      "type": "page",
+      "title": "Child Page 2"
+    }
+  ],
+  "_links": {
+    "self": "https://my.atlassian.net/wiki/api/v2/pages/111111/descendants"
+  }
+}
+```
+
+---
+
+## Get Direct Children Only
+
+```http
+GET /wiki/api/v2/pages/111111/pages HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "results": [
+    {
+      "id": "123456",
+      "type": "page",
+      "title": "Direct Child"
+    }
+  ],
+  "start": 0,
+  "limit": 25
+}
+```
+
+---
+
+## Get Page Ancestors Path
+
+```http
+GET /wiki/api/v2/pages/123456?expand=ancestors.title HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+Use the `ancestors` array to build a breadcrumb trail.
+
+---
+
+## Get Space Home Page
+
+```http
+GET /wiki/api/v2/spaces/{spaceKey}?expand=homepage HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": 987654,
+  "key": "PROJ",
+  "homepage": {
+    "id": "111111",
+    "type": "page",
+    "title": "Project Home"
+  }
+}
+```
+
+---
+
+## cURL Examples
+
+```bash
+# Get page with ancestors
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/123456?expand=ancestors
+
+# Get descendants
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/111111/descendants
+
+# Get direct children
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/111111/pages
+
+# Get space homepage
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/spaces/PROJ?expand=homepage
+```
+
+---
+
+## Notes
+
+- Ancestors array is ordered from immediate parent to root
+- Descendants returns all nested children recursively
+- Use `start` and `limit` query parameters for pagination
+- The `pages` endpoint returns only direct children (one level)

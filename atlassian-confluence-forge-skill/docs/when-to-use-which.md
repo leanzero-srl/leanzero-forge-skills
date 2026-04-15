@@ -55,10 +55,10 @@ What do you need to build?
 
 modules:
   # Display sync status on each page
-  confluence:pageCustomUi:
+  confluence:pageBanner:
     - key: sync-status-extension
       resource: page-ui
-      
+
   # React immediately when pages change
   webhook:
     - destination: page-sync-handler
@@ -94,12 +94,12 @@ modules:
   confluence:spaceSettings:
     - key: my-app-settings
       resource: settings
-      
+
   # Pages inherit space defaults + can override
-  confluence:pageCustomUi:
+  confluence:pageBanner:
     - key: page-extension
       resource: page-ui
-      
+
   resources:
     - key: settings
       path: src/space-settings.jsx

@@ -1,0 +1,144 @@
+---
+
+# Jira Workflow Validator via REST API Template
+# Create and manage workflow validators using the REST API
+
+## Overview
+
+Workflow validators in Jira are typically created via Forge apps using the `jira:workflowValidator` module. However, you can:
+
+1. **Query workflows** to understand existing validators
+2. **Manage transition properties** that act as validators
+3. **Validate issues before transitions** via external services
+
+This template shows REST API approaches for workflow validation.
+
+---
+
+## Get Workflow Transition with Validators
+
+```http
+GET /rest/api/3/workflow/transitions/{transitionId} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "10001",
+  "name": "Start Progress",
+  "to": {
+    "id": "3",
+    "name": "In Progress"
+  },
+  "validators": [
+    {
+      "type": "project-validator",
+      "params": {}
+    }
+  ]
+}
+```
+
+---
+
+## Get Workflow Validator Details
+
+```http
+GET /rest/api/3/workflow/validator/{validatorId} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+---
+
+## Validate Issue Before Transition (External Service)
+
+For external validation before transition:
+
+```javascript
+// Validate issue before allowing transition
+
+async function validateBeforeTransition(issueKey, transitionId, userToken) {
+  const response = await fetch(
+    `https://{your-domain}.atlassian.net/rest/api/3/issue/${issueKey}/transitions`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${userToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        transition: { id: transitionId }
+      })
+    }
+  );
+  
+  if (!response.ok) {
+    const error = await response.json();
+    console.error('Transition validation failed:', error);
+    return false;
+  }
+  
+  return true;
+}
+
+// Usage
+const isValid = await validateBeforeTransition('PROJ-123', '10001', token);
+if (isValid) {
+  // Proceed with transition
+}
+```
+
+---
+
+## Get Issue Transitions Available to User
+
+```http
+GET /rest/api/3/issue/{issueKey}/transitions HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "transitions": [
+    {
+      "id": "21",
+      "name": "Resolve Issue",
+      "to": {"name": "Done"},
+      "hasScreen": false,
+      "isGlobal": true,
+      "isInitial": false
+    }
+  ]
+}
+```
+
+---
+
+## cURL Examples
+
+```bash
+# Get workflow transitions for an issue
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/rest/api/3/issue/PROJ-123/transitions
+
+# Get transition details
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/rest/api/3/workflow/transitions/10001
+```
+
+---
+
+## Notes
+
+- Workflow validators are primarily created via Forge apps
+- REST API approach is for querying and working with existing workflows
+- For custom validation logic, use Forge's `jira:workflowValidator` module
+- External services can validate issues before triggering transitions

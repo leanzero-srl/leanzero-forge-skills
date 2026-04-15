@@ -1,0 +1,132 @@
+---
+
+# Confluence Custom Content REST API Template
+# Manage custom content types using the REST API
+
+## Overview
+
+Custom content types in Confluence allow you to define structured content. This template shows:
+- Creating and managing custom content
+- Querying custom content via REST API
+
+---
+
+## Get Custom Content by ID
+
+```http
+GET /wiki/api/v2/customcontent/123456 HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "123456",
+  "type": "custom-content-type",
+  "title": "Custom Content Item",
+  "space": {
+    "id": 987654,
+    "key": "PROJ"
+  },
+  "properties": {
+    "customField1": "value1",
+    "customField2": "value2"
+  }
+}
+```
+
+---
+
+## Search Custom Content
+
+```http
+GET /wiki/api/v2/pages/search?cql=type="custom-content-type" HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+Use CQL to search for custom content types.
+
+---
+
+## Create Custom Content
+
+```http
+POST /wiki/api/v2/pages HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "spaceId": 987654,
+  "title": "New Custom Content",
+  "type": "custom-content-type",
+  "body": {
+    "storage": {
+      "value": "<p>Custom content body</p>",
+      "representation": "storage"
+    }
+  },
+  "properties": {
+    "customField1": "value1",
+    "customField2": "value2"
+  }
+}
+```
+
+---
+
+## Update Custom Content
+
+```http
+PUT /wiki/api/v2/customcontent/123456 HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "title": "Updated Custom Content",
+  "properties": {
+    "customField1": "updated-value"
+  },
+  "version": {"number": 2}
+}
+```
+
+---
+
+## Delete Custom Content
+
+```http
+DELETE /wiki/api/v2/customcontent/123456 HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+```
+
+**Response (204 No Content)**
+
+---
+
+## cURL Examples
+
+```bash
+# Get custom content
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/customcontent/123456
+
+# Search for custom content types
+curl -H "Authorization: Bearer <token>" \
+  "https://{your-domain}.atlassian.net/wiki/api/v2/pages/search?cql=type=\"custom-content-type\""
+```
+
+---
+
+## Notes
+
+- Custom content uses the same endpoints as pages with a specific `type`
+- Properties can store additional metadata in JSON format
+- Use CQL (`type="custom-content-type"`) to search for custom content
+- For creating new custom content types, use the Forge `confluence:customContent` module

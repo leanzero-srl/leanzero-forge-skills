@@ -1,0 +1,121 @@
+---
+
+# Confluence Content Macro REST API Template
+# Manage macros embedded in page content using the REST API
+
+## Overview
+
+Macros are components that can be inserted into Confluence page content. This template shows:
+- How to read macro information from pages
+- Working with embedded macros via REST API
+
+---
+
+## Get Page with Macros (Expand Body)
+
+```http
+GET /wiki/api/v2/pages/123456?expand=body.storage HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "123456",
+  "type": "page",
+  "title": "Page with Macros",
+  "body": {
+    "storage": {
+      "value": "<p>Some text before</p>\n<p><ac:structured-macro ac:name=\"info\"><ac:rich-text-body><p>Information macro content</p></ac:rich-text-body></ac:structured-macro></p>\n<p>Some text after</p>",
+      "representation": "storage"
+    }
+  }
+}
+```
+
+---
+
+## Get Page with Rendered Body
+
+```http
+GET /wiki/api/v2/pages/123456?expand=body.view HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+The `body.view` representation shows how the page renders in the browser.
+
+---
+
+## Search for Pages with Specific Macro
+
+```http
+GET /wiki/api/v2/pages/search?cql=page~"ac:structured-macro" HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+Use CQL to search for pages containing specific macros.
+
+---
+
+## Get Macro Details (via Forge App)
+
+For Forge apps with `confluence:contentMacro` modules, use this endpoint:
+
+```http
+GET /wiki/rest/api/contentmacro HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+---
+
+## Update Page Content (with Macros)
+
+```http
+PUT /wiki/api/v2/pages/123456 HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "spaceId": 987654,
+  "title": "Updated Page",
+  "body": {
+    "storage": {
+      "value": "<p>New content with <ac:structured-macro ac:name=\"info\"><ac:rich-text-body><p>Macro</p></ac:rich-text-body></ac:structured-macro></p>",
+      "representation": "storage"
+    }
+  },
+  "version": {"number": 2}
+}
+```
+
+---
+
+## cURL Examples
+
+```bash
+# Get page with storage format (includes macros)
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/123456?expand=body.storage
+
+# Search for pages containing macros
+curl -H "Authorization: Bearer <token>" \
+  "https://{your-domain}.atlassian.net/wiki/api/v2/pages/search?cql=page~\"ac:structured-macro\""
+```
+
+---
+
+## Notes
+
+- Macros are stored in the storage format as XML with `ac:` namespace
+- To modify macros, update the page's storage body
+- For Forge macro development, use the `confluence:contentMacro` module
+- The REST API approach is for reading/modifying macro content, not creating new macro types

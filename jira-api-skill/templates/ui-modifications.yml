@@ -1,0 +1,132 @@
+---
+
+# Jira UI Modifications via REST API Template
+# Query and manage UI modifications using the REST API
+
+## Overview
+
+UI Modifications in Jira allow you to dynamically modify fields. While typically created via Forge apps, you can:
+
+1. **Query existing UI modifications**
+2. **Manage field configurations** via REST API
+3. **Get UI modification details**
+
+---
+
+## Get Field Configurations
+
+```http
+GET /rest/api/3/fieldconfiguration HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "start": 0,
+  "limit": 50,
+  "isLast": true,
+  "values": [
+    {
+      "id": "10000",
+      "name": "Default Field Configuration",
+      "description": "The default field configuration"
+    }
+  ]
+}
+```
+
+---
+
+## Get Field Configuration Schema
+
+```http
+GET /rest/api/3/fieldconfiguration/{fieldConfigurationId}/fields HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "start": 0,
+  "limit": 50,
+  "isLast": true,
+  "values": [
+    {
+      "id": "summary",
+      "required": true,
+      "hidden": false,
+      "showOnIssueView": true
+    }
+  ]
+}
+```
+
+---
+
+## Get Issue Layout
+
+```http
+GET /rest/api/3/issuelayout HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "items": [
+    {
+      "type": "field",
+      "key": "summary",
+      "name": "Summary"
+    },
+    {
+      "type": "field",
+      "key": "description",
+      "name": "Description"
+    }
+  ]
+}
+```
+
+---
+
+## Get UI Modification Details
+
+```http
+GET /rest/uitweaks/1.0/modifications HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+Note: This endpoint may require specific permissions or be available only in certain Jira tiers.
+
+---
+
+## cURL Examples
+
+```bash
+# Get field configurations
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/rest/api/3/fieldconfiguration
+
+# Get issue layout
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/rest/api/3/issuelayout
+```
+
+---
+
+## Notes
+
+- UI Modifications are primarily created via Forge apps using `jira:uiModifications` module
+- REST API approach is for querying and understanding existing configurations
+- Field configurations control field visibility and requirements
+- For dynamic UI modifications, use Forge's UI modifications module

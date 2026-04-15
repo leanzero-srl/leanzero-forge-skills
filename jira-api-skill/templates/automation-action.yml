@@ -1,0 +1,130 @@
+---
+
+# Jira Automation via REST API Template
+# Create and manage automation rules using the REST API
+
+## Overview
+
+Jira's Automation Rules allow you to automate workflows. You can:
+
+1. **Create automation rules** via REST API
+2. **Query existing rules**
+3. **Trigger rule execution**
+
+Note: Some advanced automation features may require Forge apps.
+
+---
+
+## Get Automation Rules for a Project
+
+```http
+GET /rest/automation/1.0/project/{projectId}/rule HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "rules": [
+    {
+      "id": "10001",
+      "name": "Auto-assign to project lead",
+      "projectKey": "PROJ",
+      "enabled": true,
+      "lastUpdated": "2024-01-15T10:30:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+## Create an Automation Rule
+
+```http
+POST /rest/automation/1.0/project/{projectId}/rule HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "name": "Auto-close resolved issues",
+  "description": "Automatically transitions resolved issues to closed after 7 days",
+  "enabled": true,
+  "rules": [
+    {
+      "type": "ISSUE_EVENT",
+      "config": {
+        "events": ["issue_resolved"]
+      }
+    },
+    {
+      "type": "CONDITION",
+      "config": {
+        "expression": "{{issue.resolutiondate.plusDays(7).isBeforeNow}}",
+        "evaluateOn": "STATE_CHANGE"
+      }
+    },
+    {
+      "type": "ACTION",
+      "config": {
+        "transition": {"id": 5}
+      }
+    }
+  ]
+}
+```
+
+---
+
+## Get Rule Details
+
+```http
+GET /rest/automation/1.0/project/{projectId}/rule/{ruleId} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+---
+
+## Trigger Automation Rule Execution
+
+```http
+POST /rest/automation/1.0/rule/{ruleId}/execute HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "issueKeys": ["PROJ-123", "PROJ-456"]
+}
+```
+
+---
+
+## cURL Examples
+
+```bash
+# Get automation rules for project
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/rest/automation/1.0/project/PROJ/rule
+
+# Create automation rule
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Auto-close resolved","enabled":true}' \
+  https://{your-domain}.atlassian.net/rest/automation/1.0/project/PROJ/rule
+```
+
+---
+
+## Notes
+
+- Automation REST API is available for Jira Software Cloud Premium and Enterprise
+- Some rule types may require Forge app integration
+- Use `projectKey` or `projectId` depending on your endpoint
+- Rule execution can be triggered manually or automatically

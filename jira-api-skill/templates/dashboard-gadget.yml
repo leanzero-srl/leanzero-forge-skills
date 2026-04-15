@@ -1,0 +1,114 @@
+---
+
+# Jira Dashboard Gadget via REST API Template
+# Query and manage dashboard gadgets using the REST API
+
+## Overview
+
+Dashboard gadgets in Jira display data on dashboards. You can:
+
+1. **Query existing gadgets** on dashboards
+2. **Get gadget configuration**
+3. **Manage dashboard layouts**
+
+Note: Creating custom gadgets typically requires Forge apps.
+
+---
+
+## Get Dashboard Gadgets
+
+```http
+GET /rest/gadgets/1.0/dashboard/{dashboardId}/gadgets HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "gadgets": [
+    {
+      "id": "gadget-123",
+      "title": "My Gadget",
+      "description": "Gadget description",
+      "width": 300,
+      "height": 400,
+      "color": "blue"
+    }
+  ]
+}
+```
+
+---
+
+## Get Dashboard Information
+
+```http
+GET /rest/api/3/dashboard/{dashboardId} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "10000",
+  "name": "My Dashboard",
+  "description": "Dashboard description",
+  "view": "dashboard",
+  "edit": true,
+  "isFavourite": false
+}
+```
+
+---
+
+## Get Dashboard Layout
+
+```http
+GET /rest/gadgets/1.0/dashboard/{dashboardId}/layout HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "columns": [
+    {
+      "id": "left",
+      "gadgets": ["gadget-1", "gadget-2"]
+    },
+    {
+      "id": "center",
+      "gadgets": ["gadget-3"]
+    }
+  ]
+}
+```
+
+---
+
+## cURL Examples
+
+```bash
+# Get dashboard gadgets
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/rest/gadgets/1.0/dashboard/123456/gadgets
+
+# Get dashboard info
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/rest/api/3/dashboard/10000
+```
+
+---
+
+## Notes
+
+- Dashboard gadgets are typically created via Forge apps using `jira:dashboardGadget` module
+- REST API approach is for querying and managing existing gadgets
+- For custom gadget data, use external services and embed via iframe
+- Consider using Jira's native widgets for simple statistics

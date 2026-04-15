@@ -1,0 +1,155 @@
+---
+
+# Confluence Content Properties REST API Template
+# Store app data tied to pages, blog posts, or spaces using the /wiki/api/v2 content properties endpoints
+
+## Overview
+
+Content properties allow you to attach JSON data to Confluence content. This is useful for:
+- Storing sync status with external systems
+- Saving custom metadata about content
+- Tracking configuration per page/space
+
+---
+
+## Content Properties Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/wiki/api/v2/pages/{id}/properties/{key}` | PUT | Create/update a property |
+| `/wiki/api/v2/pages/{id}/properties/{key}` | GET | Retrieve a property |
+| `/wiki/api/v2/pages/{id}/properties/{key}` | DELETE | Delete a property |
+| `/wiki/api/v2/pages/{id}/properties` | GET | List all properties for content |
+
+Similar endpoints exist for blog posts and spaces.
+
+---
+
+## Example: Save Content Property
+
+```http
+PUT /wiki/api/v2/pages/123456/properties/syncStatus HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "value": {"status": "synced", "timestamp": "2024-01-15T10:30:00Z"}
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "123456",
+  "key": "syncStatus",
+  "value": {"status": "synced", "timestamp": "2024-01-15T10:30:00Z"},
+  "version": 1
+}
+```
+
+---
+
+## Example: Get Content Property
+
+```http
+GET /wiki/api/v2/pages/123456/properties/syncStatus HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "123456",
+  "key": "syncStatus",
+  "value": {"status": "synced", "timestamp": "2024-01-15T10:30:00Z"},
+  "version": 1,
+  "_links": {
+    "self": "https://my.atlassian.net/wiki/api/v2/pages/123456/properties/syncStatus"
+  }
+}
+```
+
+---
+
+## Example: Delete Content Property
+
+```http
+DELETE /wiki/api/v2/pages/123456/properties/syncStatus HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+```
+
+**Response (204 No Content)**
+
+---
+
+## Example: List All Properties for a Page
+
+```http
+GET /wiki/api/v2/pages/123456/properties HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "results": [
+    {
+      "id": "123456",
+      "key": "syncStatus",
+      "value": {"status": "synced"},
+      "version": 2
+    },
+    {
+      "id": "123456",
+      "key": "customMetadata",
+      "value": {"tags": ["important", "review"]},
+      "version": 1
+    }
+  ],
+  "_links": {
+    "self": "https://my.atlassian.net/wiki/api/v2/pages/123456/properties"
+  }
+}
+```
+
+---
+
+## cURL Examples
+
+```bash
+# Save property
+curl -X PUT \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"value":{"status":"synced","timestamp":"'$(date -Iseconds)'"}}' \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/123456/properties/syncStatus
+
+# Get property
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/123456/properties/syncStatus
+
+# Delete property
+curl -X DELETE \
+  -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/123456/properties/syncStatus
+
+# List properties
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/123456/properties
+```
+
+---
+
+## Notes
+
+- Property keys can only contain letters, numbers, and underscores
+- The maximum size of a property value is 1 MB
+- Content properties are versioned (increment on each update)
+- Use `spaceProperties` endpoints for space-level storage:
+  - `/wiki/api/v2/spaces/{id}/properties/{key}`

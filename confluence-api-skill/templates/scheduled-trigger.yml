@@ -1,0 +1,130 @@
+---
+
+# Confluence Scheduled Task Template
+# Run periodic background jobs (sync, cleanup, reconciliation) via external scheduler
+
+## Overview
+
+For scheduled tasks in Confluence integration, you have two options:
+
+### Option 1: External Scheduler (Recommended for API integrations)
+Use your own scheduler (cron job, GitHub Actions, AWS Lambda, etc.) to call the Confluence REST API:
+
+```bash
+# Example: Daily sync via cron
+0 2 * * * curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/search?cql=type=page > /dev/null 2>&1
+```
+
+### Option 2: Forge Scheduled Trigger (For Forge apps only)
+Use `function.scheduled` module in Forge apps.
+
+This template focuses on **Option 1** - external schedulers calling REST API.
+
+---
+
+## Example: Daily Page Sync
+
+```javascript
+// sync-pages.js
+const { execSync } = require('child_process');
+
+async function getPagesModifiedSince(lastSync) {
+  const response = await fetch(
+    `https://{your-domain}.atlassian.net/wiki/api/v2/pages/search?cql=type=page%20AND%20lastModified>${lastSync}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${process.env.CONFLUENCE_TOKEN}`,
+        'Accept': 'application/json'
+      }
+    }
+  );
+  
+  const data = await response.json();
+  return data.results;
+}
+
+async function syncPage(page) {
+  // Your sync logic here
+  console.log(`Syncing page: ${page.title}`);
+}
+
+async function main() {
+  const lastSync = process.env.LAST_SYNC || '2024-01-01T00:00:00.000Z';
+  
+  const pages = await getPagesModifiedSince(lastSync);
+  console.log(`Found ${pages.length} pages to sync`);
+  
+  for (const page of pages) {
+    await syncPage(page);
+  }
+  
+  // Update last sync timestamp
+  process.env.LAST_SYNC = new Date().toISOString();
+}
+
+main().catch(console.error);
+```
+
+---
+
+## Example: Hourly Webhook Reconciliation
+
+```javascript
+// reconcile-webhooks.js
+async function getEventsSince(sinceTime) {
+  // Since webhooks may miss events, query for recent changes
+  const response = await fetch(
+    `https://{your-domain}.atlassian.net/wiki/api/v2/pages/search?cql=type=page%20AND%20lastModified>="${sinceTime}"`,
+    {
+      headers: {
+        'Authorization': `Bearer ${process.env.CONFLUENCE_TOKEN}`,
+        'Accept': 'application/json'
+      }
+    }
+  );
+  
+  return await response.json();
+}
+
+async function processEvent(event) {
+  // Process the event (same logic as webhook handler)
+  console.log(`Processing: ${event.content.type} - ${event.content.id}`);
+}
+
+async function main() {
+  const lastCheck = process.env.LAST_CHECK || '2024-01-01T00:00:00.000Z';
+  
+  const pages = await getEventsSince(lastCheck);
+  
+  for (const page of pages) {
+    await processEvent({ content: page, space: page.space });
+  }
+  
+  // Save current time for next check
+  process.env.LAST_CHECK = new Date().toISOString();
+}
+
+main().catch(console.error);
+```
+
+---
+
+## Cron Schedule Examples
+
+| Frequency | Cron Expression |
+|-----------|-----------------|
+| Every 15 minutes | `*/15 * * * *` |
+| Every hour | `0 * * * *` |
+| Daily at 2 AM | `0 2 * * *` |
+| Weekly (Sunday midnight) | `0 0 * * 0` |
+| Monthly (1st day) | `0 0 1 * *` |
+
+---
+
+## Notes
+
+- For production, use a proper scheduler (GitHub Actions, AWS Lambda + CloudWatch, etc.)
+- Implement idempotent handlers to handle duplicate events
+- Combine webhooks + scheduled reconciliation for reliability
+- Use environment variables for tokens and domain configuration

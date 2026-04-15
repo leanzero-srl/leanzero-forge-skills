@@ -1,0 +1,178 @@
+---
+
+# Jira Complex Validation via REST API Template
+# Implement complex validation logic using the REST API
+
+## Overview
+
+Complex validation in Jira can be implemented via:
+
+1. **REST API-based validation** - Validate before transition via external service
+2. **JQL-based filtering** - Use JQL to identify issues needing validation
+3. **Webhook-triggered validation** - Validate on issue events
+
+---
+
+## Example: Multi-Rule Validation Service
+
+```javascript
+// validation-service.js
+
+const VALIDATION_RULES = {
+  required_fields: ['summary', 'description', 'assignee'],
+  field_constraints: {
+    summary: { maxLength: 255, requiredPattern: /^[A-Z]/ },
+    description: { minLength: 10 },
+    priority: { allowedValues: ['Blocker', 'Critical', 'Major', 'Minor'] }
+  },
+  conditional_requirements: [
+    {
+      condition: issue => issue.fields.priority?.name === 'Blocker',
+      requirements: ['summary.length > 20', 'description.length > 50']
+    }
+  ]
+};
+
+async function validateIssue(issueKey, userToken) {
+  // Fetch issue data
+  const response = await fetch(
+    `https://{your-domain}.atlassian.net/rest/api/3/issue/${issueKey}?expand=changelog`,
+    {
+      headers: { 'Authorization': `Bearer ${userToken}` }
+    }
+  );
+  
+  if (!response.ok) return { valid: false, errors: ['Failed to fetch issue'] };
+  
+  const issue = await response.json();
+  const fields = issue.fields;
+  
+  // Run validation rules
+  const errors = [];
+  
+  // Check required fields
+  for (const field of VALIDATION_RULES.required_fields) {
+    if (!fields[field]) {
+      errors.push(`Field '${field}' is required`);
+    }
+  }
+  
+  // Check field constraints
+  for (const [field, constraints] of Object.entries(VALIDATION_RULES.field_constraints)) {
+    const value = fields[field];
+    
+    if (value && constraints.maxLength && String(value).length > constraints.maxLength) {
+      errors.push(`Field '${field}' exceeds maximum length of ${constraints.maxLength}`);
+    }
+    
+    if (value && constraints.minLength && String(value).length < constraints.minLength) {
+      errors.push(`Field '${field}' must be at least ${constraints.minLength} characters`);
+    }
+  }
+  
+  return { valid: errors.length === 0, errors };
+}
+
+module.exports = { validateIssue };
+```
+
+---
+
+## Example: Conditional Validation
+
+```javascript
+// conditional-validation.js
+
+async function validateForTransition(issueKey, transitionId, userToken) {
+  // Get issue details
+  const issueResponse = await fetch(
+    `https://{your-domain}.atlassian.net/rest/api/3/issue/${issueKey}`,
+    { headers: { 'Authorization': `Bearer ${userToken}` } }
+  );
+  
+  const issue = await issueResponse.json();
+  const fields = issue.fields;
+  
+  // Transition-specific validation
+  switch (transitionId) {
+    case '10001': // Start Progress
+      if (!fields.assignee) {
+        return { valid: false, error: 'Issue must be assigned before starting' };
+      }
+      break;
+      
+    case '21': // Resolve Issue
+      if (!fields.resolution) {
+        return { valid: false, error: 'Resolution is required to resolve issue' };
+      }
+      if (fields.priority?.name === 'Blocker' && !fields.labels.includes('QA-approved')) {
+        return { valid: false, error: 'Blockers require QA approval label' };
+      }
+      break;
+  }
+  
+  return { valid: true };
+}
+```
+
+---
+
+## Example: Pre-Transition Validation Endpoint
+
+```javascript
+// Validate before allowing transition to proceed
+
+async function canExecuteTransition(issueKey, transitionId, userToken) {
+  // First check basic permissions
+  const transitionsResponse = await fetch(
+    `https://{your-domain}.atlassian.net/rest/api/3/issue/${issueKey}/transitions`,
+    { headers: { 'Authorization': `Bearer ${userToken}` } }
+  );
+  
+  if (!transitionsResponse.ok) return false;
+  
+  // Check validation rules
+  const validation = await validateForTransition(issueKey, transitionId, userToken);
+  
+  return validation.valid;
+}
+
+// Usage in your app
+app.post('/validate-transition', async (req, res) => {
+  const { issueKey, transitionId } = req.body;
+  
+  const canExecute = await canExecuteTransition(
+    issueKey,
+    transitionId,
+    req.headers['x-user-token']
+  );
+  
+  res.json({ 
+    valid: canExecute,
+    message: canExecute ? 'Transition allowed' : 'Validation failed'
+  });
+});
+```
+
+---
+
+## cURL Examples
+
+```bash
+# Get issue for validation
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/rest/api/3/issue/PROJ-123?expand=changelog
+
+# Get available transitions
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/rest/api/3/issue/PROJ-123/transitions
+```
+
+---
+
+## Notes
+
+- REST API validation runs on your external service, not Jira
+- Consider rate limits when validating many issues
+- Cache validation results for frequently accessed issues
+- For Forge apps, use `jira:workflowValidator` module instead

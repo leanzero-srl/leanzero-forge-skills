@@ -1,0 +1,150 @@
+---
+
+# Jira Bulk Operations via REST API Template
+# Perform bulk operations on issues using the REST API
+
+## Overview
+
+Bulk operations in Jira allow you to update multiple issues at once:
+
+1. **Update multiple issues** (status, assignee, fields)
+2. **Delete multiple issues**
+3. **Transition multiple issues**
+
+---
+
+## Bulk Update Issues
+
+```http
+POST /rest/api/3/bulk HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "update": {
+    "summary": [
+      {"set": "Updated summary"}
+    ],
+    "assignee": [
+      {"set": {"accountId": "5b10a28b42e45d37d8c5b123"}}
+    ]
+  },
+  "issueKeys": ["PROJ-123", "PROJ-456", "PROJ-789"]
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "issueEvents": [
+    {
+      "issueKey": "PROJ-123",
+      "success": true
+    },
+    {
+      "issueKey": "PROJ-456",
+      "success": true
+    }
+  ],
+  "errors": []
+}
+```
+
+---
+
+## Bulk Transition Issues
+
+```http
+POST /rest/api/3/bulktransition HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "transitions": [
+    {
+      "issueKey": "PROJ-123",
+      "transition": {"id": "21"}
+    },
+    {
+      "issueKey": "PROJ-456",
+      "transition": {"id": "21"}
+    }
+  ]
+}
+```
+
+---
+
+## Bulk Delete Issues
+
+```http
+POST /rest/api/3/bulk HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "deleteIssues": true,
+  "issueKeys": ["PROJ-123", "PROJ-456"],
+  "moveToTrash": false
+}
+```
+
+---
+
+## Bulk Update with JQL Filter
+
+```http
+POST /rest/api/3/bulk HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "update": {
+    "labels": [
+      {"add": "urgent"}
+    ]
+  },
+  "jql": "project = PROJ AND status = 'To Do' AND priority = High"
+}
+```
+
+---
+
+## cURL Examples
+
+```bash
+# Bulk update issues
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "update":{"status":[{"transiton":{"id":21}}]},
+    "issueKeys":["PROJ-123","PROJ-456"]
+  }' \
+  https://{your-domain}.atlassian.net/rest/api/3/bulk
+
+# Bulk transition issues
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "transitions":[
+      {"issueKey":"PROJ-123","transition":{"id":21}},
+      {"issueKey":"PROJ-456","transition":{"id":21}}
+    ]
+  }' \
+  https://{your-domain}.atlassian.net/rest/api/3/bulktransition
+```
+
+---
+
+## Notes
+
+- Bulk operations support up to 1000 issues per request
+- Use `moveToTrash: true` for soft delete (issues can be recovered)
+- For larger batches, use multiple requests or export/import
+- Consider rate limits when processing many issues

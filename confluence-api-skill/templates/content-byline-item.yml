@@ -1,0 +1,153 @@
+---
+
+# Confluence Content Byline REST API Template
+# Work with content byline items using the REST API
+
+## Overview
+
+The byline is the information line at the top of a Confluence page showing:
+- Author
+- Last modified date
+- Other metadata
+
+This template shows how to access and work with byline-related data.
+
+---
+
+## Get Page with Byline Information
+
+```http
+GET /wiki/api/v2/pages/123456?expand=metadata.properties HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "123456",
+  "type": "page",
+  "title": "Page Title",
+  "metadata": {
+    "properties": {
+      "modificationDate": "2024-01-15T10:30:00.000Z",
+      "creationDate": "2024-01-01T08:00:00.000Z"
+    }
+  },
+  "history": {
+    "createdDate": "2024-01-01T08:00:00.000Z",
+    "createdBy": {
+      "accountId": "5b10a28b42e45d37d8c5b123",
+      "displayName": "John Doe"
+    },
+    "lastUpdated": {
+      "when": "2024-01-15T10:30:00.000Z",
+      "by": {
+        "accountId": "5b10a28b42e45d37d8c5b123",
+        "displayName": "John Doe"
+      }
+    }
+  }
+}
+```
+
+---
+
+## Get Page Author Information
+
+```http
+GET /wiki/api/v2/pages/123456?expand=history.createdBy HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "123456",
+  "title": "Page Title",
+  "history": {
+    "createdBy": {
+      "accountId": "5b10a28b42e45d37d8c5b123",
+      "displayName": "John Doe",
+      "profilePicture": {
+        "path": "/wiki/secure/useravatar?ownerId=5b10a28b42e45d37d8c5b123",
+        "width": 48,
+        "height": 48
+      }
+    }
+  }
+}
+```
+
+---
+
+## Get Page Modification Date
+
+```http
+GET /wiki/api/v2/pages/123456?expand=metadata.properties HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+The `modificationDate` property shows when the page was last modified.
+
+---
+
+## Get Labels (shown in byline)
+
+```http
+GET /wiki/api/v2/content/123456/labels HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+**Response (200 OK):**
+```json
+{
+  "results": [
+    {
+      "id": "label-123",
+      "name": "approved"
+    },
+    {
+      "id": "label-456",
+      "name": "reviewed"
+    }
+  ],
+  "_links": {
+    "self": "https://my.atlassian.net/wiki/api/v2/content/123456/labels"
+  }
+}
+```
+
+---
+
+## cURL Examples
+
+```bash
+# Get page with metadata properties
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/123456?expand=metadata.properties
+
+# Get page author
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/123456?expand=history.createdBy
+
+# Get labels
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/content/123456/labels
+```
+
+---
+
+## Notes
+
+- Byline information is accessed via the page's `metadata` and `history` properties
+- Use `expand=metadata.properties` to get modification dates
+- Labels appear in the byline when added to content
+- For custom byline items, use the Forge `confluence:contentBylineItem` module

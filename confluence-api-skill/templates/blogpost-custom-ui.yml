@@ -1,0 +1,140 @@
+---
+
+# Confluence Blog Posts REST API Template
+# Create, read, update, or delete blog posts using the /wiki/api/v2 endpoints
+
+## Overview
+
+Blog posts in Confluence use the same endpoints as pages. The content type is determined by the `type` field.
+
+---
+
+## POST: Create a Blog Post
+
+```http
+POST /wiki/api/v2/pages HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+Accept: application/json
+
+{
+  "spaceId": 987654,
+  "title": "New Blog Post",
+  "type": "blogpost",
+  "body": {
+    "storage": {
+      "value": "<p>This is the blog post content</p>",
+      "representation": "storage"
+    }
+  },
+  "status": "current"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "id": "789012",
+  "type": "blogpost",
+  "status": "current",
+  "title": "New Blog Post",
+  "_links": {
+    "webui": "/spaces/PROJ/blogposts/789012/New+Blog+Post",
+    "self": "https://my.atlassian.net/wiki/api/v2/pages/789012"
+  }
+}
+```
+
+---
+
+## GET: Retrieve a Blog Post
+
+```http
+GET /wiki/api/v2/pages/{pageId} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+The response will include `"type": "blogpost"` to distinguish from regular pages.
+
+---
+
+## PUT: Update a Blog Post
+
+```http
+PUT /wiki/api/v2/pages/{pageId} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Content-Type: application/json
+Accept: application/json
+
+{
+  "spaceId": 987654,
+  "title": "Updated Blog Post",
+  "type": "blogpost",
+  "body": {
+    "storage": {
+      "value": "<p>Updated content</p>",
+      "representation": "storage"
+    }
+  },
+  "version": {"number": 2, "message": "Update blog post"}
+}
+```
+
+---
+
+## DELETE: Delete a Blog Post
+
+```http
+DELETE /wiki/api/v2/pages/{pageId} HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+```
+
+**Response (204 No Content)**
+
+---
+
+## List Blog Posts in a Space
+
+```http
+GET /wiki/api/v2/spaces/{spaceKey}/pages?expand=body.storage&limit=50 HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Bearer <token>
+Accept: application/json
+```
+
+Filter results by `type=blogpost` in your code.
+
+---
+
+## cURL Examples
+
+```bash
+# Create blog post
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "spaceId": 987654,
+    "title": "New Blog Post",
+    "type": "blogpost",
+    "body": {"storage": {"value": "<p>Blog content</p>", "representation": "storage"}}
+  }' \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages
+
+# Get blog post
+curl -H "Authorization: Bearer <token>" \
+  https://{your-domain}.atlassian.net/wiki/api/v2/pages/123456
+```
+
+---
+
+## Notes
+
+- Blog posts and pages share the same API endpoints
+- Use `type: "blogpost"` to create a blog post vs `type: "page"`
+- The `webui` link in response shows the correct URL for viewing
