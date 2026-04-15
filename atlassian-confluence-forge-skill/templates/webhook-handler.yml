@@ -1,69 +1,85 @@
-# Webhook Handler Template for Confluence Events
+# Product Event Trigger Template for Confluence Events
 # Handle real-time events from Confluence (page created/updated/deleted)
-# Documentation: https://developer.atlassian.com/cloud/confluence/modules/webhook/
+# Documentation: https://developer.atlassian.com/platform/forge/manifest-reference/modules/trigger/
 
 modules:
-  webhook:
+  trigger:
     - key: page-created-handler
-      destination: page-created-endpoint
-      
-    # Optionally handle multiple event types in same handler
+      function: onPageCreated
+      events:
+        - avi:confluence:created:page
+
     - key: page-updated-handler
-      destination: page-updated-endpoint
+      function: onPageUpdated
+      events:
+        - avi:confluence:updated:page
 
-    # With filtering to only trigger on specific conditions
-    - key: filtered-page-handler
-      destination: page-created-endpoint
-      filter: |
-        data.space.key == "PROJ" && 
-        !contains(data.content.labels, 'skip-sync')
+    - key: comment-created-handler
+      function: onCommentCreated
+      events:
+        - avi:confluence:created:comment
 
-  resources:
-    - key: webhook-handler
-      path: src/webhooks/handler.js
-      
+  function:
+    - key: onPageCreated
+      handler: src/triggers/page-created.handler
+    - key: onPageUpdated
+      handler: src/triggers/page-updated.handler
+    - key: onCommentCreated
+      handler: src/triggers/comment-created.handler
+
+permissions:
+  scopes:
+    - read:confluence-content.summary
+
 ---
-# Example handler implementation (src/webhooks/handler.js):
-
-# export default async function handler(req, res) {
-#   const { event, data } = req.body;
-#   
-#   try {
-#     switch (event) {
-#       case 'confluence:page:created':
-#         await handlePageCreated(data);
-#         break;
-#       case 'confluence:page:updated':
-#         await handlePageUpdated(data);
-#         break;
-#       default:
-#         console.log(`Unhandled event: ${event}`);
-#     }
-#     res.status(200).json({ success: true });
-#   } catch (error) {
-#     res.status(500).json({ error: error.message });
+# Example handler implementation (src/triggers/page-created.ts):
+#
+# import api, { route } from '@forge/api';
+#
+# export const handler = async (event, context) => {
+#   // User who triggered the event
+#   const accountId = event.context?.principal?.accountId;
+#
+#   console.log(`Page created by user: ${accountId}`);
+#   console.log('Event payload:', JSON.stringify(event));
+#
+#   // Use api.asApp() for backend API calls
+#   const response = await api.asApp().requestConfluence(
+#     route`/wiki/api/v2/pages/${event.content.id}`
+#   );
+#
+#   if (response.ok) {
+#     const page = await response.json();
+#     console.log(`Page title: ${page.title}`);
 #   }
-# }
+# };
 ---
 
-# Available Events:
-# - confluence:page:created
-# - confluence:page:updated  
-# - confluence:page:deleted
-# - confluence:blogpost:created
-# - confluence:blogpost:updated
-# - confluence:blogpost:deleted
-# - confluence:space:created
-# - confluence:space:updated
-
-# Filter Expression Syntax:
-# - data.space.key == "KEY"
-# - contains(data.content.labels, 'label-name')
-# - data.content.version.number > 5
-# - AND: &&
-# - OR: ||
-
-# Notes:
-# - Webhooks trigger immediately when events occur
-# - Combine with scheduled triggers for reconciliation of missed events
-# - Implement retry logic and rate limiting in handlers
+# Available Confluence Events (pattern: avi:confluence:<action>:<content-type>):
+#
+# Pages:
+# - avi:confluence:created:page
+# - avi:confluence:updated:page
+# - avi:confluence:viewed:page      (may have limited reliability)
+# - avi:confluence:trashed:page
+# - avi:confluence:restored:page
+# - avi:confluence:deleted:page
+# - avi:confluence:archived:page
+# - avi:confluence:moved:page
+# - avi:confluence:copied:page
+#
+# Blog Posts:
+# - avi:confluence:created:blogpost
+# - avi:confluence:updated:blogpost
+#
+# Comments:
+# - avi:confluence:created:comment
+# - avi:confluence:updated:comment
+# - avi:confluence:deleted:comment
+#
+# Key facts:
+# - Handler signature: (event, context) => {} — NOT Express (req, res)
+# - User ID is at event.context.principal.accountId
+# - Event delivery may be delayed up to 3 minutes
+# - Use @forge/api for backend calls — NOT @forge/bridge (frontend only)
+# - Required scope: read:confluence-content.summary
