@@ -448,6 +448,6 @@ export const rateLimitedTrigger = async (event, context) => {
 ## Related Documentation
 
 - [Forge Scheduled Triggers](https://developer.atlassian.com/cloud/forge/application-structure/#scheduled-triggers)
-- [Jira REST API Reference](../api-endpoints/jira-rest-api-v2.md)
+- [Jira REST API Reference](06-api-endpoints.md)
 
 **Note**: The correct module type is `scheduledTriggers` (plural), not `scheduledTrigger`.

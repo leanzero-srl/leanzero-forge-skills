@@ -1,10 +1,10 @@
-# Jira Workflow Validators (Jira Expressions)
+# Jira Workflow Validators
 
 ## Overview
 
-Forge apps **DO have a `jira:workflowValidator` module type**. This allows you to execute custom Forge functions to validate transitions, providing much more power than simple Jira expressions.
+The `jira:workflowValidator` module runs your Forge function during a workflow transition. The function returns `{ result: true }` to allow or `{ result: false, errorMessage: "..." }` to block. Use it whenever validation needs code — REST API calls, KVS lookups, external systems, regex against complex inputs — anything beyond what a Jira expression can express.
 
-The `jira:workflowValidator` module is used to run custom backend logic during a workflow transition. This is the correct way to implement complex, data-driven validation that requires external API calls, database lookups, or advanced business logic that exceeds the capabilities of Jira Expressions.
+For trivial checks (field-presence, simple comparisons), Jira expressions configured in the workflow UI are lighter weight and don't need a Forge module at all.
 
 ### When to use `jira:workflowValidator` vs Jira Expressions
 
@@ -56,7 +56,7 @@ export const validateTransition = async (payload) => {
     if (!response.ok) {
        return { 
          result: false, 
-         message: "Could not verify issue status with external system." 
+         errorMessage: "Could not verify issue status with external system."
        };
     }
 
@@ -65,7 +65,7 @@ export const validateTransition = async (payload) => {
     if (customFieldValue === 'REJECTED') {
        return { 
          result: false, 
-         message: "You cannot transition an issue that has been rejected." 
+         errorMessage: "You cannot transition an issue that has been rejected."
        };
     }
 
@@ -76,7 +76,10 @@ export const validateTransition = async (payload) => {
     console.error("Validator error:", error);
     // Best practice: Fail open or closed based on business criticality
     // Failing open allows the transition but logs the error
-    return { result: true, message: "Validation error occurred. Transition allowed." };
+    // Fail-open is usually right when validation depends on external systems.
+    // Never block a Jira transition on app failure — an outage in your dependency
+    // would otherwise lock all users out of the workflow.
+    return { result: true };
   }
 };
 ```
@@ -88,14 +91,15 @@ The function must return an object with a `result` property (boolean).
 | Scenario | Return Value | Result in Jira |
 |----------|--------------|----------------|
 | **Success** | `{ result: true }` | Transition proceeds normally |
-| **Blocked (with message)** | `{ result: false, message: "Error text" }` | Transition blocked; user sees "Error text" |
+| **Blocked (with message)** | `{ result: false, errorMessage: "Error text" }` | Transition blocked; user sees "Error text" |
 | **Blocked (no message)** | `{ result: false }` | Transition blocked; default error shown |
 
 ## Important Considerations
 
 ### 1. Timeout Limits
-Workflow validators have a strict execution time limit (typically **25-30 seconds**). If your function exceeds this, the transition may fail or behave unexpectedly. 
-- **Tip**: Implement a "deadline check" pattern to fail gracefully before the hard timeout.
+Workflow validators run as standard Forge functions with a **25-second** execution limit (the default FaaS timeout). If your function exceeds this, Forge kills it and the transition fails.
+- **Tip**: Track a `deadline = Date.now() + 22_000` and short-circuit before the hard timeout.
+- If you genuinely need >25s of work (e.g. an LLM call), don't do it in the validator — fail fast and offload to an async queue (`@forge/events` consumer with `timeoutSeconds: 900`). See `26-async-events-and-queues.md`.
 
 ### 2. Permissions
 Since validators often run in a workflow context where a user might not have sufficient permissions for all actions, it is recommended to use `api.asApp()` for the validation logic to ensure reliability.

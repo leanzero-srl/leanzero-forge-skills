@@ -1,391 +1,210 @@
 ---
 name: atlassian-jira-forge-skill
-description: Atlassian Jira Forge app development. Use when creating workflow validators, conditions, post-functions, custom UIs for workflow rules, or integrating with Jira REST APIs from a Forge app.
+description: Atlassian Jira Forge app development — workflow validators/conditions/post-functions, custom UIs with @forge/react, async events with @forge/events, KVS storage, and Jira REST API integration.
 ---
 
 # Atlassian Jira Forge Development
 
-This skill provides documentation for building Forge apps that extend Jira.
+Build apps that extend Jira Cloud on Atlassian's serverless Forge platform.
 
 ## When to Use This Skill
 
-**Use this skill when:**
-- You are developing apps specifically for **Jira Cloud**.
-- You need to extend Jira functionality using the Forge platform.
-- You are working with Jira-specific modules (validators, conditions, post-functions).
+Use this skill when:
+- The work targets **Jira Cloud** specifically (not Confluence Cloud — see `atlassian-confluence-forge-skill` for that).
+- You're declaring Forge modules in `manifest.yml`, writing resolvers/validators/post-functions, or building Custom UI / UI Kit panels.
+- You need to call the Jira REST API from a Forge function via `@forge/api`.
 
-**Do NOT use this skill when:**
-- You are developing for **Confluence Cloud** (use `atlassian-confluence-forge-skill` instead).
-- You are building apps for Atlassian Connect or other platforms.
-- You need to perform complex Confluence content management.
+Skip this skill for:
+- Confluence-only work, JSM-only work that doesn't touch Jira issues, or non-Forge platforms (Connect, OAuth 2.0 3LO apps, Data Center).
 
-It covers:
-- Creating workflow validators (Preview) - validate fields before transition completes
-- Creating workflow conditions (Preview) - control visibility of transitions
-- Creating workflow post-functions (Preview) - execute logic after transition
-- Building custom UIs for workflow rule configuration
-- Making Jira REST API calls from a Forge app
-- Setting up scheduled triggers and automation actions
-- Configuring dashboard widgets or Bitbucket merge checks
+## Pick a starting point
 
-**Note**: `jira:workflowValidator`, `jira:workflowCondition`, and `jira:workflowPostFunction` modules are in **Preview** status per Atlassian's official documentation.
+- **Scaffolding a new module**: copy a template from `templates/` (validator, condition, post-function, async-queue-consumer, custom-field-type, capability-token-webtrigger, etc.).
+- **Production patterns** (sharding, backoff+jitter, drafts/locks, capability tokens, async offload, fail-open validators): `docs/24-production-patterns.md`.
+- **Limits & quotas** (timeouts, KVS quotas, queue limits): `docs/27-faas-limits-and-cost.md`.
+- **Decision: which module type?** `docs/when-to-use-which.md`.
 
 ## Quick Reference
 
-| Task | Module Type |
-|------|-------------|
+| Task | Module |
+|---|---|
 | Validate fields before transition | `jira:workflowValidator` |
-| Control transition visibility | `jira:workflowCondition` |
-| Execute logic after transition | `jira:workflowPostFunction` |
-| Custom configuration UI | Custom React UI with @forge/bridge |
-| Run scheduled tasks | `scheduledTrigger` |
-| Create automation actions | `action` |
+| Hide/show transitions | `jira:workflowCondition` |
+| Run logic after transition | `jira:workflowPostFunction` |
+| Cron-style background job | `scheduledTrigger` |
+| Long-running work (>25s) | `trigger` → `consumer` (async event with `timeoutSeconds:` up to 900) |
+| Public HTTPS endpoint into the app | `webtrigger` |
+| Custom field (view + edit) | `jira:customField` / `jira:customFieldType` |
+| Issue-context UI | `jira:issuePanel` / `jira:issueAction` |
+| Full-page UI | `jira:globalPage` / `jira:adminPage` / `jira:projectPage` |
+| Dashboard widget | `jira:dashboardGadget` |
+| Bitbucket merge gate | `bitbucket:mergeCheck` |
 
----
-
-## Core Concepts
-
-Forge is Atlassian's serverless platform for building apps that extend Jira, Confluence, Bitbucket, and Jira Service Management.
-
-### Key Components
-
-- **Module**: A capability declared in manifest.yml
-- **Function**: Code executed when a module triggers
-- **Resource**: Static assets for Custom UI
-- **Resolver**: Bridge between frontend UI and backend functions
-
-### Context Object
-
-Every function receives payload and context:
+## Core API
 
 ```javascript
-export const handler = async (payload, context) => {
-  console.log(context.installContext);
-  console.log(context.accountId);
-  return { result: true };
-};
+import api, { route } from '@forge/api';
+import { kvs } from '@forge/kvs';
+import Resolver from '@forge/resolver';
+import { Queue, InvocationError, InvocationErrorCode } from '@forge/events';
+
+// REST call (always use route`...` to auto-encode interpolations)
+const r = await api.asApp().requestJira(route`/rest/api/3/issue/${key}`);
+
+// KVS (named import — required scope: storage:app)
+await kvs.set('config', { theme: 'dark' });
+const config = await kvs.get('config');
+
+// Resolver (Custom UI / UI Kit backend)
+const resolver = new Resolver();
+resolver.define('getText', async ({ payload, context }) => 'Hello');
+export const handler = resolver.getDefinitions();
+
+// Async queue offload (>25s work)
+const queue = new Queue({ key: 'long-jobs' });
+await queue.push({ body: { taskId: '...' } });
 ```
 
----
-
-## Quick Comparison: Validators vs Conditions vs Post Functions
-
-| Aspect | Validator | Condition | Post Function |
-|--------|-----------|-----------|---------------|
-| When runs | Before transition completes | Before UI renders | After transition completes |
-| Purpose | Validate data before completion | Hide/show transitions in UI | Execute logic after success |
-| Failure behavior | Transition blocked, error shown | Transition hidden from user | Error logged, workflow continues |
-
----
-
-## Module Configuration Examples
-
-### Workflow Validator (Function-based)
+## Manifest skeleton
 
 ```yaml
 modules:
   jira:workflowValidator:
     - key: my-validator
       name: My Validator
-      description: Validates issue fields
-      function: validateContent
-      
-      create:
-        resource: config-ui
-```
+      description: Validates fields before transition
+      function: validate
+  function:
+    - key: validate
+      handler: index.validate
 
-```javascript
-export const validateContent = async (args) => {
-  const { issue, configuration } = args;
-  
-  if (isValid) {
-    return { result: true };
-  } else {
-    return { 
-      result: false, 
-      errorMessage: "Validation failed" 
-    };
-  }
-};
-```
-
-### Workflow Condition
-
-```yaml
-modules:
-  jira:workflowCondition:
-    - key: my-condition
-      name: My Condition
-      description: Controls visibility
-      function: checkLicense
-      
-      create:
-        resource: config-ui
-```
-
-```javascript
-export const checkLicense = async (args) => {
-  return { result: context.license?.isActive };
-};
-```
-
-### Post Function
-
-```yaml
-modules:
-  jira:workflowPostFunction:
-    - key: my-post-function
-      name: My Post Function
-      description: Executes after transition
-      function: enhanceSummary
-      
-      create:
-        resource: config-ui
-```
-
----
-
-## Common Patterns
-
-See [Problem Patterns](docs/problem-patterns.md) for:
-
-- How to build dropdowns that fetch projects
-- How to validate custom fields against external APIs
-- How to sync Jira issues with external systems
-- Handling rate limits and batching operations
-
-## Available Scripts
-
-Use these scripts to automate common Forge development workflows. They are located in the `scripts/` directory.
-
-| Script | Description |
-|--------|-------------|
-| `validate-manifest.sh` | Validates `manifest.yml` for errors using `forge lint` |
-| `deploy-and-install.sh` | Automates `forge deploy` followed by `forge install --upgrade` |
-| `dev-setup.sh` | Starts the Forge development tunnel (supports `-e` for environment) |
-| `preflight-check.sh` | Runs a comprehensive environment and manifest validation check |
-
-### 🚀 Recommended Workflow: Plan-Validate-Execute
-
-For high-stakes operations (like deployment or manifest changes), follow this pattern to minimize errors:
-
-1.  **Plan**: Describe the intended changes or commands.
-2.  **Validate**: Run `./scripts/preflight-check.sh` and `./scripts/validate-manifest.sh` to ensure the environment and configuration are correct.
-3.  **Execute**: Perform the deployment or modification only after validation passes.
-
-### Real-World Implementation Issues & Solutions
-
-**New!** See [Real-World Patterns](docs/24-real-world-patterns.md) for:
-
-- **CSP & Custom UI errors** - "Refused to load script" fixes, inline style workarounds
-- **Rate limiting (429)** - Exponential backoff implementations, batching strategies  
-- **Storage/KVS issues** - Orphan cleanup patterns, safe storage access with fallbacks
-- **Tunnel problems** - Manifest change handling, local dev auth issues
-- **Migration pitfalls** - Connect to Forge key mapping, webhook alternatives
-- **Performance optimization** - Caching patterns, attachment size budgets
-- **Third-party integrations** - OpenAI/Slack network restrictions, env var usage
-
-> This document aggregates real problems from Atlassian Community, GitHub issues, and production Forge apps with verified solutions. Structured for AI models to match user symptoms → solutions quickly.
-
-See [When to Use Which Module](docs/when-to-use-which.md) for choosing the right module type.
-
-## Gotchas
-
-For common pitfalls and environment-specific facts, see [Gotchas](docs/gotchas.md).
-
-## Templates
-
-Copy-paste templates are available in `templates/`:
-
-### Workflow Modules
-| Template | Description |
-|----------|-------------|
-| `validator.yml` | Workflow validator boilerplate with configuration UI example |
-| `condition.yml` | Workflow condition boilerplate for visibility control |
-| `post-function.yml` | Post function boilerplate for post-transition logic |
-| `complex-validator.yml` | Multi-rule validator with dynamic configuration UI |
-
-### Triggers & Events
-| Template | Description |
-|----------|-------------|
-| `scheduled-trigger.yml` | Scheduled trigger (hourly, daily, weekly) for background tasks |
-| `webhook-handler.yml` | Event-based handler for Jira events (created, updated, deleted) |
-| `trigger-with-filter.yml` | Trigger with advanced event filtering |
-
-### Automation & Actions
-| Template | Description |
-|----------|-------------|
-| `automation-action.yml` | Custom automation action with configurable inputs |
-| `bulk-operation.yml` | Bulk issue operations with rate limiting and batching |
-
-### Storage & Configuration
-| Template | Description |
-|----------|-------------|
-| `storage-kvs-example.yml` | Key-value storage patterns for configuration and state |
-
-### UI Components
-| Template | Description |
-|----------|-------------|
-| `ui-modifications.yml` | Custom UI modifications with React components |
-| `dashboard-gadget.yml` | Dashboard widget template |
-
-### Integrations
-| Template | Description |
-|----------|-------------|
-| `bitbucket-merge-check.yml` | Bitbucket merge check for pull request validation |
-
-
----
-
-## Failure Strategies
-
-When an error occurs during execution, follow these patterns:
-
-- **Manifest/Module Errors**: If a module is not recognized, verify the `manifest.yml` against the [Advanced Documentation](#advanced-documentation) and ensure you are using the correct Jira module names (e.g., `jira:workflowValidator`).
-- **Permission Denied (403)**: Check if the required OAuth scopes are defined in the `permissions.scopes` section of your `manifest.yml`. Refer to [07-permissions-scopes.md](docs/07-permissions-scopes.md).
-- **API Errors (4xx/5xx)**: 
-  - For 404 errors, verify the issue key or project ID exists.
-  - For 429 (Rate Limit), implement exponential backoff.
-- **Runtime Errors**: Use `forge logs` to inspect the error stack trace and ensure all required environment variables or dependencies are present.
-
-## API Integration
-
-Use `@forge/api` for REST calls:
-
-```javascript
-import api, { route } from '@forge/api';
-
-// GET request
-const response = await api.asApp().requestJira(route`/rest/api/3/issue/${key}`);
-const data = await response.json();
-
-// POST with body
-await api.asApp().requestJira(route`/rest/api/3/issue`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ fields: { summary: "New" } })
-});
-```
-
-See `docs/06-api-endpoints-enhanced.md` for all endpoints.
-
----
-
-## Permissions & Scopes
-
-```yaml
 permissions:
   scopes:
-    - read:jira-work      # View issues
-    - write:jira-work     # Create/update issues
-    - read:workflow:jira  # Read workflows
-    
+    - read:jira-work
+    - write:jira-work
+    - storage:app
   external:
     fetch:
       backend:
-        - "api.openai.com"
+        - api.openai.com
+
+app:
+  id: ari:cloud:ecosystem::app/YOUR-APP-ID
+  runtime:
+    name: nodejs22.x   # also valid: nodejs24.x, nodejs20.x
+    memoryMB: 512      # optional; raises CPU too
 ```
 
-See `docs/07-permissions-scopes.md` for complete scope list.
+## Failure strategies (one-liners; details in linked docs)
 
----
+| Symptom | First-pass fix | Detail |
+|---|---|---|
+| `403` permission denied | Add scope to `permissions.scopes`, run `forge install --upgrade` | `07-permissions-scopes.md` |
+| `429 Too Many Requests` | Honor `Retry-After`, add exponential backoff with jitter | `19-rate-limit-handling.md` + `24-production-patterns.md` |
+| Function timed out (~25s) | Push the work to an async queue (`@forge/events`), set `timeoutSeconds: 900` | `26-async-events-and-queues.md` |
+| "Refused to load script" / CSP errors | Allowlist host in `permissions.external.fetch.client` (or `.backend`); bundle scripts | `gotchas.md`, `23-custom-ui-advanced.md` |
+| Tunnel doesn't apply manifest changes | Restart tunnel; `forge install --upgrade` if scopes changed | `gotchas.md` |
+| KVS hot key (>1 MB/s writes) | Shard: `key:{i}` with deterministic mapping | `24-production-patterns.md` |
 
-## CLI Commands
+## Documentation map
 
-| Command | Purpose |
-|---------|---------|
-| `forge init` | Create new app |
-| `forge deploy` | Deploy to development |
-| `forge install --upgrade` | Install on site |
-| `forge tunnel` | Local testing |
-| `forge logs -n 50` | View logs |
+### Core
+| File | Topic |
+|---|---|
+| `01-core-concepts.md` | Forge platform, modules, functions, resolvers, context |
+| `02-workflow-validators.md` | `jira:workflowValidator` |
+| `03-workflow-conditions.md` | `jira:workflowCondition` |
+| `04-workflow-post-functions.md` | `jira:workflowPostFunction` |
+| `05-events-payloads.md` | Event types and payload schemas |
+| `06-api-endpoints.md` | Jira REST reference (with per-resource appendix in `api/`) |
+| `07-permissions-scopes.md` | OAuth scopes, storage scopes |
+| `08-cli-commands.md` | `forge` CLI reference |
 
-See `docs/08-cli-commands.md` for full reference.
+### Modules & UI
+| File | Topic |
+|---|---|
+| `09-scheduled-triggers.md` | Cron-style scheduled functions |
+| `10-automation-actions.md` | Custom automation actions |
+| `11-event-filters.md` | Event filter expressions |
+| `12-dashboard-widgets.md` | `jira:dashboardGadget` |
+| `13-merge-checks.md` | `bitbucket:mergeCheck` |
+| `14-ui-modifications.md` | UI Modifications API |
+| `15-bridge-api-reference.md` | `@forge/bridge` reference |
+| `16-resolver-patterns.md` | Resolver structuring patterns |
+| `17-ui-kit-components.md` | `@forge/react` component reference |
 
----
+### Custom UI
+| File | Topic |
+|---|---|
+| `18-custom-ui-troubleshooting.md` | Custom UI troubleshooting |
+| `21-complete-custom-ui-guide.md` | End-to-end Custom UI guide |
+| `22-jira-service-management.md` | JSM extensions |
+| `23-custom-ui-advanced.md` | Advanced Custom UI patterns |
 
-## Advanced Documentation
+### Performance & Production
+| File | Topic |
+|---|---|
+| `19-rate-limit-handling.md` | Rate-limit / backoff |
+| `20-performance-optimization.md` | Caching, attachment budgets |
+| `24-production-patterns.md` | Production patterns from PPM Pro & CogniRunner |
 
-The `docs/` directory contains detailed documentation:
+### Reference (new)
+| File | Topic |
+|---|---|
+| `26-async-events-and-queues.md` | `@forge/events` queues, retries, long-running work |
+| `27-faas-limits-and-cost.md` | Timeouts, memory, KVS quotas, queue limits |
+| `28-forge-remote-and-egress.md` | `permissions.external`, `remotes:`, OAuth providers |
+| `29-custom-field-types.md` | `jira:customField`, `jira:customFieldType` |
+| `30-testing-and-tunneling.md` | `forge tunnel`, mocking, jest |
 
-### Core Topics
-| Topic | File |
-|-------|------|
-| Core Concepts | `01-core-concepts.md` |
-| UI Modifications | `02-ui-modifications.md` |
-| Workflow Validators | `02-workflow-validators.md` |
-| Workflow Conditions | `03-workflow-conditions.md` |
-| Workflow Post Functions | `04-workflow-post-functions.md` |
+### Decision aids
+| File | Topic |
+|---|---|
+| `when-to-use-which.md` | Module selection guide |
+| `gotchas.md` | Pitfalls and environment-specific quirks |
 
-### Advanced Topics
-| Topic | File |
-|-------|------|
-| Events & Payloads | `05-events-payloads.md` |
-| API Endpoints | `06-api-endpoints-enhanced.md` |
-| Permissions & Scopes | `07-permissions-scopes.md` |
-| CLI Commands | `08-cli-commands.md` |
-| Scheduled Triggers | `09-scheduled-triggers.md` |
-| Automation Actions | `10-automation-actions.md` |
-| Event Filters | `11-event-filters.md` |
-| Dashboard Widgets | `12-dashboard-widgets.md` |
-| Bitbucket Merge Checks | `13-merge-checks.md` |
-| Confluence Content Properties | `14-content-properties.md` |
-| Bridge API Reference | `15-bridge-api-reference.md` |
-| Resolver Patterns | `16-resolver-patterns.md` |
-| UI Kit Components | `17-ui-kit-components.md` |
+## Templates
 
-### Custom UI Documentation (New)
-| Topic | File |
-|-------|------|
-| Complete Custom UI Guide | `21-complete-custom-ui-guide.md` |
-| Custom UI Troubleshooting | `18-custom-ui-troubleshooting.md` |
-| Rate Limit Handling | `19-rate-limit-handling.md` |
-| Performance Optimization | `20-performance-optimization.md` |
+Copy-paste-ready manifests in `templates/`:
 
-### Real-World Patterns
-| Topic | File |
-|-------|------|
-| **Implementation Issues & Solutions** | **`24-real-world-patterns.md`** |
-| **Production Patterns (PPM Pro)** | **`25-production-patterns-ppm.md`** |
+| Template | Module |
+|---|---|
+| `validator.yml` | `jira:workflowValidator` |
+| `complex-validator.yml` | Multi-rule validator with config UI |
+| `condition.yml` | `jira:workflowCondition` |
+| `post-function.yml` | `jira:workflowPostFunction` |
+| `scheduled-trigger.yml` | `scheduledTrigger` |
+| `webhook-handler.yml` | `trigger` (event-based) |
+| `trigger-with-filter.yml` | `trigger` with event filter |
+| `async-queue-consumer.yml` | `trigger` → `consumer` (long-running) |
+| `automation-action.yml` | Custom automation action |
+| `bulk-operation.yml` | Bulk issue ops with rate limiting |
+| `storage-kvs-example.yml` | KVS patterns |
+| `ui-modifications.yml` | UI Modifications |
+| `dashboard-gadget.yml` | `jira:dashboardGadget` |
+| `bitbucket-merge-check.yml` | `bitbucket:mergeCheck` |
+| `custom-field-type.yml` | `jira:customFieldType` (view + edit + contextConfig) |
+| `capability-token-webtrigger.yml` | Webtrigger with token + bearer auth |
 
-### Jira Service Management (New)
-| Topic | File |
-|-------|------|
-| JSM Extensions Guide | `22-jira-service-management.md` |
+## Scripts
 
-### New in This Version
-- `problem-patterns.md` - Common code patterns with examples
-- `when-to-use-which.md` - Decision guide for module selection
-- **`24-real-world-patterns.md`** - Real-world issues & solutions from community/GitHub (CSP errors, rate limits, storage cleanup, tunnel fixes, migration pitfalls)
-- **`25-production-patterns-ppm.md`** - 24 production-proven patterns extracted from PPM Pro: KVS sharding, chunked write-back, retry with jitter, issue links (with critical outward/inward gotcha), ADF comments, screen configuration chain, trigger protection, concurrency (drafts/locks/conflicts), bridge invoke, Jira bridge modal, multi-module manifest, KVS cost control, modular resolver registration, issue transformer (two-pass with plan-scoped dep filtering), full indexing pipeline (sources → transform → shard → KVS), config-driven field payload builder, dependency extraction semantics, post-write verification, and Forge memory management. Every pattern includes working code and a verified Jira REST API endpoint reference table with required scopes.
-- Custom UI complete guide with working React code examples
-- CSP error troubleshooting and fixes
-- Rate limit handling with exponential backoff implementations
-- Performance optimization patterns to reduce costs
-- JSM extensions: custom request types, SLA automation, portal widgets
+CI-safe shell scripts in `scripts/`:
 
-### Templates
+| Script | Purpose |
+|---|---|
+| `preflight-check.sh` | Verify CLI install, auth, manifest, lint |
+| `validate-manifest.sh` | Run `forge lint` with parsed summary |
+| `deploy-and-install.sh` | `forge deploy` + `forge install --upgrade` |
+| `dev-setup.sh` | Start `forge tunnel` (`-e` for environment) |
 
-All templates include:
-- YAML manifest configuration with detailed comments
-- JavaScript function handlers with working examples
-- React UI components (where applicable)
-- Required permissions/scopes section
-- Testing instructions
+Recommended workflow: `preflight-check.sh` → make changes → `validate-manifest.sh` → `deploy-and-install.sh`.
 
-See `templates/` directory for complete, ready-to-use code.
+## Changelog
 
----
-
-## Debugging & Troubleshooting
-
-| Error | Solution |
-|-------|----------|
-| "Function not found" | Check function keys match manifest |
-| "Permission denied" | Add required scope to permissions.scopes |
-
-1. Use `console.log()` for debugging
-2. View logs with `forge logs -n 50`
-3. Test locally with `forge tunnel`
-
-See `docs/advanced-troubleshooting.md` for detailed troubleshooting guide.
+- Merged `06-api-endpoints.md` and the prior `-enhanced.md` variant into one canonical reference, with the per-resource `docs/api/` folder linked as an appendix.
+- Renumbered duplicate prefixes: `02-ui-modifications.md` → `14-`, `18-custom-ui-advanced.md` → `23-`.
+- Removed the long-stale claim that workflow validators/conditions/post-functions are Connect-only — they are real, supported Forge modules.
+- Standardized on the named KVS import: `import { kvs } from '@forge/kvs'`.
+- Added five new docs: `26-async-events-and-queues.md`, `27-faas-limits-and-cost.md`, `28-forge-remote-and-egress.md`, `29-custom-field-types.md`, `30-testing-and-tunneling.md`.
+- Added three new templates: `async-queue-consumer.yml`, `custom-field-type.yml`, `capability-token-webtrigger.yml`.
+- Stripped emoji from shell scripts; added `set -euo pipefail` headers.
