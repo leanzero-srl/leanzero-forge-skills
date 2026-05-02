@@ -1,30 +1,20 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# deploy-and-install.sh — runs `forge deploy` then `forge install --upgrade`.
+# Stops on first error; safe for CI (no emoji, no color escapes).
 
-# deploy-and-install.sh - Automates deployment and installation upgrade for Forge apps.
+set -euo pipefail
 
-echo "🚀 Starting Deployment and Installation workflow..."
-
-# 1. Deploy the app
-echo "📦 Step 1: Deploying app..."
-forge deploy
-DEPLOY_EXIT_CODE=$?
-
-if [ $DEPLOY_EXIT_CODE -ne 0 ]; then
-  echo "❌ Deployment failed! Aborting installation."
-  exit $DEPLOY_EXIT_CODE
+echo "[deploy-and-install] Step 1/2: forge deploy"
+if ! forge deploy; then
+  echo "[deploy-and-install] FAIL: forge deploy exited non-zero. Aborting." >&2
+  exit 1
 fi
+echo "[deploy-and-install] OK: deploy succeeded"
 
-echo "✅ Deployment successful!"
-
-# 2. Install/Upgrade the app
-echo "🛠️ Step 2: Upgrading installation (to apply new permissions/modules)..."
-forge install --upgrade
-INSTALL_EXIT_CODE=$?
-
-if [ $INSTALL_EXIT_CODE -ne 0 ]; then
-  echo "❌ Installation upgrade failed!"
-  exit $INSTALL_EXIT_CODE
+echo "[deploy-and-install] Step 2/2: forge install --upgrade"
+if ! forge install --upgrade; then
+  echo "[deploy-and-install] FAIL: forge install --upgrade exited non-zero." >&2
+  echo "  Hint: new scopes require user approval. Re-run interactively if scopes changed." >&2
+  exit 1
 fi
-
-echo "🎉 Workflow completed successfully! Your app is deployed and upgraded."
-exit 0
+echo "[deploy-and-install] OK: install/upgrade succeeded"

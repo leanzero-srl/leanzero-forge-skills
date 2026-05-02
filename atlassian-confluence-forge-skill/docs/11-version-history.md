@@ -1,5 +1,7 @@
 # Version History: Confluence Page Versions
 
+> **Auth note (2025 update).** Examples below use the legacy Atlassian Connect `AP.context.getToken()` pattern. **Don't use that in new Forge apps.** Replace with `requestConfluence('/wiki/api/v2/...')` from `@forge/bridge` (Custom UI) or `api.asUser().requestConfluence(route\`...\`)` from `@forge/api` (resolver). See `01-core-concepts.md`.
+
 This guide covers working with page versions in Confluence - viewing, comparing, and restoring previous versions.
 
 ---

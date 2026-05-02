@@ -54,7 +54,7 @@ This skill provides comprehensive guidance for developing Confluence apps using 
 │   ├── 05-dashboard-widgets.md    # Dashboard widgets
 │   ├── 06-content-properties.md   # Content properties API
 │   ├── 07-webhooks-events.md      # Webhook handling
-│   ├── 08-cli-commands.md         # Forge CLI reference
+│   ├── 13-cli-commands.md         # Forge CLI reference
 │   ├── 09-labels-management.md    # NEW: Labels API guide
 │   ├── 10-user-permissions.md     # NEW: User & permission API guide
 │   ├── 11-version-history.md      # NEW: Version history API guide

@@ -1,59 +1,117 @@
-# Page Banner Module Template
-# Add custom React components to Confluence pages (appears as a banner at top)
-# Location: https://developer.atlassian.com/cloud/confluence/modules/confluence-page-banner/
+# confluence:pageBanner Template (Custom UI on every page)
 
+The `confluence:pageBanner` module renders a Custom UI banner above the page body. It's the most common way to add a per-page extension that runs on every page open.
+
+> **Note**: there is no `confluence:pageCustomUi` module — `confluence:pageBanner` is the right choice for "show something on every page".
+
+## File: manifest.yml
+
+```yaml
 modules:
   confluence:pageBanner:
-    - key: {{APP_KEY}}-page-extension
+    - key: my-page-banner
       resource: main
       icon: icon.png
-      title: {{EXTENSION_TITLE}}
-      location: confluence-page-custom-ui-top
+      title: My Page Banner
+      # Optional: only show on pages where the app should run
+      # displayConditions:
+      #   pageTypes:
+      #     - page
+      #     - blogpost
 
-  # Optional: Add a button in the page menu (if supported)
-  # confluence:pageMenu:
-  #   - key: {{APP_KEY}}-menu-item
-  #     resource: menu
-  #     title: Open {{EXTENSION_TITLE}}
+resources:
+  - key: main
+    path: static/banner/build   # Custom UI: build directory of the React app
+  - key: icon
+    path: static/icon.png
 
-  resources:
-    - key: main
-      path: src/page-banner.jsx
+permissions:
+  scopes:
+    - read:confluence-content.summary
+    # Add `write:confluence-content` only if you actually mutate content
+    - storage:app
 
-    # Optional icon for the extension
-    # - key: icon
-    #   path: static/icon.png
+app:
+  id: ari:cloud:ecosystem::app/YOUR-APP-ID
+  runtime:
+    name: nodejs22.x   # also valid: nodejs24.x, nodejs20.x
+```
 
----
-# Example manifest configuration with permissions:
+## File: static/banner/src/App.jsx (Custom UI)
 
-# app:
-#   id: ari:cloud:ecosystem::app/{{APP_ID}}
-#   name: {{APP_NAME}}
-#   description: Adds custom UI to Confluence pages
-#
-# permissions:
-#   scopes:
-#     - read:confluence-content:*
-#     # For modifying content:
-#     # - write:confluence-content:*
-#   scoped:
-#     - spaces:${SPACE_ID}
-#     - sites:${SITE_URL}
----
+```jsx
+import React, { useEffect, useState } from 'react';
+import { view, requestConfluence } from '@forge/bridge';
 
-# Usage Example:
-# 1. Replace {{APP_KEY}} with your app's unique key
-# 2. Replace {{EXTENSION_TITLE}} with display title
-# 3. Create src/page-banner.jsx with your React component
-# 4. Deploy: forge deploy --verbose
-# 5. Register in Confluence: forge register
+export default function App() {
+  const [page, setPage] = useState(null);
 
-# Common location values:
-# - confluence-page-custom-ui-top (default)
-# - confluence-page-custom-ui-bottom
+  useEffect(() => {
+    (async () => {
+      // 1) Get the current page ID from the Forge context
+      const ctx = await view.getContext();
+      const pageId = ctx?.extension?.content?.id;
+      if (!pageId) return;
 
-# Notes:
-# - The extension renders in an iframe within the page
-# - Use AP.context.getToken() to authenticate API calls
-# - Extract page ID from routeHandlers.getCurrentRoute()
+      // 2) Fetch via the Forge bridge — auth is handled for you. No tokens.
+      const r = await requestConfluence(
+        `/wiki/api/v2/pages/${pageId}?body-format=atlas_doc_format`
+      );
+      if (r.ok) setPage(await r.json());
+    })();
+  }, []);
+
+  return (
+    <div style={{ padding: '8px 12px' }}>
+      {page ? `Title: ${page.title}` : 'Loading…'}
+    </div>
+  );
+}
+```
+
+```jsx
+// static/banner/src/index.jsx
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+```
+
+## Authentication — what's correct, what's wrong
+
+| Pattern | Use? |
+|---|---|
+| `requestConfluence('/wiki/api/v2/...')` from `@forge/bridge` | **Yes** — Forge proxies the request and adds OAuth automatically. |
+| `invoke('myResolver', payload)` from `@forge/bridge` → resolver calls `api.asUser()` / `api.asApp()` | **Yes** — when you need backend logic before/after the REST call. |
+| `AP.context.getToken()` + `Authorization: JWT <token>` | **No.** This is the legacy Atlassian Connect auth flow. Forge apps do not use it; the Forge bridge handles auth. |
+| Local `jsonwebtoken.sign(...)` against the Connect shared secret | **No.** Same as above — Connect-only. |
+
+If you see older skill docs using `AP.context.getToken()`, treat them as legacy. The replacement is always `requestConfluence(...)` from `@forge/bridge`.
+
+## Building & deploying
+
+```bash
+# Build the React app
+cd static/banner && npm install && npm run build && cd ../..
+
+# Deploy and install
+forge deploy
+forge install --upgrade   # required when scopes change; users approve the new scopes
+```
+
+> There is no `forge register` command. `forge install` registers the app on a site; `forge install --upgrade` updates an existing install.
+
+## Tunnel for local development
+
+```bash
+forge tunnel
+```
+
+Restart the tunnel after every `manifest.yml` change — it does **not** hot-reload manifest edits.
+
+## References
+
+- https://developer.atlassian.com/platform/forge/manifest-reference/modules/confluence-page-banner
+- https://developer.atlassian.com/platform/forge/custom-ui/iframe
+- See also: `docs/01-core-concepts.md` for the Custom UI / resolver split, and `docs/24-production-patterns.md` for ADF and version-handling patterns.

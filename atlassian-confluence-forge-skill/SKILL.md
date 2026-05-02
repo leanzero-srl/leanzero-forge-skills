@@ -1,196 +1,233 @@
 ---
 name: atlassian-confluence-forge-skill
-description: Provides guidance, patterns, and templates for developing Atlassian apps on the Forge platform for Confluence Cloud. Use when building custom UI extensions, handling webhooks, setting up scheduled triggers, or integrating with Confluence's REST API.
+description: Atlassian Confluence Forge app development — page banners, content actions, macros, content properties, async events with @forge/events, KVS storage, ADF/storage-format bodies, and Confluence REST API v2 integration.
 ---
 
-# Atlassian Confluence Forge Skill
+# Atlassian Confluence Forge Development
 
----
+Build apps that extend Confluence Cloud on Atlassian's serverless Forge platform.
 
-## Trigger Description
+## When to Use This Skill
 
-When you need to build an app or extension for **Confluence Cloud** using **Forge**, use this skill. It covers:
+Use this skill when:
+- The work targets **Confluence Cloud** specifically (not Jira — see `atlassian-jira-forge-skill` for that).
+- You're declaring Confluence Forge modules in `manifest.yml` (`confluence:pageBanner`, `confluence:contentAction`, `macro`, etc.), writing resolvers, building Custom UI / UI Kit panels, or registering content/space properties.
+- You're calling `/wiki/api/v2/...` (preferred) or `/wiki/rest/api/...` (legacy) from a Forge function.
 
-## Boundaries
+Skip this skill for:
+- Jira-only work (use `atlassian-jira-forge-skill`).
+- Atlassian organization / cross-product admin operations (use `atlassian-organizations-api-skill`).
+- Atlassian Connect or Data Center.
 
-**Use this skill when:**
-- You are developing apps specifically for **Confluence Cloud**.
-- You need to extend Confluence functionality using the Forge platform.
-- You are working with Confluence-specific modules (pages, spaces, blog posts).
+## Pick a starting point
 
-**Do NOT use this skill when:**
-- You are developing for **Jira Cloud** (use `atlassian-jira-forge-skill` instead).
-- You are building apps for Atlassian Connect or other platforms.
-- You need to perform complex Jira workflow automations.
+- **Scaffolding a new module**: copy a template from `templates/`.
+- **Production patterns** (KVS prefix indexing, ADF surgery, content-property version handling, capability-token web triggers, dual-strategy API fallback): `docs/24-production-patterns.md`.
+- **Limits & quotas** (timeouts, KVS quotas, queue limits, ADF size): `docs/27-faas-limits-and-cost.md`.
+- **ADF vs storage format**: `docs/28-adf-and-storage-format.md`.
 
-It covers:
+## Quick Reference
 
-- **Custom UI**: Page extensions, blog post extensions, space settings, dashboard gadgets
-- **Webhooks**: Handling Confluence events (page created/updated/deleted, blog posts, spaces)
-- **Content Properties**: Storing app data tied to pages, blog posts, and other content types  
-- **REST API Integration**: Using Confluence's v2 REST APIs for content management
-- **Custom Content**: Creating custom content types in the content tree (new in v2)
-- **Scheduled Triggers**: Running periodic background tasks
+| Task | Module |
+|---|---|
+| Banner on every page / blogpost | `confluence:pageBanner` |
+| Menu item in "more actions" (•••) | `confluence:contentAction` |
+| Right-click context menu on selected text | `confluence:contextMenu` |
+| Content byline area widget (under page title) | `confluence:contentBylineItem` |
+| Editor macro (insert dynamic content) | `macro` |
+| Custom content type indexed by Confluence | `confluence:customContent` |
+| Right-rail item on the home feed | `confluence:homepageFeed` |
+| Top-level admin settings page | `globalSettings` |
+| Page in space navigation | `spacePage` |
+| Page in the global "Apps" menu | `globalPage` |
+| Per-content app data (CQL-indexed) | `confluence:contentProperty` |
+| Cron-style background job | `scheduledTrigger` |
+| Long-running work (>25s) | `trigger` → `consumer` (`@forge/events`, `timeoutSeconds:` up to 900) |
+| Public HTTPS endpoint into the app | `webtrigger` |
 
----
+> There is no `confluence:pageCustomUi` or `confluence:blogPostCustomUi` module. Use `confluence:pageBanner` for "render on every page" and `confluence:contentAction` for "menu item that opens a modal."
 
-## Quick Start
+## Core API
+
+```javascript
+// Custom UI (frontend, runs in iframe)
+import { requestConfluence, view, invoke } from '@forge/bridge';
+
+const ctx  = await view.getContext();
+const r    = await requestConfluence(`/wiki/api/v2/pages/${ctx.extension.content.id}?body-format=atlas_doc_format`);
+const page = await r.json();
+
+// Resolver / trigger / scheduled function (backend)
+import api, { route } from '@forge/api';
+import { kvs }        from '@forge/kvs';                  // named import; legacy `storage` from '@forge/api' is no longer receiving features after 2025-03-17
+import Resolver       from '@forge/resolver';
+import { Queue, InvocationError, InvocationErrorCode } from '@forge/events';
+
+const r2 = await api.asUser().requestConfluence(route`/wiki/api/v2/pages/${pageId}`);
+await kvs.set('config', { theme: 'dark' });
+```
+
+## Authentication — what's correct, what's wrong
+
+| Pattern | Use? |
+|---|---|
+| `await requestConfluence('/wiki/api/v2/...')` from `@forge/bridge` (Custom UI) | **Yes** — Forge proxies the request and adds OAuth automatically. |
+| `await api.asUser().requestConfluence(route\`...\`)` / `api.asApp()` (resolver) | **Yes** — token exchange handled for you. |
+| `invoke('myResolver', payload)` from `@forge/bridge` | **Yes** — when the UI needs backend logic before/after the REST call. |
+| `const token = await AP.context.getToken();` + `Authorization: 'JWT <token>'` | **No.** This is the legacy Atlassian Connect pattern — Forge apps do not use it. |
+| Local `jsonwebtoken.sign(...)` against the Connect shared secret | **No.** Connect-only. |
+
+If older docs in this skill use `AP.context.getToken()`, treat them as legacy reference. The replacement is always one of the patterns above.
+
+## Manifest skeleton
 
 ```yaml
-# manifest.yml - Basic Forge app for Confluence
 modules:
-  # Use confluence:pageBanner instead of pageCustomUi (which doesn't exist)
   confluence:pageBanner:
-    - key: my-page-banner
+    - key: my-banner
       resource: main
-      icon: icon.png
-      title: My Page Banner
-      
-  webhook:
-    - destination: page-webhook
-      event: confluence:page:created
-      
-  # For blog posts, use the same modules (confluence:pageBanner or confluence:contentAction)
-  confluence:contentAction:
-    - key: my-blog-action
-      resource: main
-      title: My Blog Action
-      displayConditions:
-        pageTypes:
-          - blogpost
+      title: My Banner
+  function:
+    - key: handler
+      handler: index.handler
 
-  resource:
-    - key: main
-      path: src/main.jsx
+resources:
+  - key: main
+    path: static/banner/build         # Custom UI build directory
+
+permissions:
+  scopes:
+    - read:confluence-content.summary
+    - storage:app
+  external:
+    fetch:
+      backend:
+        - api.atlassian.com           # only if you call the Org Admin API
+
+app:
+  id: ari:cloud:ecosystem::app/YOUR-APP-ID
+  runtime:
+    name: nodejs22.x                  # also valid: nodejs24.x, nodejs20.x
+    memoryMB: 512                     # optional; raises CPU too
 ```
 
-**Note**: Confluence Forge does NOT have `confluence:pageCustomUi` or `confluence:blogPostCustomUi` modules. Use:
-- `confluence:pageBanner` for banners on pages and blog posts
-- `confluence:contentAction` for menu items in "more actions" (•••)
+## Key Differences from the Jira Forge Skill
 
----
+| Feature | Jira | Confluence |
+|---|---|---|
+| Workflow modules | Validators, conditions, post-functions | n/a |
+| Issue-context UIs | `jira:issuePanel`, `jira:issueAction` | `confluence:contentBylineItem`, `confluence:contentAction` |
+| Per-resource storage | Issue properties | Content / space properties (CQL-indexed) |
+| Page body format | n/a | ADF (`atlas_doc_format`) or storage (XHTML) — see `28-adf-and-storage-format.md` |
+| Events | Workflow transitions, issue lifecycle | `avi:confluence:created/updated/...:page|blogpost|comment|attachment|...` |
 
-## Documentation Index
+## Failure strategies
 
-### Core Concepts & Setup
-- [01-core-concepts.md](docs/01-core-concepts.md) - Forge fundamentals for Confluence
-- **[08-cli-commands.md](docs/08-cli-commands.md)** - Forge CLI reference (NEW)
+| Symptom | First-pass fix | Detail |
+|---|---|---|
+| `403` permission denied | Add scope, run `forge install --upgrade` | `12-permissions-scopes.md` |
+| `409 Conflict` on PUT page or property | You sent a stale `version.number` — GET → bump → PUT | `28-adf-and-storage-format.md` |
+| `429 Too Many Requests` | Honor `Retry-After`, exponential backoff with jitter | `24-production-patterns.md` (Pattern 3) |
+| Function timed out (~25s) | Push the work to an async queue | `26-async-events-and-queues.md` |
+| "Refused to load script" / CSP errors | Allowlist host in `permissions.external.fetch.client` (or `.backend`); bundle scripts | `gotchas.md` |
+| Tunnel doesn't apply manifest changes | Restart tunnel; `forge install --upgrade` if scopes changed | `gotchas.md` |
+| Trigger fires on your own writes | Add `filter.ignoreSelf: true` and check `event.atlassianId` against your app's accountId | `24-production-patterns.md` (Pattern 5) |
 
-### Custom UI Modules
-- [02-page-custom-ui.md](docs/02-page-custom-ui.md) - Page extensions (most common)
-- [03-space-settings.md](docs/03-space-settings.md) - Space configuration panels
-- [04-blogpost-custom-ui.md](docs/04-blogpost-custom-ui.md) - Blog post extensions
+## Documentation map
 
-### Content & Data
-- [06-content-properties.md](docs/06-content-properties.md) - Storing data with content properties
-- **[21-custom-content.md](docs/21-custom-content.md)** - Custom Content module guide (NEW)
-- [08-api-endpoints.md](docs/08-api-endpoints.md) - Confluence REST API v2 reference
+### Core
+| File | Topic |
+|---|---|
+| `01-core-concepts.md` | Forge platform, modules, functions, resolvers, context — Confluence specifics |
+| `06-content-properties.md` | Per-content app data with CQL search |
+| `12-permissions-scopes.md` | OAuth scopes for the Confluence REST API |
+| `13-cli-commands.md` | `forge` CLI reference |
+
+### Modules & UI
+| File | Topic |
+|---|---|
+| `02-page-custom-ui.md` | Page extensions (`confluence:pageBanner`) |
+| `03-space-settings.md` | Space settings panels |
+| `04-blogpost-custom-ui.md` | Blog post extensions |
+| `05-dashboard-widgets.md` | Dashboard gadgets |
+| `21-custom-content.md` | `confluence:customContent` |
+
+### REST & Data
+| File | Topic |
+|---|---|
+| `08-api-endpoints.md` | Confluence REST v2 reference |
+| `09-labels-management.md` | Labels CRUD |
+| `10-user-permissions.md` | Users, groups, permissions |
+| `11-version-history.md` | Page versions |
+| `28-adf-and-storage-format.md` | ADF vs storage format, version handling, building ADF nodes |
 
 ### Automation & Events
-- [07-webhooks-events.md](docs/07-webhooks-events.md) - Webhook events and payloads
-- [09-scheduled-triggers.md](docs/09-scheduled-triggers.md) - Scheduled background tasks
+| File | Topic |
+|---|---|
+| `07-webhooks-events.md` | Trigger events and payloads |
+| `26-async-events-and-queues.md` | `@forge/events` queues, retries, long-running consumers |
 
-### Dashboard & UI Components
-- [05-dashboard-widgets.md](docs/05-dashboard-widgets.md) - Dashboard gadgets
+### Performance, Limits, Patterns
+| File | Topic |
+|---|---|
+| `20-performance-optimization.md` | Caching, batching, pagination |
+| `27-faas-limits-and-cost.md` | Timeouts, KVS quotas, queue limits |
+| `24-production-patterns.md` | 15 production patterns from Sentinel Vault and License Leash |
 
-### Advanced Patterns & Best Practices
-- **[24-real-world-patterns.md](docs/24-real-world-patterns.md)** - Real-world code examples (NEW)
-- **[20-performance-optimization.md](docs/20-performance-optimization.md)** - Performance best practices (NEW)
-- **[07-permissions-scopes.md](docs/07-permissions-scopes.md)** - OAuth scopes reference (NEW)
+### Testing
+| File | Topic |
+|---|---|
+| `30-testing-and-tunneling.md` | `forge tunnel`, jest mocks for `@forge/*` |
 
-### Decision Guides
-- [when-to-use-which.md](docs/when-to-use-which.md) - Which module type to use?
-- [problem-patterns.md](docs/problem-patterns.md) - Common patterns with code examples
+### Decision aids
+| File | Topic |
+|---|---|
+| `when-to-use-which.md` | Module selection guide |
+| `gotchas.md` | Pitfalls and environment-specific quirks |
+| `problem-patterns.md` | Common problems with code snippets |
 
----
+## Templates
 
-## Available Templates
+Copy-paste-ready manifests in `templates/`:
 
-| Template | Description | Use Case |
-|----------|-------------|----------|
-| `page-custom-ui.yml` | Page extension configuration | Add custom UI via pageBanner module |
-| `space-settings.yml` | Space settings panel | Configure app for a space |
-| `dashboard-gadget.yml` | Dashboard widget | Display data on dashboards |
-| `webhook-handler.yml` | Webhook event handler | React to Confluence events |
-| `scheduled-trigger.yml` | Scheduled background task | Periodic background processing |
-| `content-property-storage.yml` | Content property patterns | Store app data with content |
-| **`custom-content-module.yml`** | Custom content definition | Create custom content types (NEW) |
-| **`content-byline-item.yml`** | Byline item module | Add metadata to page bylines (NEW) |
-| **`remote-webhook-handler.yml`** | Remote webhook routing | Route events to external services (NEW) |
+| Template | Module / Use case |
+|---|---|
+| `page-custom-ui.yml` | `confluence:pageBanner` (most-used Custom UI surface) |
+| `blogpost-custom-ui.yml` | Custom UI on blogposts (via `displayConditions.pageTypes: [blogpost]`) |
+| `content-byline-item.yml` | `confluence:contentBylineItem` |
+| `content-macro.yml` | Editor `macro` |
+| `space-settings.yml` | Space-scoped settings panel |
+| `space-properties.yml` | Space property storage |
+| `content-property-storage.yml` | Per-content app data with CQL |
+| `dashboard-gadget.yml` | Dashboard widget |
+| `attachment-management.yml` | Page attachments CRUD |
+| `page-hierarchy.yml` | Page tree navigation |
+| `webhook-handler.yml` | `trigger` (event-based) |
+| `scheduled-trigger.yml` | `scheduledTrigger` |
+| `remote-webhook-handler.yml` | Routing events to an external service |
+| `custom-content-module.yml` | `confluence:customContent` |
 
-**Note**: Confluence Forge does NOT have `confluence:pageCustomUi` or `confluence:blogPostCustomUi` modules. Use:
-- `confluence:pageBanner` for banners on pages and blog posts
-- `confluence:contentAction` for menu items in "more actions" (•••)
-- `confluence:contextMenu` for text selection context menus
+## Scripts
 
----
+CI-safe shell scripts in `scripts/`:
 
-## Key Differences from Jira Forge
+| Script | Purpose |
+|---|---|
+| `preflight-check.sh` | Verify CLI install, auth, manifest, lint |
+| `validate-manifest.sh` | Run `forge lint` with parsed summary |
+| `deploy-and-install.sh` | `forge deploy` + `forge install --upgrade` |
+| `dev-setup.sh` | Start `forge tunnel` (`-e` for environment) |
 
-| Feature | Jira Forge | Confluence Forge |
-|---------|------------|------------------|
-| **Workflow modules** | Validators, conditions, post-functions | No workflows |
-| **Custom UI locations** | Workflow rules | Pages, Blog Posts, Space Settings |
-| **Content types** | Issues, Comments | Pages, Blog Posts, Whiteboards |
-| **Storage patterns** | Issue properties | Content Properties (per content type) |
-| **Events** | Workflow transitions | Page/blogpost created/updated/deleted |
+Recommended workflow: `preflight-check.sh` → make changes → `validate-manifest.sh` → `deploy-and-install.sh`.
 
----
+## Changelog
 
-## Confluence REST API v2 Base URL
-
-```
-https://{your-domain}.atlassian.net/wiki/api/v2
-```
-
-Example: `https://mycompany.atlassian.net/wiki/api/v2/pages`
-
-Authentication via OAuth 2.0 (3LO) or JWT from Forge.
-
----
-
-## Common CLI Commands
-
-```bash
-# Initialize new app (use -t confluence flag)
-forge init my-confluence-app -t confluence
-
-# Deploy app
-forge deploy
-
-# Install on site
-forge install --upgrade
-
-# Start local tunnel for testing
-forge tunnel
-
-# View logs
-forge logs -n 50
-
-# Auto-fix manifest issues
-forge lint --fix
-```
-
-**Important**: The Forge CLI auto-generates templates. Always verify the generated `manifest.yml` uses correct module types:
-- Use `confluence:pageBanner` instead of non-existent `confluence:pageCustomUi`
-- Use `confluence:contentAction` for menu items on pages/blogs
-
----
-
-## Failure Strategies
-
-When an error occurs during execution, follow these patterns:
-
-- **Manifest/Module Errors**: If a module is not recognized, verify the `manifest.yml` against the [Documentation Index](#documentation-index) and ensure you are using the correct Confluence module names (e.g., `confluence:pageBanner`).
-- **Permission Denied (403)**: Check if the required OAuth scopes are defined in the `permissions.scopes` section of your `manifest.yml`. Refer to [07-permissions-scopes.md](docs/07-permissions-scopes.md).
-- **API Errors (4xx/5xx)**: 
-  - For 404 errors, verify the resource ID (pageId, spaceId) exists.
-  - For 429 (Rate Limit), implement exponential backoff.
-- **Runtime Errors**: Use `forge logs` to inspect the error stack trace and ensure all required environment variables or dependencies are present.
-
-## Gotchas
-
-For common pitfalls and environment-specific facts, see [Gotchas](docs/gotchas.md).
+- Replaced the legacy "Authentication via OAuth 2.0 (3LO) or JWT from Forge" claim with the three actually-valid patterns; added an explicit "Auth note" preamble to every doc/template that still contained `AP.context.getToken()` (Atlassian Connect, not Forge).
+- Standardized on the named KVS import: `import { kvs } from '@forge/kvs'`. Legacy `storage` from `@forge/api` flagged with the 2025-03-17 deprecation date.
+- Removed the spurious `forge register` step from `templates/page-custom-ui.yml` (no such command — use `forge install --upgrade`).
+- Renumbered duplicate prefixes: `07-permissions-scopes.md` → `12-`, `08-cli-commands.md` → `13-`.
+- Added five new docs: `24-production-patterns.md` (15 patterns from Sentinel Vault and License Leash), `26-async-events-and-queues.md`, `27-faas-limits-and-cost.md`, `28-adf-and-storage-format.md`, `30-testing-and-tunneling.md`. Removed `24-real-world-patterns.md` (folded in).
+- Stripped emoji from shell scripts; added `set -euo pipefail` headers.
 
 ## Support & Resources
 
