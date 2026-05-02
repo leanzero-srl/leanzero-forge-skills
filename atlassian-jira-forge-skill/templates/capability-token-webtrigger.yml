@@ -1,0 +1,187 @@
+# Capability-Token Web Trigger Template
+
+A Forge web trigger is a public HTTPS endpoint into your app — anyone with the URL can hit it. To make calls safe, this pattern mints **two-secret capability tokens**: a 256-bit token in the URL and a 256-bit bearer in the `Authorization` header. The KVS record bound to the token also pins the operation (e.g. issue key, attachment id, actor), so a leaked token can't be repurposed.
+
+This is the pattern CogniRunner uses for its attachment bridge. It also implements the doc-processor MCP `uploadUrl` / `uploadAuthHeader` upload contract.
+
+## File: manifest.yml
+
+```yaml
+modules:
+  webtrigger:
+    - key: capability-endpoint
+      function: handleCapability
+
+  function:
+    - key: handleCapability
+      handler: index.handleCapability
+    - key: mintCapability
+      handler: index.mintCapability
+
+  # Optional: expose `mintCapability` to a UI via a resolver
+  jira:globalPage:
+    - key: mint-ui
+      resource: mint-ui
+      title: Issue your capability link
+
+resources:
+  - key: mint-ui
+    path: src/mint/build
+
+permissions:
+  scopes:
+    - read:jira-work
+    - storage:app
+```
+
+## File: src/index.js
+
+```javascript
+import api, { route } from '@forge/api';
+import { kvs } from '@forge/kvs';
+import Resolver from '@forge/resolver';
+import { randomBytes, timingSafeEqual } from 'crypto';
+
+const TOKEN_PREFIX = 'cap_token:';
+const TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+// ---- 1) Mint -------------------------------------------------------
+// Called by your Resolver / UI / consumer when handing out a capability.
+const resolver = new Resolver();
+resolver.define('mintCapability', async ({ payload, context }) => {
+  return mintCapability({
+    operation: payload.operation,    // e.g. 'attachment.read'
+    issueKey: payload.issueKey,
+    actorAccountId: context.accountId,
+  });
+});
+export const handler = resolver.getDefinitions();
+
+export async function mintCapability({ operation, issueKey, actorAccountId }) {
+  const token  = randomBytes(32).toString('base64url');  // 256-bit URL token
+  const bearer = randomBytes(32).toString('base64url');  // 256-bit Authorization
+  const expiresAt = Date.now() + TTL_MS;
+
+  // Pin the operation server-side. The caller can never widen scope.
+  const record = { operation, issueKey, actorAccountId, bearer, expiresAt };
+
+  try {
+    await kvs.set(TOKEN_PREFIX + token, record, {
+      ttl: { unit: 'SECONDS', value: Math.ceil(TTL_MS / 1000) },
+    });
+  } catch {
+    // Older @forge/kvs without ttl option — falls back to soft expiry.
+    await kvs.set(TOKEN_PREFIX + token, record);
+  }
+
+  const baseUrl = await getWebtriggerUrl();
+  console.log(
+    `[mintCapability] op=${operation} issue=${issueKey} actor=${actorAccountId} ` +
+    `token=${redact(token)} bearer=${redact(bearer)}`
+  );
+
+  return {
+    url: `${baseUrl}?t=${token}`,
+    authHeader: `Bearer ${bearer}`,
+  };
+}
+
+// ---- 2) Verify + serve --------------------------------------------
+export async function handleCapability(event) {
+  const url = new URL(event.queryParameters?.url || event.url || '');
+  const token = url.searchParams.get('t') || event.queryParameters?.t;
+  const headerBearer =
+    (event.headers?.authorization || event.headers?.Authorization || '')
+      .replace(/^Bearer\s+/i, '');
+
+  if (!token || !headerBearer) {
+    return json(401, { error: 'unauthorized' });
+  }
+
+  const record = await kvs.get(TOKEN_PREFIX + token);
+  if (!record) return json(401, { error: 'unauthorized' });
+
+  // Single-use: delete BEFORE the heavy fetch so a slow downstream can't lock the token open.
+  await kvs.delete(TOKEN_PREFIX + token);
+
+  if (Date.now() > record.expiresAt) return json(401, { error: 'expired' });
+
+  // Timing-safe bearer compare (lengths must match — zero-pad if needed).
+  const a = Buffer.from(headerBearer);
+  const b = Buffer.from(record.bearer);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return json(401, { error: 'unauthorized' });
+  }
+
+  // Now perform the *server-side* operation. The token never granted
+  // anything by itself; this fetch is the authorized action.
+  if (record.operation === 'attachment.read') {
+    return await readAttachment(record.issueKey, url.searchParams.get('id'));
+  }
+  return json(400, { error: 'unknown-operation' });
+}
+
+async function readAttachment(issueKey, attachmentId) {
+  const r = await api
+    .asApp()
+    .requestJira(route`/rest/api/3/attachment/content/${attachmentId}`);
+  if (!r.ok) return json(r.status, { error: 'fetch-failed' });
+  const buf = Buffer.from(await r.arrayBuffer());
+  return {
+    statusCode: 200,
+    headers: { 'Content-Type': ['application/json'] },
+    body: JSON.stringify({
+      issueKey,
+      bytes: buf.toString('base64'),
+    }),
+  };
+}
+
+// ---- helpers -------------------------------------------------------
+function json(status, body) {
+  return {
+    statusCode: status,
+    headers: { 'Content-Type': ['application/json'] },
+    body: JSON.stringify(body),
+  };
+}
+
+function redact(secret) {
+  if (!secret) return '<empty>';
+  return `${secret.slice(0, 4)}…${secret.slice(-4)}`;
+}
+
+async function getWebtriggerUrl() {
+  // Cached after first call; fetched via Forge runtime API.
+  // Replace with your app's web trigger lookup.
+  return process.env.WEBTRIGGER_URL || '';
+}
+```
+
+## Why two secrets?
+
+A URL-only token leaks in browser history, server logs, and analytics. A header-only bearer can't be sent in an `<img src>` or naive client. Requiring **both** means a leak from any single channel doesn't grant access. The token also pins the operation server-side at mint time, so the holder can't widen scope (e.g. read a different issue's attachment).
+
+## Gotchas
+
+- **Delete the token *before* the downstream fetch.** A stuck fetch must not hold the token open for replay.
+- **Use `timingSafeEqual`**, not `===`, on the bearer comparison.
+- **`base64url`** (no padding) is URL-safe; keeps tokens short and not subject to URL encoding.
+- **TTL on KVS** auto-cleans abandoned records — but always honor `expiresAt` in code; KVS deletion is asynchronous.
+- **Don't put PII in the URL** (`?t=…` is fine, `?email=…` is not).
+- **Rotate the bearer on every mint** — never reuse a previously-issued bearer.
+
+## Testing
+
+```bash
+forge deploy
+forge install --upgrade
+# Get the webtrigger URL once:
+forge webtrigger
+# Then mint a capability via your UI/resolver and curl the URL with the bearer.
+```
+
+## References
+
+- https://developer.atlassian.com/platform/forge/runtime-reference/webtrigger
+- See also: `docs/24-production-patterns.md` → "Capability-token web triggers"

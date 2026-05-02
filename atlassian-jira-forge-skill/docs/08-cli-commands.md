@@ -207,19 +207,21 @@ For sensitive data like API keys, use Forge's Key-Value Storage:
 
 ```javascript
 // Store a secret (in your resolver function)
-import kvs from '@forge/kvs';
-await kvs.set('MY_API_KEY', 'secret-value');
+import { kvs } from '@forge/kvs';
+await kvs.setSecret('MY_API_KEY', 'secret-value');
 
-// Retrieve in your function:
-const apiKey = await kvs.get('MY_API_KEY');
+// Retrieve in your function (encrypted):
+const apiKey = await kvs.getSecret('MY_API_KEY');
 ```
+
+> Use `kvs.setSecret` / `kvs.getSecret` for credentials — values are encrypted at rest. Use `kvs.set` / `kvs.get` for non-sensitive data. Both require the `storage:app` scope.
 
 ### Available KVS API Functions
 
-Use the `@forge/kvs` module in your JavaScript code:
+Use the `@forge/kvs` module in your JavaScript code (named import — the legacy default import shape is not the documented form):
 
 ```javascript
-import kvs from '@forge/kvs';
+import { kvs } from '@forge/kvs';
 
 // Get a value
 const value = await kvs.get('MY_KEY');
@@ -230,6 +232,8 @@ await kvs.set('MY_KEY', 'value');
 // Delete a value
 await kvs.delete('MY_KEY');
 ```
+
+> The older `import { storage } from '@forge/api'` API still works but stopped receiving feature updates after 2025-03-17. Prefer `@forge/kvs` for new code.
 
 ### Permissions Required
 
@@ -261,7 +265,23 @@ permissions:
 
 ---
 
+## Runtime Versions
+
+Per the official runtime reference, Forge currently supports `nodejs24.x`, `nodejs22.x`, and `nodejs20.x`. Declare in `manifest.yml`:
+
+```yaml
+runtime:
+  name: nodejs22.x
+  memoryMB: 512   # optional; raising memory also raises CPU
+```
+
+Per-function override is allowed via `function.runtime.memoryMB`.
+
+---
+
 ## Next Steps
 
 - **Permissions**: Understand what scopes are needed for your modules
 - **API Endpoints**: Learn how to make REST API calls
+- **FaaS Limits**: see `27-faas-limits-and-cost.md` for default 25s timeout, 900s consumer ceiling, KVS quotas
+- **Async Events**: see `26-async-events-and-queues.md` for queues, retries, long-running work

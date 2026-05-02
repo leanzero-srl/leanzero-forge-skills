@@ -566,4 +566,4 @@ export const checkRateLimits = async () => {
 
 - [Custom UI Troubleshooting](18-custom-ui-troubleshooting.md)
 - [Performance Optimization](20-performance-optimization.md)
-- [API Endpoints Enhanced](06-api-endpoints-enhanced.md)
+- [API Endpoints](06-api-endpoints.md)

@@ -63,14 +63,19 @@ A capability your app provides. Each module type serves a specific purpose:
 
 | Module Type | Purpose |
 |-------------|---------|
-| `jira:issueCreatedTrigger` | Trigger when an issue is created |
-| `jira:workflowCondition` | Control visibility of transitions using Jira expressions (Connect/Forge pattern) |
-| `jira:workflowPostFunction` | Execute logic after transition using Jira expressions (Connect/Forge pattern) |
-| `scheduledTriggers` | Run functions at scheduled intervals |
-| `trigger` | Handle webhook events from external systems |
-| `macro` | Insert content in Confluence pages |
+| `trigger` | Run a function when product events fire (`avi:jira:created:issue`, etc.) |
+| `jira:workflowValidator` | Block a transition when validation fails |
+| `jira:workflowCondition` | Hide/show transitions based on app logic |
+| `jira:workflowPostFunction` | Run logic after a transition completes |
+| `scheduledTrigger` | Run functions on a cron schedule |
+| `consumer` | Process events from an async queue (`@forge/events`) |
+| `webtrigger` | Public HTTPS endpoint into your app |
+| `jira:globalPage` / `jira:adminPage` / `jira:projectPage` | Full-page UIs |
+| `jira:issuePanel` / `jira:issueAction` | Issue-context UIs |
+| `jira:customField` / `jira:customFieldType` | Custom fields |
+| `jira:dashboardGadget` | Dashboard widgets |
 
-**Important Note**: Forge apps primarily use **Jira expressions** for workflow validators, conditions, and post functions - not custom module declarations like Connect apps. The `jira:workflowValidator`, `jira:workflowCondition`, and `jira:workflowPostFunction` keys shown in manifest examples are from the older Connect app framework.
+> The three workflow modules are real, supported Forge modules — see `developer.atlassian.com/platform/forge/manifest-reference/modules/jira-workflow-validator` (and the parallel `jira-workflow-condition` / `jira-workflow-post-function` pages). They run your Forge function during the transition. Jira expressions are an alternative for simple checks that don't need code, but the modules are the right choice when you need to call REST APIs, KVS, or external systems.
 
 ### Function
 
@@ -220,9 +225,9 @@ export const dailyReport = async (event, context) => {
 
 ## Next Steps
 
-- **Jira Modules**: Learn about workflow conditions and post functions using Jira expressions
-- **Events & Payloads**: Understand what data is available when modules trigger
-- **API Endpoints**: Know how to call Jira REST APIs from your app
-- **Permissions**: Configure required scopes for your app's functionality
-
-**Important Note on Workflow Rules**: Forge apps use **Jira expressions** (not custom module types) for workflow validators, conditions, and post functions. These are configured via the Jira UI or through the Jira Management API, not in the `manifest.yml`.
+- **Workflow modules**: `02-workflow-validators.md`, `03-workflow-conditions.md`, `04-workflow-post-functions.md`
+- **Events & Payloads**: `05-events-payloads.md`
+- **API Endpoints**: `06-api-endpoints.md`
+- **Permissions**: `07-permissions-scopes.md`
+- **Async events / long-running work**: `26-async-events-and-queues.md`
+- **FaaS limits**: `27-faas-limits-and-cost.md`

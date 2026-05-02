@@ -1,0 +1,188 @@
+# Async Queue Consumer Template (long-running work, > 25s)
+
+Use this when work exceeds the 25-second resolver / trigger / validator timeout. The pattern: a fast trigger or resolver pushes to a queue, then a `consumer` function with `timeoutSeconds: 900` does the heavy lifting. Front-end polls a result keyed by `taskId`.
+
+This is the same shape used by CogniRunner for AI calls and PPM Pro for background indexing.
+
+## File: manifest.yml
+
+```yaml
+modules:
+  # 1) Trigger that fans events into the queue (fast — well under 25s)
+  trigger:
+    - key: enqueue-on-issue-update
+      function: enqueue
+      events:
+        - avi:jira:updated:issue
+      filter:
+        ignoreSelf: true   # don't loop on your own writes
+
+  # 2) Long-running consumer reads from the queue
+  consumer:
+    - key: long-job-consumer
+      queue: long-jobs
+      function: consume
+
+  function:
+    - key: enqueue
+      handler: index.enqueue
+    - key: consume
+      handler: index.consume
+      timeoutSeconds: 900   # max for consumer functions
+
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - storage:app
+```
+
+## File: src/index.js
+
+```javascript
+import api, { route } from '@forge/api';
+import { kvs } from '@forge/kvs';
+import {
+  Queue,
+  InvocationError,
+  InvocationErrorCode,
+  RateLimitError,
+} from '@forge/events';
+
+const queue = new Queue({ key: 'long-jobs' });
+const TASK_PREFIX = 'task:';
+
+// ---- 1) Producer: trigger handler pushes to the queue --------------
+export const enqueue = async (event, context) => {
+  const taskId = `${event.issue.key}-${Date.now()}`;
+
+  await kvs.set(`${TASK_PREFIX}${taskId}`, { status: 'queued' });
+
+  try {
+    await queue.push({
+      body: {
+        taskId,
+        issueKey: event.issue.key,
+        accountId: context.accountId,
+      },
+      // Optional: serialize per-issue work (avoid concurrent writes for the same issue)
+      concurrency: { key: event.issue.key, limit: 1 },
+    });
+  } catch (err) {
+    if (err instanceof RateLimitError) {
+      // Queue ingest is rate-limited per minute; back off and try again later.
+      await kvs.set(`${TASK_PREFIX}${taskId}`, {
+        status: 'queue-rate-limited',
+      });
+      return;
+    }
+    throw err;
+  }
+
+  return { taskId };
+};
+
+// ---- 2) Consumer: long-running handler ------------------------------
+export const consume = async (event) => {
+  const { taskId, issueKey, accountId } = event.body;
+  const retry = event.retryContext;
+
+  // Optional: log retries for debugging
+  if (retry) {
+    console.log(
+      `[consume] retry #${retry.retryCount} reason=${retry.retryReason}`
+    );
+  }
+
+  await kvs.set(`${TASK_PREFIX}${taskId}`, { status: 'processing' });
+
+  try {
+    // Long work goes here — REST calls, AI inference, batch updates, etc.
+    const result = await doExpensiveWork({ issueKey, accountId });
+
+    await kvs.set(`${TASK_PREFIX}${taskId}`, {
+      status: 'done',
+      result,
+      finishedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    // Upstream rate-limit → ask Forge to retry honoring Retry-After.
+    if (err.status === 429 && err.retryAfter) {
+      return new InvocationError({
+        retryAfter: Math.min(err.retryAfter, 900),
+        retryReason: InvocationErrorCode.FUNCTION_UPSTREAM_RATE_LIMITED,
+        retryData: { taskId, issueKey }, // <= 4 KB
+      });
+    }
+
+    // Transient error → exponential backoff with jitter, capped at 4 retries.
+    if (isTransient(err)) {
+      const count = (retry?.retryCount ?? 0) + 1;
+      const delay = Math.min(20 * 2 ** count + Math.random() * 100, 900);
+      return new InvocationError({
+        retryAfter: delay,
+        retryReason: InvocationErrorCode.FUNCTION_RETRY_REQUEST,
+        retryData: { taskId, issueKey },
+      });
+    }
+
+    // Permanent failure: persist and stop retrying.
+    await kvs.set(`${TASK_PREFIX}${taskId}`, {
+      status: 'failed',
+      error: err.message,
+    });
+  }
+};
+
+// ---- 3) (Optional) Resolver for the UI to poll task status ----------
+import Resolver from '@forge/resolver';
+const resolver = new Resolver();
+resolver.define('getTaskStatus', async ({ payload }) => {
+  return (await kvs.get(`${TASK_PREFIX}${payload.taskId}`)) ?? null;
+});
+export const handler = resolver.getDefinitions();
+
+// ---- helpers -------------------------------------------------------
+async function doExpensiveWork({ issueKey, accountId }) {
+  // Example: fetch issue, call an external API, write back a comment.
+  const r = await api
+    .asApp()
+    .requestJira(route`/rest/api/3/issue/${issueKey}`);
+  const issue = await r.json();
+  // ... do work ...
+  return { summary: issue.fields.summary };
+}
+
+function isTransient(err) {
+  return (
+    err.status === 502 || err.status === 503 || err.status === 504 ||
+    err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT'
+  );
+}
+```
+
+## Limits & gotchas
+
+- **Consumer timeout**: max `timeoutSeconds: 900` (15 min). Default is 25s — set it explicitly.
+- **`queue.push` payload**: ≤ 50 events and ≤ 200 KB combined.
+- **`InvocationError.retryData`**: ≤ 4 KB.
+- **Retries**: Forge retries up to **4 times** total. After that the event is dropped.
+- **`retryAfter`**: ≤ 900s.
+- **Queue ingest is rate-limited per minute**: catch `RateLimitError` from `queue.push`.
+- **`@forge/events` v2 manifest shape uses `function:`**, not the deprecated v1 `resolver:` shape.
+- **Self-loop guard**: if your consumer writes to Jira, set `filter.ignoreSelf: true` on the trigger or your trigger will fire again on its own write.
+
+## Testing
+
+```bash
+forge deploy
+forge install --upgrade
+# Touch an issue in Jira to fire the trigger
+forge logs -n 50 --follow
+```
+
+## References
+
+- https://developer.atlassian.com/platform/forge/runtime-reference/async-events-api
+- https://developer.atlassian.com/platform/forge/use-a-long-running-function
+- See also: `docs/26-async-events-and-queues.md` (in this skill)
