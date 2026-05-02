@@ -23,8 +23,8 @@ This skill provides comprehensive guidance for integrating with Confluence Cloud
 
 ## Quick Start
 
-1. **Get your API credentials**: Create an app at https://developer.atlassian.com/console/myapps/
-2. **Obtain OAuth token**: Use 3LO flow or JWT
+1. **Get your API credentials**: either an [API token](https://id.atlassian.com/manage-profile/security/api-tokens) (Basic auth) or [register an OAuth 2.0 app](https://developer.atlassian.com/console/myapps/) (3LO).
+2. **Obtain a Bearer token**: API tokens are used directly with Basic auth (`base64(email:token)`); OAuth apps go through the 3LO flow at `auth.atlassian.com`.
 3. **Make your first request**:
 
 ```bash
@@ -43,11 +43,13 @@ https://{your-domain}.atlassian.net/wiki/api/v2
 
 ### Authentication
 
-| Method | Use Case |
-|--------|----------|
-| OAuth 2.0 (3LO) | Production apps with user consent |
-| JWT | Server-to-server authentication |
-| Personal Access Token | Development/testing only |
+| Method | Header shape | Use Case |
+|---|---|---|
+| API token + email (Basic auth) | `Authorization: Basic base64(email:token)` | Personal scripts, CI jobs, simple integrations |
+| OAuth 2.0 (3LO) access token | `Authorization: Bearer <access_token>` | Apps acting on behalf of an Atlassian user |
+| Forge | `api.asUser/asApp().requestConfluence(...)` | App code running inside Atlassian (use the Forge skill) |
+
+> Locally-signed JWTs (Atlassian Connect's user-impersonation flow) are **not** accepted by the Confluence Cloud REST API for general server-to-server use. Use an API token or an OAuth access token issued by `auth.atlassian.com`. See `SKILL.md` for the canonical guidance.
 
 ### Common Endpoints
 

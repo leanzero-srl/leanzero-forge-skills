@@ -1,40 +1,31 @@
 ---
 name: jira-api-skill
-description: Atlassian Jira REST API v3. Use when integrating with Jira Cloud via REST endpoints for issue management, projects, workflows, users, and automation.
+description: Atlassian Jira Cloud REST API v3 integration from external apps — issues, projects, workflows, JQL search, ADF bodies, OAuth 2.0 / API-token auth, rate-limit handling. Use for non-Forge integrations calling Jira Cloud over HTTPS.
 ---
 
-# Atlassian Jira REST API v3
+# Atlassian Jira Cloud REST API v3
 
-This skill provides documentation for integrating with Jira Cloud using the REST API v3.
+Build external apps that talk to Jira Cloud over HTTPS — bots, integrations, sync jobs, scripts.
 
 ## When to Use This Skill
 
-**Use this skill when:**
-- You need to integrate with **Jira Cloud** via REST APIs
-- You are building external applications that interact with Jira issues, projects, or workflows
-- You require programmatic access to Jira data from non-Forge systems
-- You need to create, update, search, or manage issues programmatically
+Use this skill when:
+- You're integrating with Jira Cloud from an **external system** (a Node/Python service, a CI job, a Slack bot, etc.).
+- The communication is HTTPS to `https://{your-domain}.atlassian.net/rest/api/3/...`.
+- You're authenticating with an Atlassian API token (Basic auth) or OAuth 2.0 (3LO).
 
-**Do NOT use this skill when:**
-- You are developing Forge apps (use `atlassian-jira-forge-skill` instead)
-- You need workflow validators/conditions/post-functions (Forge modules)
-- You are building for Confluence Cloud (use `confluence-api-skill` instead)
+Skip this skill for:
+- Apps that run *inside* Atlassian as Forge functions → use `atlassian-jira-forge-skill`.
+- Pure org-admin operations (users/groups/policies across products) → use `atlassian-organizations-api-skill`.
+- Confluence Cloud → use `confluence-api-skill` or `atlassian-confluence-forge-skill`.
 
----
+## Pick a starting point
 
-## What This Skill Covers
-
-This skill covers:
-
-- **Issue Management**: Create, update, delete, transition issues
-- **Project Operations**: Manage projects, issue types, and project settings
-- **Workflow Operations**: Get workflows, transitions, status mappings
-- **User & Permission Management**: Query users, check permissions, groups
-- **Search & Query**: Search using JQL (Jira Query Language)
-- **Attachments & Comments**: Add attachments, create comments
-- **REST API Endpoints**: Complete reference for `/rest/api/3` endpoints
-
----
+- **Production patterns** (auth refresh, retry+jitter, idempotent writes, pagination): `docs/24-rest-integration-patterns.md`.
+- **Rate limits & quotas**: `docs/27-rate-limits-and-quotas.md`.
+- **ADF (descriptions, comments, worklog bodies)**: `docs/28-adf-construction.md`.
+- **Testing your integration**: `docs/30-testing-rest-integrations.md`.
+- **Endpoint reference**: `docs/06-api-endpoints.md` (and the per-resource appendix in `docs/api/`).
 
 ## API Base URL
 
@@ -44,237 +35,205 @@ https://{your-domain}.atlassian.net/rest/api/3
 
 Example: `https://mycompany.atlassian.net/rest/api/3/issue/PROJ-123`
 
-### Authentication Options
+## Authentication — what's correct, what's wrong
 
-| Method | Use Case |
-|--------|----------|
-| OAuth 2.0 (3LO) | User authorization flow |
-| JWT | Server-to-server authentication |
-| Personal Access Token | Development/testing only |
+The Jira Cloud REST API accepts the following auth methods:
 
----
+| Method | When to use | Header shape |
+|---|---|---|
+| **API token + email (Basic auth)** | Personal scripts, CI jobs, simple integrations | `Authorization: Basic base64(email:api_token)` |
+| **OAuth 2.0 (3LO)** — access token | Apps acting on behalf of an Atlassian user | `Authorization: Bearer <access_token>` |
+| **From a Forge app** | App code running inside Atlassian | `api.asUser().requestJira(route\`...\`)` from `@forge/api` |
+
+> **Don't** sign your own JWT with `jsonwebtoken` and pass it as a Bearer token. That's the legacy Atlassian Connect "user-impersonation JWT" flow, and the Jira Cloud REST API does not validate locally-signed JWTs for general server-to-server use. Use an API token (Basic auth) or an OAuth 2.0 access token issued by `auth.atlassian.com`.
+
+### API token (simplest)
+
+Create at <https://id.atlassian.com/manage-profile/security/api-tokens>. Then:
+
+```bash
+curl -u "$ATLASSIAN_EMAIL:$ATLASSIAN_API_TOKEN" \
+  https://your-domain.atlassian.net/rest/api/3/myself
+```
+
+Or in Node:
+
+```javascript
+const auth = Buffer
+  .from(`${process.env.ATLASSIAN_EMAIL}:${process.env.ATLASSIAN_API_TOKEN}`)
+  .toString('base64');
+
+const r = await fetch('https://your-domain.atlassian.net/rest/api/3/myself', {
+  headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' },
+});
+```
+
+### OAuth 2.0 (3LO) — for end-user-facing apps
+
+```bash
+# Step 1 — open this URL in a browser to get an authorization code
+# https://auth.atlassian.com/authorize?
+#   audience=api.atlassian.com&client_id=YOUR_CLIENT_ID&
+#   scope=read:jira-work+write:jira-work+offline_access&
+#   redirect_uri=https://YOUR_REDIRECT_URI&state=UNIQUE_STATE&response_type=code&prompt=consent
+
+# Step 2 — exchange the code for an access token
+curl -X POST https://auth.atlassian.com/oauth/token \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "grant_type": "authorization_code",
+    "client_id": "YOUR_CLIENT_ID",
+    "client_secret": "YOUR_CLIENT_SECRET",
+    "code": "AUTHORIZATION_CODE",
+    "redirect_uri": "https://YOUR_REDIRECT_URI"
+  }'
+
+# Step 3 — discover the cloudid for the site (one-time per site)
+curl -H "Authorization: Bearer <access_token>" \
+  https://api.atlassian.com/oauth/token/accessible-resources
+
+# Step 4 — make REST calls via the Atlassian gateway
+curl -H "Authorization: Bearer <access_token>" \
+  https://api.atlassian.com/ex/jira/{cloudid}/rest/api/3/myself
+```
+
+Refresh tokens via `grant_type=refresh_token` before `expires_in` lapses (default ~1 h). See `docs/24-rest-integration-patterns.md`.
 
 ## Quick Reference: Common Endpoints
 
 | Task | Endpoint | Method |
-|------|----------|--------|
+|---|---|---|
 | Get issue by key | `/rest/api/3/issue/{issueKey}` | GET |
 | Create issue | `/rest/api/3/issue` | POST |
 | Update issue | `/rest/api/3/issue/{issueIdOrKey}` | PUT |
 | Delete issue | `/rest/api/3/issue/{issueIdOrKey}` | DELETE |
 | Transition issue | `/rest/api/3/issue/{issueIdOrKey}/transitions` | POST |
+| List transitions | `/rest/api/3/issue/{issueIdOrKey}/transitions` | GET |
+| Add comment (ADF body) | `/rest/api/3/issue/{issueIdOrKey}/comment` | POST |
 | Get project | `/rest/api/3/project/{projectIdOrKey}` | GET |
-| Search issues (JQL) | `/rest/api/3/search` | POST |
-| Get user | `/rest/api/3/user` | GET |
-| Add comment | `/rest/api/3/issue/{issueIdOrKey}/comment` | POST |
+| Search (JQL) | `/rest/api/3/search/jql` | POST |
+| Get current user | `/rest/api/3/myself` | GET |
+| User search | `/rest/api/3/user/search?query=...` | GET |
+| Notify users about issue | `/rest/api/3/issue/{issueKey}/notify` | POST |
 
----
+> Issue descriptions, comments, and worklog bodies use **ADF** (Atlassian Document Format) — a JSON tree, not Markdown or HTML. See `docs/28-adf-construction.md`.
 
-## Request/Response Examples
-
-### Get an Issue
+## Get an issue (full request/response shape)
 
 ```http
 GET /rest/api/3/issue/PROJ-123 HTTP/1.1
-Host: {your-domain}.atlassian.net
-Authorization: Bearer <token>
+Host: your-domain.atlassian.net
+Authorization: Basic <base64(email:api_token)>
 Accept: application/json
 ```
 
-**Response (200 OK):**
 ```json
 {
   "key": "PROJ-123",
-  "id": "123456",
+  "id": "10042",
   "fields": {
-    "summary": "Issue Summary",
-    "status": {
-      "name": "To Do"
-    },
-    "issuetype": {
-      "name": "Bug"
-    },
-    "project": {
-      "key": "PROJ",
-      "name": "Project Name"
-    }
+    "summary": "Login button broken in Safari",
+    "status": { "name": "In Progress" },
+    "issuetype": { "name": "Bug" },
+    "project": { "key": "PROJ", "name": "My Project" },
+    "description": { "type": "doc", "version": 1, "content": [/* ADF nodes */] }
   }
 }
 ```
 
-### Create an Issue
+## Search with JQL (`POST /rest/api/3/search/jql`)
 
 ```http
-POST /rest/api/3/issue HTTP/1.1
-Host: {your-domain}.atlassian.net
-Authorization: Bearer <token>
+POST /rest/api/3/search/jql HTTP/1.1
+Host: your-domain.atlassian.net
+Authorization: Bearer <access_token>
 Content-Type: application/json
 Accept: application/json
 
 {
-  "fields": {
-    "project": {"key": "PROJ"},
-    "summary": "New Issue",
-    "description": "Issue description",
-    "issuetype": {"name": "Task"}
-  }
-}
-```
-
-### Search Issues with JQL
-
-```http
-POST /rest/api/3/search HTTP/1.1
-Host: {your-domain}.atlassian.net
-Authorization: Bearer <token>
-Content-Type: application/json
-Accept: application/json
-
-{
-  "jql": "project = PROJ AND status = 'In Progress'",
+  "jql": "project = PROJ AND status = 'In Progress' ORDER BY created DESC",
+  "fields": ["summary", "status", "assignee"],
   "maxResults": 50,
-  "fields": ["summary", "status", "assignee"]
+  "nextPageToken": null
 }
 ```
 
----
+> Jira's search endpoint paginates with `nextPageToken` (cursor-based), not `startAt`. Save the cursor between calls.
 
-## Documentation Index
+## Failure strategies
 
-### Core Concepts
-| Topic | File |
-|-------|------|
-| API Overview & Authentication | `docs/01-core-concepts.md` |
-| Error Handling & Rate Limits | `docs/problem-patterns.md` |
+| Status | First-pass fix | Detail |
+|---|---|---|
+| 401 | Token missing/expired/revoked. Refresh OAuth or rotate API token. | `01-core-concepts.md` |
+| 403 | Token's user/scope lacks the operation. Add scope or grant project permission. | `07-permissions-scopes.md` |
+| 404 | Issue/project/user doesn't exist *or* isn't visible to the auth context (e.g. private project). | — |
+| 409 | You sent a stale `version` or duplicated a unique value. | `24-rest-integration-patterns.md` |
+| 410 | Endpoint removed; check v2 → v3 deprecations. | `06-api-endpoints.md` |
+| 429 | Honor `Retry-After`; exponential backoff with jitter. | `27-rate-limits-and-quotas.md` |
+| 5xx | Atlassian-side. Retry with backoff; surface a friendly error. | `24-rest-integration-patterns.md` |
 
-### Issue Management
-| Topic | File |
-|-------|------|
-| Issues (CRUD) | `docs/02-ui-modifications.md` |
-| Workflows & Transitions | `docs/02-workflow-validators.md` |
-| Comments & Attachments | `docs/03-workflow-conditions.md` |
+## Documentation map
 
-### Search & Query
-| Topic | File |
-|-------|------|
-| JQL Search | `docs/06-api-endpoints-enhanced.md` |
+### Core
+| File | Topic |
+|---|---|
+| `01-core-concepts.md` | API overview, auth, versioning |
+| `06-api-endpoints.md` | Endpoint reference (with per-resource appendix in `docs/api/`) |
+| `07-permissions-scopes.md` | OAuth 2.0 scopes |
+| `13-cli-commands.md` *(if present)* | curl & dev-loop helpers |
 
-### Project Management
-| Topic | File |
-|-------|------|
-| Projects | `docs/12-dashboard-widgets.md` |
-| Issue Types | `docs/14-content-properties.md` |
+### Production
+| File | Topic |
+|---|---|
+| `24-rest-integration-patterns.md` | OAuth refresh, retry+jitter, idempotency, cursor pagination |
+| `27-rate-limits-and-quotas.md` | 429 behavior, per-endpoint guidance, batching |
+| `28-adf-construction.md` | Building ADF for descriptions, comments, worklogs |
+| `30-testing-rest-integrations.md` | Mocking, fixtures, dev-loop patterns |
 
-### User & Security
-| Topic | File |
-|-------|------|
-| Users & Groups | `docs/07-permissions-scopes.md` |
-| Permissions | `docs/07-permissions-scopes.md` |
+### Reference (inherited content)
+| File | Topic |
+|---|---|
+| `gotchas.md` | Pitfalls & edge cases |
+| `problem-patterns.md` | Common problem snippets |
+| `when-to-use-which.md` | When this skill vs the Forge skill |
 
----
+> **Note on the bundled docs and templates.** This skill ships several `docs/02-*` through `docs/22-*` files and `templates/*.yml` that overlap heavily with the `atlassian-jira-forge-skill` directory. They cover Forge-specific surfaces (workflow validators, custom UI, scheduled triggers) and are kept here as a convenience reference for cross-context lookups. For pure REST integration work, the canonical files are the ones listed in **Core** and **Production** above.
 
-## Available Templates
+## Templates
 
-| Template | Description | Use Case |
-|----------|-------------|----------|
-| `webhook-handler.yml` | Webhook event handling | Receive Jira events |
-| `scheduled-trigger.yml` | Scheduled API tasks | Periodic sync operations |
-| `bulk-operation.yml` | Batch processing patterns | Handle multiple issues efficiently |
+Copy-paste-ready helpers in `templates/`:
 
----
+| Template | Purpose |
+|---|---|
+| `webhook-handler.yml` | Receive Jira webhook events |
+| `bulk-operation.yml` | Batch-update many issues with rate-limit handling |
+| `scheduled-trigger.yml` | Periodic sync skeleton (Forge or external scheduler) |
+| `storage-kvs-example.yml` | KVS patterns (Forge) |
 
-## Authentication
+## Scripts
 
-### OAuth 2.0 (3LO)
+CI-safe helpers in `scripts/`:
 
-```bash
-# Authorization URL
-https://auth.atlassian.com/authorize?client_id=YOUR_CLIENT_ID&scope=read%3Ajira-work&redirect_uri=https://YOUR_REDIRECT_URI&state=UNIQUE_STATE&response_type=code&prompt=consent
-
-# Exchange code for token
-curl -X POST https://auth.atlassian.com/oauth/token \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "client_id": "YOUR_CLIENT_ID",
-    "client_secret": "YOUR_CLIENT_SECRET",
-    "code": "AUTHORIZATION_CODE",
-    "grant_type": "authorization_code"
-  }'
-```
-
-### JWT Authentication
-
-```javascript
-import jwt from 'jsonwebtoken';
-
-const token = jwt.sign(
-  {
-    iss: 'YOUR_CLIENT_ID',
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 60,
-    qsh: 'QUERY_STRING_HASH'
-  },
-  'YOUR_CLIENT_SECRET'
-);
-```
-
----
-
-## Common CLI Commands
-
-### cURL Examples
-
-```bash
-# Get an issue
-curl -H "Authorization: Bearer <token>" \
-  https://{your-domain}.atlassian.net/rest/api/3/issue/PROJ-123
-
-# Create an issue
-curl -X POST \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"fields":{"project":{"key":"PROJ"},"summary":"New Issue","issuetype":{"name":"Task"}}}' \
-  https://{your-domain}.atlassian.net/rest/api/3/issue
-
-# Search issues
-curl -X POST \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"jql":"project = PROJ","maxResults":50}' \
-  https://{your-domain}.atlassian.net/rest/api/3/search
-```
-
----
-
-## Error Handling
-
-| Status Code | Meaning |
-|-------------|---------|
-| 401 | Unauthorized - invalid/missing token |
-| 403 | Forbidden - insufficient permissions |
-| 404 | Not Found - resource doesn't exist |
-| 429 | Rate Limited - too many requests |
-| 5xx | Server error |
-
-See `docs/problem-patterns.md` for detailed error handling patterns.
-
----
-
-## Permissions & Scopes
-
-| Scope | Description |
-|-------|-------------|
-| `read:jira-work` | Read issues, projects, workflows |
-| `write:jira-work` | Create/update issues |
-| `delete:jira-work` | Delete issues |
-| `read:jira-project` | Read project metadata |
-| `write:jira-project` | Modify projects |
-
----
+| Script | Purpose |
+|---|---|
+| `test-auth.sh` | Verify your API token / OAuth bearer hits `/rest/api/3/myself` |
+| `test-api-endpoint.sh` | Probe a few common endpoints |
+| `test-jql.sh` | Run a JQL query and dump the first page of results |
+| `preflight-check.sh` | Verify environment vars and CLI tools are present |
+| `validate-manifest.sh` | (Forge) `forge lint` wrapper — for the bundled Forge templates |
+| `deploy-and-install.sh` | (Forge) deploy + install upgrade |
+| `dev-setup.sh` | (Forge) start tunnel |
 
 ## Support & Resources
 
 - [Jira REST API v3 Reference](https://developer.atlassian.com/cloud/jira/platform/rest/v3/)
-- [Jira Query Language (JQL)](https://support.atlassian.com/jira-cloud-administration/docs/use-advanced-search-with-jira-query-language-jql/)
-- [Atlassian Developer Documentation](https://developer.atlassian.com/)
-- [Community Forum](https://community.developer.atlassian.com/)
+- [JQL — Jira Query Language](https://support.atlassian.com/jira-cloud-administration/docs/use-advanced-search-with-jira-query-language-jql/)
+- [OAuth 2.0 (3LO) for Atlassian Cloud](https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/)
+- [API tokens](https://id.atlassian.com/manage-profile/security/api-tokens)
+
+## Changelog
+
+- Replaced the legacy "JWT — Server-to-server authentication" claim with the three actually-valid Cloud REST options (API token Basic auth, OAuth 2.0 3LO, Forge `api.asUser/asApp`). Locally-signed JWTs are an Atlassian Connect pattern and are not validated by the v3 REST API.
+- Added four new REST-API-specific docs: `24-rest-integration-patterns.md`, `27-rate-limits-and-quotas.md`, `28-adf-construction.md`, `30-testing-rest-integrations.md`.
+- Standardized scripts: stripped emoji, added `set -euo pipefail`, made CI-safe.
+- Added a "Pick a starting point" block and a documentation map that distinguishes canonical REST coverage from the bundled Forge-flavored reference content.
