@@ -1,282 +1,246 @@
 ---
 name: confluence-api-skill
-description: Atlassian Confluence REST API v2. Use when integrating with Confluence Cloud via REST endpoints for content management, spaces, pages, blog posts, attachments, and labels.
+description: Atlassian Confluence Cloud REST API v2 integration from external apps — pages, blogposts, spaces, attachments, content properties, ADF/storage bodies, OAuth 2.0 / API-token auth, rate-limit handling. Use for non-Forge integrations calling Confluence Cloud over HTTPS.
 ---
 
-# Atlassian Confluence REST API v2
+# Atlassian Confluence Cloud REST API v2
 
-This skill provides documentation for integrating with Confluence Cloud using the REST API v2.
+Build external apps that talk to Confluence Cloud over HTTPS — bots, integrations, content sync jobs, doc-as-code pipelines.
 
 ## When to Use This Skill
 
-**Use this skill when:**
-- You need to integrate with **Confluence Cloud** via REST APIs
-- You are building external applications that interact with Confluence content
-- You need to perform CRUD operations on pages, blog posts, spaces, attachments
-- You require programmatic access to Confluence data from non-Forge systems
+Use this skill when:
+- You're integrating with Confluence Cloud from an **external system** (a Node/Python service, a CI job, a doc generator, etc.).
+- The communication is HTTPS to `https://{your-domain}.atlassian.net/wiki/api/v2/...` (preferred) or `/wiki/rest/api/...` (legacy).
+- You're authenticating with an Atlassian API token (Basic auth) or OAuth 2.0 (3LO).
 
-**Do NOT use this skill when:**
-- You are developing Forge apps (use `atlassian-confluence-forge-skill` instead)
-- You need custom UI extensions within Confluence (Forge modules)
-- You are building for Jira Cloud (use `jira-api-skill` instead)
+Skip this skill for:
+- Apps that run *inside* Atlassian as Forge functions → use `atlassian-confluence-forge-skill`.
+- Pure org-admin operations (users/groups/policies across products) → use `atlassian-organizations-api-skill`.
+- Jira Cloud → use `jira-api-skill` or `atlassian-jira-forge-skill`.
 
----
+## Pick a starting point
 
-## What This Skill Covers
+- **Production patterns** (auth refresh, retry+jitter, idempotent writes, cursor pagination): `docs/24-rest-integration-patterns.md`.
+- **Rate limits & quotas**: `docs/27-rate-limits-and-quotas.md`.
+- **ADF (page/comment bodies) and storage format**: `docs/28-adf-and-storage.md`.
+- **Testing your integration**: `docs/30-testing-rest-integrations.md`.
+- **Endpoint reference**: `docs/08-api-endpoints.md`.
 
-This skill covers:
+## API Base URLs
 
-- **Content Management**: CRUD operations for pages, blog posts, and attachments
-- **Space Operations**: Create, update, delete spaces and manage permissions
-- **Labels & Metadata**: Add/remove labels, manage content properties
-- **User & Permission Management**: Query users, check permissions, group membership
-- **Version History**: Retrieve version history, compare versions, restore content
-- **Search & Query**: Search content using CQL (Confluence Query Language)
-- **REST API Endpoints**: Complete reference for `/wiki/api/v2` endpoints
+| Surface | Base URL | When |
+|---|---|---|
+| **v2 (preferred)** | `https://{your-domain}.atlassian.net/wiki/api/v2` | Pages, blogposts, comments, attachments, properties, labels, spaces, users |
+| **v1 (legacy)** | `https://{your-domain}.atlassian.net/wiki/rest/api` | CQL search, certain space operations, content-by-CQL — only when v2 lacks the operation |
 
----
+Example: `https://mycompany.atlassian.net/wiki/api/v2/pages/123456?body-format=atlas_doc_format`
 
-## API Base URL
+## Authentication — what's correct, what's wrong
 
+The Confluence Cloud REST API accepts:
+
+| Method | When to use | Header shape |
+|---|---|---|
+| **API token + email (Basic auth)** | Personal scripts, CI jobs, simple integrations | `Authorization: Basic base64(email:api_token)` |
+| **OAuth 2.0 (3LO)** — access token | Apps acting on behalf of an Atlassian user | `Authorization: Bearer <access_token>` |
+| **From a Forge app** | App code running inside Atlassian | `api.asUser().requestConfluence(route\`...\`)` from `@forge/api` |
+
+> **Don't** sign your own JWT with `jsonwebtoken` and pass it as a Bearer token. That's the legacy Atlassian Connect "user-impersonation JWT" flow, and the Confluence Cloud REST API does not validate locally-signed JWTs. Use an API token (Basic auth) or an OAuth 2.0 access token issued by `auth.atlassian.com`.
+
+### API token (simplest)
+
+Create at <https://id.atlassian.com/manage-profile/security/api-tokens>. Then:
+
+```bash
+curl -u "$ATLASSIAN_EMAIL:$ATLASSIAN_API_TOKEN" \
+  https://your-domain.atlassian.net/wiki/api/v2/spaces?limit=5
 ```
-https://{your-domain}.atlassian.net/wiki/api/v2
+
+Or in Node:
+
+```javascript
+const auth = Buffer
+  .from(`${process.env.ATLASSIAN_EMAIL}:${process.env.ATLASSIAN_API_TOKEN}`)
+  .toString('base64');
+
+const r = await fetch('https://your-domain.atlassian.net/wiki/api/v2/spaces?limit=5', {
+  headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' },
+});
 ```
 
-Example: `https://mycompany.atlassian.net/wiki/api/v2/pages`
+### OAuth 2.0 (3LO) — for end-user-facing apps
 
-### Authentication Options
+```bash
+# Step 1 — open in a browser to get an authorization code
+# https://auth.atlassian.com/authorize?
+#   audience=api.atlassian.com&client_id=YOUR_CLIENT_ID&
+#   scope=read:confluence-content.summary+write:confluence-content+offline_access&
+#   redirect_uri=https://YOUR_REDIRECT_URI&state=UNIQUE_STATE&response_type=code&prompt=consent
 
-| Method | Use Case |
-|--------|----------|
-| OAuth 2.0 (3LO) | User authorization flow |
-| JWT | Server-to-server authentication |
-| Personal Access Token | Development/testing only |
+# Step 2 — exchange the code for an access token
+curl -X POST https://auth.atlassian.com/oauth/token \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "grant_type": "authorization_code",
+    "client_id": "YOUR_CLIENT_ID",
+    "client_secret": "YOUR_CLIENT_SECRET",
+    "code": "AUTHORIZATION_CODE",
+    "redirect_uri": "https://YOUR_REDIRECT_URI"
+  }'
 
----
+# Step 3 — discover cloudid for the site (one-time per site)
+curl -H "Authorization: Bearer <access_token>" \
+  https://api.atlassian.com/oauth/token/accessible-resources
 
-## Quick Reference: Common Endpoints
+# Step 4 — make REST calls via the Atlassian gateway
+curl -H "Authorization: Bearer <access_token>" \
+  https://api.atlassian.com/ex/confluence/{cloudid}/wiki/api/v2/spaces?limit=5
+```
+
+Refresh tokens via `grant_type=refresh_token` before `expires_in` lapses. See `docs/24-rest-integration-patterns.md`.
+
+## Quick Reference: Common Endpoints (v2 unless noted)
 
 | Task | Endpoint | Method |
-|------|----------|--------|
-| Get page by ID | `/wiki/api/v2/pages/{pageId}` | GET |
+|---|---|---|
+| Get page (with ADF body) | `/wiki/api/v2/pages/{pageId}?body-format=atlas_doc_format` | GET |
 | Create page | `/wiki/api/v2/pages` | POST |
-| Update page | `/wiki/api/v2/pages/{pageId}` | PUT |
-| Delete page | `/wiki/api/v2/pages/{pageId}` | DELETE |
-| Get space | `/wiki/api/v2/spaces/{spaceKey}` | GET |
-| List pages in space | `/wiki/api/v2/spaces/{spaceKey}/pages` | GET |
-| Upload attachment | `/wiki/api/v2/pages/{pageId}/attachments` | POST |
-| Add label to content | `/wiki/api/v2/content/{contentId}/labels` | POST |
-| Search content | `/wiki/api/v2/pages/search` | GET |
+| Update page (full replacement) | `/wiki/api/v2/pages/{pageId}` | PUT |
+| Delete page (trash) | `/wiki/api/v2/pages/{pageId}` | DELETE |
+| List pages in space | `/wiki/api/v2/spaces/{spaceId}/pages?limit=100&cursor=...` | GET |
+| Get page versions | `/wiki/api/v2/pages/{pageId}/versions` | GET |
+| List footer comments | `/wiki/api/v2/pages/{pageId}/footer-comments` | GET |
+| Post footer comment | `/wiki/api/v2/footer-comments` | POST |
+| List/get content properties | `/wiki/api/v2/pages/{pageId}/properties` | GET |
+| Set content property | `/wiki/api/v2/pages/{pageId}/properties` | POST/PUT |
+| List spaces | `/wiki/api/v2/spaces?limit=25&cursor=...` | GET |
+| Upload attachment (legacy v1) | `/wiki/rest/api/content/{pageId}/child/attachment` | POST |
+| Search (CQL — v1 only) | `/wiki/rest/api/search?cql=...` | GET |
 
----
+> Page bodies use **ADF** (`?body-format=atlas_doc_format`) or **storage format** (XHTML). PUT requires the current `version.number` + 1. See `docs/28-adf-and-storage.md`.
 
-## Request/Response Examples
-
-### Get a Page
+## Get a page (full request/response shape)
 
 ```http
-GET /wiki/api/v2/pages/123456 HTTP/1.1
-Host: {your-domain}.atlassian.net
-Authorization: Bearer <token>
+GET /wiki/api/v2/pages/123456?body-format=atlas_doc_format HTTP/1.1
+Host: your-domain.atlassian.net
+Authorization: Basic <base64(email:api_token)>
 Accept: application/json
 ```
 
-**Response (200 OK):**
 ```json
 {
   "id": "123456",
-  "type": "page",
+  "title": "Onboarding Checklist",
+  "spaceId": "987654",
   "status": "current",
-  "title": "My Page",
-  "space": {
-    "id": 987654,
-    "key": "PROJ",
-    "name": "Project Space"
-  },
+  "version": { "number": 7 },
   "body": {
-    "storage": {
-      "value": "<p>Page content</p>",
-      "representation": "storage"
-    }
-  },
-  "_links": {
-    "webui": "/spaces/PROJ/pages/123456/My+Page",
-    "self": "https://my.atlassian.net/wiki/api/v2/pages/123456"
+    "atlas_doc_format": { "value": "{\"type\":\"doc\",\"version\":1,\"content\":[...]}" }
   }
 }
 ```
 
-### Create a Page
+> `body.atlas_doc_format.value` is a *stringified* JSON tree. `JSON.parse` it before traversing.
+
+## Update a page (PUT — version bump required)
 
 ```http
-POST /wiki/api/v2/pages HTTP/1.1
-Host: {your-domain}.atlassian.net
-Authorization: Bearer <token>
+PUT /wiki/api/v2/pages/123456 HTTP/1.1
+Authorization: Basic <base64(email:api_token)>
 Content-Type: application/json
-Accept: application/json
 
 {
-  "spaceId": 987654,
-  "title": "New Page",
-  "body": {
-    "storage": {
-      "value": "<p>This is the page content</p>",
-      "representation": "storage"
-    }
-  },
-  "ancestors": [
-    {"id": 111111}
-  ]
+  "id": "123456",
+  "status": "current",
+  "title": "Onboarding Checklist",
+  "spaceId": "987654",
+  "body": { "representation": "atlas_doc_format", "value": "{\"type\":\"doc\",\"version\":1,\"content\":[...]}" },
+  "version": { "number": 8 }
 }
 ```
 
-### Search with CQL
+A mismatched `version.number` returns `409 Conflict`. GET → bump → PUT, never compute it from a cached value.
 
-```http
-GET /wiki/api/v2/pages/search?cql=space=PROJ+AND+type=page HTTP/1.1
-Host: {your-domain}.atlassian.net
-Authorization: Bearer <token>
-Accept: application/json
-```
+## Failure strategies
 
----
+| Status | First-pass fix | Detail |
+|---|---|---|
+| 401 | Token missing/expired/revoked. Refresh OAuth or rotate API token. | `01-core-concepts.md` |
+| 403 | Token's user/scope lacks the operation. Add scope or grant space permission. | `07-permissions-scopes.md` |
+| 404 | Page/space/property doesn't exist *or* isn't visible to the auth context. | — |
+| 409 | Stale `version.number` on PUT — GET → bump → PUT. | `28-adf-and-storage.md` |
+| 410 | Endpoint removed; check v1 → v2 migration. | `08-api-endpoints.md` |
+| 429 | Honor `Retry-After`; exponential backoff with jitter. | `27-rate-limits-and-quotas.md` |
+| 5xx | Atlassian-side. Retry with backoff. | `24-rest-integration-patterns.md` |
 
-## Documentation Index
+## Documentation map
 
-### Core Concepts
-| Topic | File |
-|-------|------|
-| API Overview & Authentication | `docs/01-core-concepts.md` |
-| Error Handling & Rate Limits | `docs/problem-patterns.md` |
+### Core
+| File | Topic |
+|---|---|
+| `01-core-concepts.md` | API overview, auth, versioning |
+| `08-api-endpoints.md` | Endpoint reference (with per-resource appendix in `docs/api/`) |
+| `07-permissions-scopes.md` | OAuth 2.0 scopes |
 
-### Content Management
-| Topic | File |
-|-------|------|
-| Pages (CRUD) | `docs/02-page-custom-ui.md` |
-| Blog Posts | `docs/04-blogpost-custom-ui.md` |
-| Attachments | `docs/attachment-management.md` |
-| Labels | `docs/09-labels-management.md` |
+### Production
+| File | Topic |
+|---|---|
+| `24-rest-integration-patterns.md` | OAuth refresh, retry+jitter, idempotency, cursor pagination |
+| `27-rate-limits-and-quotas.md` | 429 behavior, per-endpoint guidance, batching |
+| `28-adf-and-storage.md` | ADF vs storage format, version handling, building ADF nodes |
+| `30-testing-rest-integrations.md` | Mocking, fixtures, dev-loop patterns |
 
-### Space Management
-| Topic | File |
-|-------|------|
-| Spaces & Permissions | `docs/10-user-permissions.md` |
+### Topical (inherited content)
+| File | Topic |
+|---|---|
+| `06-content-properties.md` | Per-content app data |
+| `09-labels-management.md` | Labels CRUD |
+| `10-user-permissions.md` | Users, groups, permissions |
+| `11-version-history.md` | Page versions |
+| `gotchas.md` | Pitfalls |
+| `problem-patterns.md` | Common problem snippets |
+| `when-to-use-which.md` | When this skill vs the Forge skill |
 
-### User & Security
-| Topic | File |
-|-------|------|
-| Users & Groups | `docs/10-user-permissions.md` |
-| Permissions | `docs/07-permissions-scopes.md` |
+> **Note on the bundled docs and templates.** This skill ships several `docs/02-*` through `docs/21-*` files and `templates/*.yml` that overlap heavily with the `atlassian-confluence-forge-skill` directory. They cover Forge-specific surfaces (custom UI, content macros, scheduled triggers) and are kept here as a convenience reference for cross-context lookups. For pure REST integration work, the canonical files are the ones listed in **Core** and **Production** above.
 
-### Advanced Topics
-| Topic | File |
-|-------|------|
-| Version History | `docs/11-version-history.md` |
-| Content Properties | `docs/06-content-properties.md` |
-| Webhooks & Events | `docs/07-webhooks-events.md` |
+## Templates
 
----
+Copy-paste-ready helpers in `templates/`:
 
-## Available Templates
+| Template | Purpose |
+|---|---|
+| `webhook-handler.yml` | Receive Confluence webhook events |
+| `content-property-storage.yml` | Content-property CRUD shape |
+| `space-properties.yml` | Space-property CRUD shape |
+| `attachment-management.yml` | Attachment upload/list/delete |
+| `scheduled-trigger.yml` | Periodic sync skeleton (Forge or external scheduler) |
 
-| Template | Description | Use Case |
-|----------|-------------|----------|
-| `page-custom-ui.yml` | REST API call patterns for page operations | Create/update pages via API |
-| `webhook-handler.yml` | Webhook event handling | Receive Confluence events |
-| `scheduled-trigger.yml` | Scheduled API tasks | Periodic content sync |
-| `content-property-storage.yml` | Content properties API | Store app data with content |
+## Scripts
 
----
+CI-safe helpers in `scripts/`:
 
-## Authentication
-
-### OAuth 2.0 (3LO)
-
-```bash
-# Authorization URL
-https://auth.atlassian.com/authorize?client_id=YOUR_CLIENT_ID&scope=read%3Aconfluence-content.summary&redirect_uri=https://YOUR_REDIRECT_URI&state=UNIQUE_STATE&response_type=code&prompt=consent
-
-# Exchange code for token
-curl -X POST https://auth.atlassian.com/oauth/token \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "client_id": "YOUR_CLIENT_ID",
-    "client_secret": "YOUR_CLIENT_SECRET",
-    "code": "AUTHORIZATION_CODE",
-    "grant_type": "authorization_code"
-  }'
-```
-
-### JWT Authentication
-
-```javascript
-import jwt from 'jsonwebtoken';
-
-const token = jwt.sign(
-  {
-    iss: 'YOUR_CLIENT_ID',
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 60,
-    qsh: 'QUERY_STRING_HASH'
-  },
-  'YOUR_CLIENT_SECRET'
-);
-```
-
----
-
-## Common CLI Commands
-
-### cURL Examples
-
-```bash
-# Get a page
-curl -H "Authorization: Bearer <token>" \
-  https://{your-domain}.atlassian.net/wiki/api/v2/pages/123456
-
-# Create a page
-curl -X POST \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"spaceId":987654,"title":"New Page","body":{"storage":{"value":"<p>Content</p>","representation":"storage"}}}' \
-  https://{your-domain}.atlassian.net/wiki/api/v2/pages
-
-# Search content
-curl -H "Authorization: Bearer <token>" \
-  "https://{your-domain}.atlassian.net/wiki/api/v2/pages/search?cql=space=PROJ"
-```
-
----
-
-## Error Handling
-
-| Status Code | Meaning |
-|-------------|---------|
-| 401 | Unauthorized - invalid/missing token |
-| 403 | Forbidden - insufficient permissions |
-| 404 | Not Found - resource doesn't exist |
-| 429 | Rate Limited - too many requests |
-| 5xx | Server error |
-
-See `docs/problem-patterns.md` for detailed error handling patterns.
-
----
-
-## Permissions & Scopes
-
-| Scope | Description |
-|-------|-------------|
-| `read:confluence-content.summary` | Read content metadata |
-| `read:confluence-content` | Read full content |
-| `write:confluence-content` | Create/update content |
-| `delete:confluence-content` | Delete content |
-| `read:space:confluence` | Read spaces |
-| `write:space:confluence` | Modify spaces |
-
----
+| Script | Purpose |
+|---|---|
+| `test-auth.sh` | Verify your API token / OAuth bearer hits `/wiki/api/v2/spaces` |
+| `test-api-endpoint.sh` | Probe a few common endpoints |
+| `preflight-check.sh` | Verify environment vars and CLI tools are present |
+| `validate-manifest.sh` | (Forge) `forge lint` wrapper — for the bundled Forge templates |
+| `deploy-and-install.sh` | (Forge) deploy + install upgrade |
+| `dev-setup.sh` | (Forge) start tunnel |
 
 ## Support & Resources
 
-- [Confluence REST API v2 Reference](https://developer.atlassian.com/cloud/confluence/rest/v2/)
-- [Atlassian Developer Documentation](https://developer.atlassian.com/)
-- [Community Forum](https://community.developer.atlassian.com/)
+- [Confluence Cloud REST API v2 Reference](https://developer.atlassian.com/cloud/confluence/rest/v2/)
+- [Confluence Cloud REST API v1 Reference](https://developer.atlassian.com/cloud/confluence/rest/) (legacy — for CQL etc.)
+- [OAuth 2.0 (3LO) for Atlassian Cloud](https://developer.atlassian.com/cloud/confluence/oauth-2-3lo-apps/)
+- [API tokens](https://id.atlassian.com/manage-profile/security/api-tokens)
+- [Storage format reference](https://developer.atlassian.com/cloud/confluence/storage-format/)
+
+## Changelog
+
+- Replaced the legacy "JWT — Server-to-server authentication" claim with the three actually-valid Cloud REST options (API token Basic auth, OAuth 2.0 3LO, Forge `api.asUser/asApp`). Locally-signed JWTs are an Atlassian Connect pattern and are not validated by the v2 REST API.
+- Added four new REST-API-specific docs: `24-rest-integration-patterns.md`, `27-rate-limits-and-quotas.md`, `28-adf-and-storage.md`, `30-testing-rest-integrations.md`.
+- Standardized scripts: stripped emoji, added `set -euo pipefail`, made CI-safe.
+- Added a "Pick a starting point" block and a documentation map that distinguishes canonical REST coverage from the bundled Forge-flavored reference content.

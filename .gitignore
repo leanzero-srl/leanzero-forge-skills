@@ -1,0 +1,22 @@
+# Runtime / agent artifacts
+logs/
+.cline/
+.claude/
+.qwen/
+*.log
+.DS_Store
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*~
+
+# Node (for skills with bundled examples)
+node_modules/
+npm-debug.log*
+
+# Local secrets (never commit)
+.env
+.env.local
+.env.*.local
