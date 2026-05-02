@@ -1,0 +1,87 @@
+# Invite Users to Organization
+# Use Case: Bulk user onboarding with role assignment and notifications
+
+## Request
+POST /v2/orgs/{orgId}/users/invite
+
+## cURL
+```bash
+curl -X POST \
+  --url 'https://api.atlassian.com/admin/v2/orgs/{orgId}/users/invite' \
+  --header 'Authorization: Bearer <access_token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "emails": ["user1@example.com", "user2@example.com"],
+    "permissionRules": [
+      {
+        "permission": "atlassian:jira::role/member",
+        "condition": { "type": "ALL_USERS" }
+      }
+    ],
+    "additionalGroups": ["group-id-1"],
+    "sendNotification": true,
+    "notificationText": "Welcome to our organization!"
+  }'
+```
+
+## Request Body
+```json
+{
+  "emails": ["user1@example.com", "user2@example.com"],
+  "permissionRules": [
+    {
+      "permission": "atlassian:jira::role/member",
+      "condition": { "type": "ALL_USERS" }
+    }
+  ],
+  "additionalGroups": ["group-id-1"],
+  "sendNotification": true,
+  "notificationText": "Welcome to our organization!"
+}
+```
+
+## Expected Response (200 OK)
+```json
+{
+  "data": [
+    {
+      "id": "invitation-id",
+      "email": "user1@example.com",
+      "results": {
+        "roleAssignmentResult": [...],
+        "groupAssignmentResult": [...]
+      }
+    }
+  ]
+}
+```
+
+## Expected Response (206 Partial Content)
+At least one invitation failed. Check individual results for errors.
+
+## Required Scopes
+- `write:users:admin`
+
+## Notes
+- Requires at least one paid subscription in the organization
+- Maximum batch size: recommend 10 emails per request
+- Users are added to directories based on invitation rules
+- Email invitations are sent if sendNotification is true
+- 402 error if no paid subscription exists
+- 409 error if user limit exceeded for a product
+
+## Role Examples
+```json
+{
+  "permissionRules": [
+    {
+      "permission": "atlassian:jira::role/admin",
+      "condition": { "type": "ALL_USERS" }
+    },
+    {
+      "permission": "atlassian:confluence::role/admin",
+      "condition": { "type": "ALL_USERS" }
+    }
+  ]
+}
+```

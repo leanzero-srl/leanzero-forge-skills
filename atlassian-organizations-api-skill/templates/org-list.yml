@@ -1,0 +1,36 @@
+# List Organizations
+# Use Case: Discover organization IDs for subsequent API calls
+
+## Request
+GET /v1/orgs
+
+## cURL
+```bash
+curl --request GET \
+  --url 'https://api.atlassian.com/admin/v1/orgs' \
+  --header 'Authorization: Bearer <access_token>' \
+  --header 'Accept: application/json'
+```
+
+## Expected Response
+```json
+{
+  "data": [
+    {
+      "id": "<org-id>",
+      "type": "orgs",
+      "attributes": { "name": "Organization Name" },
+      "links": { "self": "https://api.atlassian.com/admin/v1/orgs/<org-id>" }
+    }
+  ],
+  "links": { "self": "...", "prev": null, "next": null }
+}
+```
+
+## Required Scopes
+- `read:orgs:admin`
+
+## Notes
+- This is the first call you should make to discover your orgId
+- Returns all organizations accessible to your API key
+- Use the orgId from the response for all subsequent calls
