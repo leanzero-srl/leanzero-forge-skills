@@ -1,101 +1,47 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# test-auth.sh — verify your Confluence Cloud auth works by hitting /wiki/api/v2/spaces.
+#
+# Reads from env (set EITHER/OR):
+#   ATLASSIAN_SITE                   e.g. https://your-domain.atlassian.net  (required)
+#   ATLASSIAN_EMAIL + ATLASSIAN_API_TOKEN     for Basic auth
+#   ATLASSIAN_ACCESS_TOKEN                    for OAuth 2.0 Bearer
+#
+# Exits 0 on 200, 1 on any error.
 
-# test-auth.sh - Test Confluence Forge app authentication and API access
+set -uo pipefail
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+: "${ATLASSIAN_SITE:?ATLASSIAN_SITE is required}"
 
-echo "🧪 Testing Confluence Forge Authentication"
-echo "==========================================="
-echo ""
-
-# Check if forge CLI is installed
-if ! command -v forge &> /dev/null; then
-  echo -e "${RED}❌ ERROR: 'forge' CLI not found in PATH.${NC}"
-  echo "   Install it using: npm install -g @forge/cli"
+if [[ -n "${ATLASSIAN_ACCESS_TOKEN:-}" ]]; then
+  AUTH=( -H "Authorization: Bearer ${ATLASSIAN_ACCESS_TOKEN}" )
+  AUTH_LABEL="OAuth Bearer"
+elif [[ -n "${ATLASSIAN_EMAIL:-}" && -n "${ATLASSIAN_API_TOKEN:-}" ]]; then
+  AUTH=( -u "${ATLASSIAN_EMAIL}:${ATLASSIAN_API_TOKEN}" )
+  AUTH_LABEL="Basic (email + API token)"
+else
+  echo "[test-auth] FAIL: no auth credentials in env" >&2
+  echo "  Set EITHER  ATLASSIAN_ACCESS_TOKEN  (OAuth)" >&2
+  echo "         OR  ATLASSIAN_EMAIL + ATLASSIAN_API_TOKEN  (Basic)" >&2
   exit 1
 fi
 
-echo -e "${GREEN}✅ Forge CLI is installed${NC}"
+URL="${ATLASSIAN_SITE%/}/wiki/api/v2/spaces?limit=1"
+echo "[test-auth] GET ${URL}  (auth: ${AUTH_LABEL})"
 
-# Check if user is logged in
-AUTH_STATUS=$(forge whoami 2>&1)
-if [[ "$AUTH_STATUS" == *"not logged in"* ]] || [[ "$AUTH_STATUS" == *"authentication required"* ]]; then
-  echo -e "${RED}❌ ERROR: Not logged into Forge.${NC}"
-  echo "   Run 'forge login' to authenticate."
-  exit 1
+HTTP_CODE=$(curl -sS -o /tmp/test-auth-body.$$ -w "%{http_code}" \
+  -H "Accept: application/json" "${AUTH[@]}" "$URL" || true)
+
+if [[ "$HTTP_CODE" == "200" ]]; then
+  TOTAL=$(grep -o '"total":[0-9]*' /tmp/test-auth-body.$$ | head -1 | cut -d: -f2)
+  echo "[test-auth] OK:   200  (sees ${TOTAL:-?} space(s) on this site)"
+  rm -f /tmp/test-auth-body.$$
+  exit 0
 fi
 
-echo -e "${GREEN}✅ You are logged in${NC}"
-echo ""
-
-# Show current user
-echo -e "${BLUE}Current user:${NC}"
-forge whoami
-echo ""
-
-# Check for manifest.yml
-if [ ! -f "manifest.yml" ]; then
-  echo -e "${YELLOW}⚠️  No manifest.yml found. This is OK for testing authentication.${NC}"
-  echo "   For full API testing, ensure you're in a Forge app directory."
-else
-  echo -e "${GREEN}✅ Found manifest.yml${NC}"
-fi
-
-echo ""
-echo -e "${BLUE}Testing Confluence API endpoint...${NC}"
-
-# Get the current site URL from forge context if available
-SITE_URL=$(forge list --json 2>/dev/null | head -1 | grep -o '"siteUrl":"[^"]*' | cut -d'"' -f4)
-
-if [ -n "$SITE_URL" ]; then
-  echo "Site URL: $SITE_URL"
-  
-  # Test using forge tunnel context (app token)
-  # Note: This requires a running tunnel or deployed app
-  echo ""
-  echo -e "${YELLOW}To test actual API access:${NC}"
-  echo "1. Start tunnel: 'forge tunnel'"
-  echo "2. Or deploy first: 'forge deploy && forge install --upgrade'"
-  echo ""
-  echo "Then use the token from Forge runtime in your code:"
-  echo ""
-  echo -e "${BLUE}Example JavaScript (in resolver function):${NC}"
-  cat << 'EOF'
-import api, { route } from '@forge/api';
-
-export const testConnection = async ({ context }) => {
-  // Test Confluence API
-  const response = await api.asUser().requestConfluence(
-    route`/wiki/api/v2/spaces?limit=5`
-  );
-  
-  if (response.ok) {
-    const data = await response.json();
-    console.log('✅ Successfully connected to Confluence!');
-    console.log('Spaces:', JSON.stringify(data.results, null, 2));
-    return { success: true, count: data.results?.length || 0 };
-  } else {
-    return { 
-      success: false, 
-      status: response.status,
-      error: await response.text() 
-    };
-  }
-};
-EOF
-else
-  echo -e "${YELLOW}⚠️  No site URL found. This is expected before deployment.${NC}"
-fi
-
-echo ""
-echo "==========================================="
-echo -e "${GREEN}Authentication test completed!${NC}"
-echo ""
-echo "Next steps:"
-echo "1. Deploy your app: 'forge deploy'"
-echo "2. Install on site: 'forge install --upgrade'"
-echo "3. Test with tunnel: 'forge tunnel'"
+echo "[test-auth] FAIL: HTTP ${HTTP_CODE}" >&2
+echo "  ----" >&2
+cat /tmp/test-auth-body.$$ >&2 || true
+echo "" >&2
+echo "  ----" >&2
+rm -f /tmp/test-auth-body.$$
+exit 1

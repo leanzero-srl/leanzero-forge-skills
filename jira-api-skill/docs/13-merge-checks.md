@@ -480,7 +480,7 @@ const isCriticalCheck = (error) => {
 ## Related Documentation
 
 - [Bitbucket Merge Check Module](https://developer.atlassian.com/platform/forge/manifest-reference/modules/bitbucket-merge-check)
-- [Bitbucket REST API](../api-endpoints/bitbucket-rest-api.md)
+- [Bitbucket Cloud REST API](https://developer.atlassian.com/cloud/bitbucket/rest/intro/)
 
 ---
 

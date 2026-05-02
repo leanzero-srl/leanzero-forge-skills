@@ -19,7 +19,7 @@ What do you need to build?
 │   └── → [Webhook Handler](../templates/webhook-handler.yml)
 │       │
 │       ├── Need periodic sync as backup?
-│       │   └── Add [Scheduled Trigger](09-scheduled-triggers.md)
+│       │   └── Add [Scheduled Trigger](../templates/scheduled-trigger.yml)
 │       │
 │       └── Need to display data on dashboard?
 │           └── Also add [Dashboard Gadget](05-dashboard-widgets.md)
@@ -28,7 +28,7 @@ What do you need to build?
 │   └── → [Content Properties](06-content-properties.md)
 │
 └── Run background tasks periodically?
-    └── → [Scheduled Trigger](09-scheduled-triggers.md)
+    └── → [Scheduled Trigger](../templates/scheduled-trigger.yml)
 ```
 
 ---

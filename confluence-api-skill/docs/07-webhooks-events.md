@@ -647,6 +647,6 @@ Forge webhooks cannot be tested locally via tunnel. Use:
 
 ## Next Steps
 
-- [Scheduled Triggers](09-scheduled-triggers.md) - Background periodic tasks
+- [Scheduled Triggers](../templates/scheduled-trigger.yml) - Background periodic tasks (template)
 - [Content Properties](06-content-properties.md) - Store app state with content
 - [API Endpoints](08-api-endpoints.md) - Complete REST API reference
