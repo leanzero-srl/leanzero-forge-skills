@@ -1,5 +1,10 @@
 # Product Event Triggers: Handling Confluence Events
 
+> **Auth note (2025 update).** Some examples below predate Forge's automatic auth and use the legacy Atlassian Connect pattern `const token = await AP.context.getToken();` + `Authorization: 'JWT <token>'`. **Do not copy that into a new Forge app.** From Forge:
+> - Custom UI: `await requestConfluence('/wiki/api/v2/...')` from `@forge/bridge` — no token plumbing.
+> - Resolvers: `await api.asUser().requestConfluence(route\`/wiki/api/v2/...\`)` from `@forge/api`.
+> The full Forge-correct pattern is shown in `01-core-concepts.md`. The legacy snippets are kept only for reference.
+
 This guide covers trigger modules in Forge apps for Confluence — allowing your app to react to events like page creation, updates, and deletions.
 
 ---
@@ -247,12 +252,13 @@ modules:
 // src/scheduled/reconciliation.ts
 
 import api, { route } from '@forge/api';
-import { storage } from '@forge/api';
+import { kvs } from '@forge/kvs';
 
 export const handler = async (event: any, context: any) => {
-  const lastSyncTime = await storage.get('lastReconciliation')
+  const lastSyncTime = (await kvs.get('lastReconciliation'))
     || '2024-01-01T00:00:00.000Z';
 
+  // CQL search is still v1; v2 has narrower endpoints (e.g. /pages with filters).
   const response = await api.asApp().requestConfluence(
     route`/wiki/rest/api/search?cql=type=page AND lastModified>='${lastSyncTime}'&limit=100`
   );

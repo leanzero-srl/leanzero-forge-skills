@@ -525,7 +525,7 @@ forge lint --fix
 
 - [Page Custom UI](02-page-custom-ui.md) - Build page extensions
 - [Webhooks & Events](07-webhooks-events.md) - Handle Confluence events  
-- [CLI Commands](08-cli-commands.md) - Complete CLI reference
+- [CLI Commands](13-cli-commands.md) - Complete CLI reference
 
 **Official Atlassian Resources:**
 - [Forge Platform Overview](https://developer.atlassian.com/platform/forge/)

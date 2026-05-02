@@ -1,6 +1,12 @@
 # Space Properties Module Template
 # Store app configuration at space level for Confluence
 # Documentation: https://developer.atlassian.com/cloud/confluence/rest/v2/api-space-properties/
+#
+# AUTH NOTE (2025 update):
+#   Replace any `AP.context.getToken()` snippets with the Forge auth pattern:
+#     - Custom UI:  await requestConfluence('/wiki/api/v2/...')  from '@forge/bridge'
+#     - Resolver:   await api.asUser().requestConfluence(route`/wiki/api/v2/...`)  from '@forge/api'
+#   See docs/01-core-concepts.md.
 
 modules:
   # Your modules here (pageBanner, contentAction, etc.)

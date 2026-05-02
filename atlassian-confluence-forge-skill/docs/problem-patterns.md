@@ -1,5 +1,7 @@
 # Problem Patterns: Common Confluence Forge Solutions
 
+> **Auth note (2025 update).** Some snippets below use the legacy Atlassian Connect `AP.context.getToken()` + `JWT <token>` pattern. **Don't use that in new Forge apps.** Replace with `requestConfluence('/wiki/api/v2/...')` from `@forge/bridge` (Custom UI) or `api.asUser().requestConfluence(route\`...\`)` from `@forge/api` (resolver). See `01-core-concepts.md`.
+
 This guide provides ready-to-use code patterns for common Confluence Forge app scenarios.
 
 ---

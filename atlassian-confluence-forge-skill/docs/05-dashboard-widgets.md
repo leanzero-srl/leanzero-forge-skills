@@ -1,5 +1,7 @@
 # Dashboard Widgets: Confluence Gadgets
 
+> **Auth note (2025 update).** Examples below use the legacy Atlassian Connect pattern `const token = await AP.context.getToken();` + `api.fetch({ url, headers: { Authorization: 'JWT <token>' } })`. **Don't use that in new Forge apps.** Replace with `await requestConfluence('/wiki/api/v2/...')` from `@forge/bridge` (Custom UI) or `await api.asUser().requestConfluence(route\`...\`)` from `@forge/api` (resolver). See `01-core-concepts.md`.
+
 This guide covers building custom dashboard widgets (gadgets) for Confluence. Dashboard widgets appear on Confluence dashboards and can display real-time data, charts, summaries, or any custom content you want to show at a glance.
 
 ---

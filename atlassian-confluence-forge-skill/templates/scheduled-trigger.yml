@@ -24,12 +24,12 @@ modules:
 # Example handler implementation (src/scheduled/sync.ts):
 #
 # import api, { route } from '@forge/api';
-# import { storage } from '@forge/api';
+# import { kvs } from '@forge/kvs';   // legacy `storage` from '@forge/api' is no longer receiving features after 2025-03-17
 #
 # export const handler = async (event, context) => {
 #   console.log('Starting scheduled sync...');
 #
-#   const lastSyncTime = await storage.get('lastSyncTimestamp')
+#   const lastSyncTime = await kvs.get('lastSyncTimestamp')
 #     || '2024-01-01T00:00:00.000Z';
 #
 #   // Use api.asApp() for backend API calls — Forge handles auth automatically

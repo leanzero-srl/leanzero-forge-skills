@@ -1,5 +1,7 @@
 # Confluence REST API v2 Reference
 
+> **Auth note (2025 update).** Some examples below use the legacy Atlassian Connect pattern `const token = await AP.context.getToken();`. **Don't use that in new Forge apps.** Forge auth: Custom UI calls `await requestConfluence('/wiki/api/v2/...')` from `@forge/bridge`; resolvers call `await api.asUser().requestConfluence(route\`...\`)` from `@forge/api`. See `01-core-concepts.md`.
+
 This document provides a comprehensive reference for the most commonly used Confluence REST API v2 endpoints when building Forge apps.
 
 **Base URL:** `https://{your-domain}.atlassian.net/wiki/api/v2`
