@@ -1,0 +1,153 @@
+# Policy CRUD Operations
+# Use Case: Security policy management — create, update, delete policies
+
+## Create IP Allowlist Policy
+POST /v1/orgs/{orgId}/policies
+
+### Request Body
+```json
+{
+  "data": {
+    "type": "policy",
+    "attributes": {
+      "type": "ip-allowlist",
+      "name": "Office IP Allowlist",
+      "status": "enabled",
+      "rule": {
+        "ips": ["192.168.1.0/24", "10.0.0.0/8"]
+      }
+    }
+  }
+}
+```
+
+### cURL
+```bash
+curl -X POST \
+  --url 'https://api.atlassian.com/admin/v1/orgs/{orgId}/policies' \
+  --header 'Authorization: Bearer <access_token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "data": {
+      "type": "policy",
+      "attributes": {
+        "type": "ip-allowlist",
+        "name": "Office IP Allowlist",
+        "status": "enabled",
+        "rule": {
+          "ips": ["192.168.1.0/24", "10.0.0.0/8"]
+        }
+      }
+    }
+  }'
+```
+
+## Update Policy
+PUT /v1/orgs/{orgId}/policies/{policyId}
+
+### Request Body
+```json
+{
+  "data": {
+    "id": "policy-id",
+    "type": "policy",
+    "attributes": {
+      "type": "ip-allowlist",
+      "name": "Updated IP Allowlist",
+      "status": "enabled",
+      "rule": {
+        "ips": ["192.168.1.0/24", "10.0.0.0/8", "172.16.0.0/12"]
+      }
+    }
+  }
+}
+```
+
+## Delete Policy
+DELETE /v1/orgs/{orgId}/policies/{policyId}
+
+### cURL
+```bash
+curl -X DELETE \
+  --url 'https://api.atlassian.com/admin/v1/orgs/{orgId}/policies/{policyId}' \
+  --header 'Authorization: Bearer <access_token>'
+```
+
+## List Policies
+GET /v1/orgs/{orgId}/policies
+
+### cURL
+```bash
+curl --request GET \
+  --url 'https://api.atlassian.com/admin/v1/orgs/{orgId}/policies' \
+  --header 'Authorization: Bearer <access_token>' \
+  --header 'Accept: application/json'
+```
+
+## Expected Response (Create/Update)
+202 Accepted
+
+```json
+{
+  "data": {
+    "id": "policy-id",
+    "type": "policy",
+    "attributes": {
+      "type": "ip-allowlist",
+      "name": "Office IP Allowlist",
+      "status": "applying",
+      "rule": { "ips": ["192.168.1.0/24"] },
+      "resources": [
+        {
+          "id": "resource-id",
+          "applicationStatus": "applying"
+        }
+      ]
+    }
+  }
+}
+```
+
+## Expected Response (Delete)
+202 Accepted
+
+## Expected Response (List)
+200 OK
+
+```json
+{
+  "data": [
+    {
+      "id": "policy-id",
+      "type": "policy",
+      "attributes": {
+        "type": "ip-allowlist",
+        "name": "Office IP Allowlist",
+        "status": "enabled",
+        "rule": { "ips": ["192.168.1.0/24"] }
+      }
+    }
+  ],
+  "meta": { "next": null, "page_size": 25 },
+  "links": { "self": "...", "prev": null, "next": null }
+}
+```
+
+## Required Scopes
+- `read:policies:admin` (list, get, validate)
+- `write:policies:admin` (create, update, delete)
+
+## Policy Types
+| Type | Description |
+|------|-------------|
+| `ip-allowlist` | Restrict access by IP address |
+| `saml` | SAML authentication |
+| `mfa` | Multi-factor authentication |
+| `two-step` | Two-step verification |
+| `custom` | Custom policy |
+
+## Notes
+- Policy application is asynchronous — status changes from `applying` to `enabled`
+- Use the validate endpoint to check policy configuration before applying
+- Resources are applied asynchronously
+- Check `resources[].applicationStatus` to track progress

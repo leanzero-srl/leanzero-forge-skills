@@ -1,0 +1,85 @@
+# Grant/Revoke User Roles
+# Use Case: Access management — assign or remove platform roles
+
+> **DEPRECATION NOTICE.** The two endpoints below
+> (`/v1/orgs/{orgId}/users/{userId}/roles/assign` and `.../roles/revoke`)
+> are scheduled for removal on **2026-06-30** per `docs/gotchas.md`.
+>
+> For new code, prefer the experimental v1 role-assignments endpoints,
+> which support org-level role grants and a richer resource model:
+>
+>   POST /v1/orgs/{orgId}/users/{userId}/role-assignments/assign
+>   POST /v1/orgs/{orgId}/users/{userId}/role-assignments/revoke
+>
+> See `docs/03-users.md` for the v2-aligned flow.
+
+## Grant Role (legacy — schedule for replacement before 2026-06-30)
+POST /v1/orgs/{orgId}/users/{userId}/roles/assign
+
+### Request Body
+```json
+{
+  "role": "atlassian/org-admin",
+  "resource": "ari:cloud:jira::cloud-id/instance-id"
+}
+```
+
+### cURL
+```bash
+curl -X POST \
+  --url 'https://api.atlassian.com/admin/v1/orgs/{orgId}/users/{userId}/roles/assign' \
+  --header 'Authorization: Bearer <access_token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "role": "atlassian/org-admin",
+    "resource": "ari:cloud:jira::cloud-id/instance-id"
+  }'
+```
+
+## Revoke Role (legacy — schedule for replacement before 2026-06-30)
+POST /v1/orgs/{orgId}/users/{userId}/roles/revoke
+
+### Request Body
+```json
+{
+  "role": "atlassian/org-admin",
+  "resource": "ari:cloud:jira::cloud-id/instance-id"
+}
+```
+
+### cURL
+```bash
+curl -X POST \
+  --url 'https://api.atlassian.com/admin/v1/orgs/{orgId}/users/{userId}/roles/revoke' \
+  --header 'Authorization: Bearer <access_token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "role": "atlassian/org-admin",
+    "resource": "ari:cloud:jira::cloud-id/instance-id"
+  }'
+```
+
+## Expected Response
+204 No Content
+
+## Required Scopes
+- `write:users:admin`
+
+## Available Platform Roles
+| Role | Description |
+|------|-------------|
+| `atlassian/org-admin` | Organization administrator |
+| `atlassian/site-admin` | Site administrator |
+| `atlassian/billing-admin` | Billing administrator |
+| `atlassian:jira::role/admin` | Jira administrator |
+| `atlassian:jira::role/member` | Jira member |
+| `atlassian:confluence::role/admin` | Confluence administrator |
+| `atlassian:confluence::role/member` | Confluence member |
+| `atlassian:bitbucket::role/admin` | Bitbucket administrator |
+| `atlassian:bitbucket::role/member` | Bitbucket member |
+
+## Notes
+- New user management experience only
+- Eventual consistency: up to 30 seconds propagation delay
+- Use the Search for users within an organization API to get the userId
+- resource parameter is optional for org-level roles
