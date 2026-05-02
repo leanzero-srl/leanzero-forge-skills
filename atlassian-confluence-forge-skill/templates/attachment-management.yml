@@ -1,6 +1,15 @@
 # Attachment Management Template
 # Work with Confluence page attachments - upload, list, download
 # Documentation: https://developer.atlassian.com/cloud/confluence/rest/api-group-attachment/
+#
+# AUTH NOTE (2025 update):
+#   Some snippets below show the legacy Atlassian Connect pattern
+#     const token = await AP.context.getToken();
+#     api.fetch({ url, headers: { Authorization: `JWT ${token}` } })
+#   Forge apps DO NOT use that. Replace with:
+#     - Custom UI:  await requestConfluence('/wiki/api/v2/...')   from '@forge/bridge'
+#     - Resolver:   await api.asUser().requestConfluence(route`/wiki/api/v2/...`)  from '@forge/api'
+#   See docs/01-core-concepts.md for the full pattern.
 
 modules:
   # Add attachment UI to pages or content actions

@@ -1,5 +1,7 @@
 # Labels Management: Confluence Content Labels
 
+> **Auth note (2025 update).** Examples below use the legacy Atlassian Connect `AP.context.getToken()` pattern. **Don't use that in new Forge apps.** Replace with `requestConfluence('/wiki/api/v2/...')` from `@forge/bridge` (Custom UI) or `api.asUser().requestConfluence(route\`...\`)` from `@forge/api` (resolver). See `01-core-concepts.md`.
+
 This guide covers working with Confluence content labels - a key organizational feature for tagging and filtering pages, blog posts, and other content.
 
 ---

@@ -1,5 +1,11 @@
 # Dashboard Gadget Template for Confluence Forge Apps
-# 
+#
+# AUTH NOTE (2025 update):
+#   Replace any `AP.context.getToken()` snippets with the Forge auth pattern:
+#     - Custom UI:  await requestConfluence('/wiki/api/v2/...')  from '@forge/bridge'
+#     - Resolver:   await api.asUser().requestConfluence(route`/wiki/api/v2/...`)  from '@forge/api'
+#   See docs/01-core-concepts.md.
+#
 # This template provides a complete dashboard gadget configuration
 # that can be customized for your specific use case.
 
