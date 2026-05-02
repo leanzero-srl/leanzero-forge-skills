@@ -1,0 +1,189 @@
+# Custom Field Type Template (`jira:customFieldType`)
+
+Defines a Forge custom field with view, edit, and context-config UIs.
+
+## Important rendering rule
+
+> **View rendering must use UI Kit (`@forge/react`, `render: native`).** Custom UI is not supported for view rendering. Edit can use either, but UI Kit keeps things consistent and gets the field value via `useProductContext()`.
+
+## File: manifest.yml
+
+```yaml
+modules:
+  jira:customFieldType:
+    - key: priority-score
+      name: Priority Score
+      description: Numeric priority score (0–100) with auto-suggest
+      type: number      # number | string | rich-text | user | group | option-list
+      collection: list  # omit for single-value fields
+      validation:
+        # Optional Jira-expression-level validation (cheap, no Forge call).
+        expression: "value >= 0 && value <= 100"
+        errorMessage: "Score must be between 0 and 100"
+
+  jira:customField:
+    - key: priority-score-render
+      type: ari:cloud:ecosystem::extension/${app-id}/${env-id}/static/customFieldType/priority-score
+      view:
+        resource: cf-view
+        render: native     # UI Kit only
+      edit:
+        resource: cf-edit
+        render: native     # native (UI Kit) recommended; Custom UI also allowed
+        isInline: true     # allow inline editing on the issue view
+      contextConfig:
+        resource: cf-context-config
+
+  function:
+    - key: cf-default-value
+      handler: index.defaultValue
+
+resources:
+  - key: cf-view
+    path: src/customField/view.jsx
+  - key: cf-edit
+    path: src/customField/edit.jsx
+  - key: cf-context-config
+    path: src/customField/contextConfig.jsx
+
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - storage:app
+```
+
+## File: src/customField/view.jsx (UI Kit)
+
+```javascript
+import React from 'react';
+import ForgeReconciler, { Lozenge, Text, useProductContext } from '@forge/react';
+
+const App = () => {
+  const ctx = useProductContext();
+  const value = ctx?.extension?.fieldValue;
+
+  if (value == null) return <Text>—</Text>;
+
+  const tone =
+    value >= 80 ? 'removed' : value >= 50 ? 'inprogress' : 'success';
+  return <Lozenge appearance={tone}>{value}</Lozenge>;
+};
+
+ForgeReconciler.render(<App />);
+```
+
+## File: src/customField/edit.jsx (UI Kit)
+
+```javascript
+import React, { useState } from 'react';
+import ForgeReconciler, {
+  Form,
+  FormFooter,
+  Button,
+  Range,
+  useForm,
+  useProductContext,
+} from '@forge/react';
+import { view } from '@forge/bridge';
+
+const App = () => {
+  const ctx = useProductContext();
+  const initial = ctx?.extension?.fieldValue ?? 50;
+  const [score, setScore] = useState(initial);
+
+  const submit = async () => {
+    // Tells Jira what the new field value is
+    await view.submit(score);
+  };
+
+  return (
+    <Form onSubmit={submit}>
+      <Range min={0} max={100} value={score} onChange={setScore} />
+      <FormFooter>
+        <Button onClick={() => view.close()}>Cancel</Button>
+        <Button appearance="primary" type="submit">Save</Button>
+      </FormFooter>
+    </Form>
+  );
+};
+
+ForgeReconciler.render(<App />);
+```
+
+## File: src/customField/contextConfig.jsx (UI Kit)
+
+```javascript
+// Project-/issue-type-scoped configuration for the field
+import React from 'react';
+import ForgeReconciler, {
+  Textfield,
+  Form,
+  FormFooter,
+  Button,
+  useForm,
+} from '@forge/react';
+import { view } from '@forge/bridge';
+
+const App = () => {
+  const submit = async (data) => {
+    // Persisted by Forge against the field-context combo
+    await view.submit({ targetTeam: data.targetTeam });
+  };
+  return (
+    <Form onSubmit={submit}>
+      <Textfield name="targetTeam" placeholder="Team responsible for triage" />
+      <FormFooter>
+        <Button appearance="primary" type="submit">Save</Button>
+      </FormFooter>
+    </Form>
+  );
+};
+
+ForgeReconciler.render(<App />);
+```
+
+## File: src/index.js (default value handler — optional)
+
+```javascript
+// Returns a starting value when the field is first seen on an issue.
+export const defaultValue = async (args, context) => {
+  // args.issue, context.extension.fieldId, etc. are available.
+  return 50;
+};
+```
+
+## Reading the field value at runtime
+
+```javascript
+import api, { route } from '@forge/api';
+
+const r = await api
+  .asApp()
+  .requestJira(route`/rest/api/3/issue/${issueKey}?fields=customfield_10042`);
+const issue = await r.json();
+const score = issue.fields.customfield_10042;
+```
+
+## Gotchas
+
+- **View must be UI Kit (`render: native`)**. Trying to use Custom UI for view will fail at deploy time.
+- **`type` is fixed at field creation**. You can't change `number` → `string` later; recreate the field.
+- **Inline edit (`isInline: true`)** is what makes the field editable directly on the issue view (no modal).
+- **`useProductContext().extension.fieldValue`** is the canonical way to read the current value in view/edit components.
+- The `contextConfig` is per-(project, issue-type) — admin-facing.
+
+## Testing
+
+```bash
+forge deploy
+forge install --upgrade
+# Then in Jira: Project settings → Issues → Fields, add the custom field to a screen
+forge logs -n 50 --follow
+```
+
+## References
+
+- https://developer.atlassian.com/platform/forge/manifest-reference/modules/jira-custom-field-type
+- https://developer.atlassian.com/platform/forge/manifest-reference/modules/jira-custom-field
+- See also: `docs/29-custom-field-types.md` (in this skill)

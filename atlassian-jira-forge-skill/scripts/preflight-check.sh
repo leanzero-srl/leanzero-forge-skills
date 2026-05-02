@@ -1,67 +1,62 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# preflight-check.sh — checks Forge CLI is installed, you're logged in,
+# manifest.yml exists, and `forge lint` passes. CI-safe.
 
-# preflight-check.sh - A smart validator for the Forge development environment.
+set -uo pipefail
+# NOTE: we deliberately don't `set -e` because we want to collect all failures
+# before exiting. Each check sets FAILED=1 on its own.
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-echo "🔍 Running Forge Pre-flight Check..."
-echo "--------------------------------------------------"
+echo "[preflight] Running Forge environment check"
+echo "[preflight] -------------------------------"
 
 FAILED=0
 
-# 1. Check if forge CLI is installed
-if ! command -v forge &> /dev/null; then
-  echo -e "${RED}❌ ERROR: 'forge' CLI not found in PATH.${NC}"
-  echo "   HINT: Install it using 'npm install -g @forge/cli'"
+# 1. forge CLI installed
+if ! command -v forge >/dev/null 2>&1; then
+  echo "[preflight] FAIL: 'forge' CLI not found in PATH"
+  echo "  Hint: npm install -g @forge/cli"
   FAILED=1
 else
-  echo -e "${GREEN}✅ Forge CLI is installed.${NC}"
+  echo "[preflight] OK:   forge CLI is installed"
 fi
 
-# 2. Check if user is logged in
-if [ $? -eq 0 ]; then
-  echo "Checking authentication status..."
-  # We attempt to run a command that requires auth, like 'forge list'
-  # Redirecting stderr to stdout to capture messages
-  AUTH_CHECK=$(forge list 2>&1)
+# 2. Logged in (only attempt if CLI exists)
+if [[ "$FAILED" -eq 0 ]]; then
+  AUTH_CHECK="$(forge list 2>&1 || true)"
   if [[ "$AUTH_CHECK" == *"not logged in"* ]] || [[ "$AUTH_CHECK" == *"authentication required"* ]]; then
-    echo -e "${RED}❌ ERROR: Not logged into Forge.${NC}"
-    echo "   HINT: Run 'forge login' to authenticate."
+    echo "[preflight] FAIL: not logged into Forge"
+    echo "  Hint: forge login"
     FAILED=1
   else
-    echo -e "${GREEN}✅ Authentication verified.${NC}"
+    echo "[preflight] OK:   forge authentication present"
   fi
 fi
 
-# 3. Check for manifest.yml
-if [ ! -f "manifest.yml" ]; then
-  echo -e "${RED}❌ ERROR: 'manifest.yml' not found in current directory.${NC}"
+# 3. manifest.yml present
+if [[ ! -f "manifest.yml" ]]; then
+  echo "[preflight] FAIL: manifest.yml not found in current directory"
   FAILED=1
 else
-  echo -e "${GREEN}✅ 'manifest.yml' found.${NC}"
-  
-  # 4. Run forge lint
-  echo "Validating manifest with 'forge lint'..."
-  LINT_OUTPUT=$(forge lint 2>&1)
-  if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✅ Manifest is valid.${NC}"
+  echo "[preflight] OK:   manifest.yml found"
+
+  # 4. forge lint passes
+  echo "[preflight] Validating manifest with 'forge lint'"
+  if LINT_OUTPUT="$(forge lint 2>&1)"; then
+    echo "[preflight] OK:   forge lint passed"
   else
-    echo -e "${RED}❌ ERROR: Manifest validation failed.${NC}"
-    echo "--------------------------------------------------"
-    echo "$LINT_OUTPUT" | grep -E "error|warning" || echo "Lint failed with unknown error."
-    echo "--------------------------------------------------"
+    echo "[preflight] FAIL: forge lint reported errors"
+    echo "  ----"
+    echo "$LINT_OUTPUT" | grep -E "error|warning" || echo "  (no parsed error/warning lines; full output above)"
+    echo "  ----"
     FAILED=1
   fi
 fi
 
-echo "--------------------------------------------------"
-if [ $FAILED -eq 0 ]; then
-  echo -e "${GREEN}🚀 PRE-FLIGHT CHECK PASSED! You are ready to develop.${NC}"
+echo "[preflight] -------------------------------"
+if [[ "$FAILED" -eq 0 ]]; then
+  echo "[preflight] OK:   pre-flight check passed"
   exit 0
 else
-  echo -e "${RED}🛑 PRE-FLIGHT CHECK FAILED. Please fix the errors above before proceeding.${NC}"
+  echo "[preflight] FAIL: pre-flight check failed — fix the errors above"
   exit 1
 fi
