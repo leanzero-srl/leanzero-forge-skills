@@ -1,0 +1,34 @@
+# Atlassian Migration Script — .env.example
+#
+# Copy this file to `.env` (gitignored) and fill in the values for your run.
+# `.env` is loaded by main/{plan,sync,audit}.js via `require("dotenv").config(...)`.
+#
+# Generate Cloud API tokens here:
+#   https://id.atlassian.com/manage-profile/security/api-tokens
+
+# ── Destination: Atlassian Cloud ─────────────────────────────────────
+# For Jira:        https://your-site.atlassian.net
+# For Confluence:  https://your-site.atlassian.net/wiki   (note the /wiki)
+CLOUD_BASE_URL=https://your-site.atlassian.net
+CLOUD_EMAIL=you@example.com
+CLOUD_API_TOKEN=your-cloud-api-token
+
+# ── Source: Atlassian Data Center / Server (optional) ────────────────
+# Use either DC_USERNAME + DC_PASSWORD (Basic auth)
+# OR DC_PAT (Personal Access Token, DC 8.14+ / Confluence DC 7.9+).
+DC_BASE_URL=https://your-jira-dc.example.com
+DC_USERNAME=admin
+DC_PASSWORD=your-dc-password
+# DC_PAT=your-personal-access-token
+
+# ── Source: second Atlassian Cloud tenant (Cloud→Cloud only) ─────────
+# When consolidating or splitting tenants, this is the read-only side.
+# SOURCE_CLOUD_BASE_URL=https://other-site.atlassian.net
+# SOURCE_CLOUD_EMAIL=admin@example.com
+# SOURCE_CLOUD_API_TOKEN=your-other-cloud-api-token
+
+# ── Forge KVS remote access (optional, for app-data mending) ─────────
+# Only set these if you're mending Forge app data from outside the app.
+# See docs/29-forge-kvs-remote-mending.md for the full setup.
+# FORGE_APP_ID=ari:cloud:ecosystem::app/00000000-0000-0000-0000-000000000000
+# FORGE_ENVIRONMENT=production

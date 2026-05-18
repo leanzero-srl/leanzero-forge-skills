@@ -8,7 +8,7 @@ A skill is a directory containing a `SKILL.md` file with YAML frontmatter (name 
 
 ## Available skills
 
-This repo ships **five skills**. Pick the one that matches your task — they don't overlap when used correctly.
+This repo ships **six skills**. Pick the one that matches your task — they don't overlap when used correctly.
 
 | Skill | Use when… | Don't use when… |
 |---|---|---|
@@ -17,10 +17,15 @@ This repo ships **five skills**. Pick the one that matches your task — they do
 | **[atlassian-organizations-api-skill](atlassian-organizations-api-skill/)** | Cross-product **org admin** operations — managing users, groups, directories, domains, audit events, policies, workspaces. Uses `api.atlassian.com/admin/`. | Working with Jira issues or Confluence content — those have their own skills. |
 | **[jira-api-skill](jira-api-skill/)** | Calling the **Jira Cloud REST API v3** from an **external app** (Node/Python service, CI job, bot). API token + OAuth flows, JQL search, ADF construction. | Building a Forge app → `atlassian-jira-forge-skill`. |
 | **[confluence-api-skill](confluence-api-skill/)** | Calling the **Confluence Cloud REST API v2** from an **external app**. Pages, blogposts, attachments, content properties, ADF/storage formats. | Building a Forge app → `atlassian-confluence-forge-skill`. |
+| **[atlassian-migration-scripts-skill](atlassian-migration-scripts-skill/)** | Writing Node.js **migration scripts** — Data Center → Cloud or Cloud ↔ Cloud — using a Plan/Sync/Audit triad, native-https clients, CSV outputs, and Forge KVS remote app-data mending. | One-off curls or building a long-running service — those don't need the resumable/auditable scaffolding. |
 
 ## Quick decision flow
 
 ```
+Are you writing a migration / bulk data-fix script?
+├── Yes → atlassian-migration-scripts-skill
+└── No, continue:
+
 Are you writing code that runs *inside* Atlassian (as a Forge function)?
 ├── Yes — Jira?         → atlassian-jira-forge-skill
 ├── Yes — Confluence?   → atlassian-confluence-forge-skill
@@ -39,7 +44,7 @@ Skills are discovered automatically by Cline / Claude Code from these paths:
 - **Project-scoped** (recommended for teams): `.cline/skills/`, `.clinerules/skills/`, or `.claude/skills/`
 - **Globally-available** (your personal collection): `~/.cline/skills/` or `~/.claude/skills/`
 
-To install all five skills globally, run:
+To install all six skills globally, run:
 
 ```bash
 ./scripts/install-skills.sh
@@ -52,7 +57,8 @@ To install manually:
 ```bash
 mkdir -p ~/.claude/skills ~/.cline/skills
 for s in atlassian-jira-forge-skill atlassian-confluence-forge-skill \
-         atlassian-organizations-api-skill jira-api-skill confluence-api-skill; do
+         atlassian-organizations-api-skill jira-api-skill confluence-api-skill \
+         atlassian-migration-scripts-skill; do
   ln -sf "$(pwd)/$s" "$HOME/.claude/skills/$s"
   ln -sf "$(pwd)/$s" "$HOME/.cline/skills/$s"
 done
@@ -68,10 +74,11 @@ skill-jira-forge/                          # repo root
 ├── scripts/
 │   └── install-skills.sh                  # symlinks skills into ~/.{claude,cline}/skills
 ├── atlassian-jira-forge-skill/            # ──┐
-├── atlassian-confluence-forge-skill/      #   │  the five skills
-├── atlassian-organizations-api-skill/     #   │
+├── atlassian-confluence-forge-skill/      #   │
+├── atlassian-organizations-api-skill/     #   │  the six skills
 ├── jira-api-skill/                        #   │
-├── confluence-api-skill/                  # ──┘
+├── confluence-api-skill/                  #   │
+├── atlassian-migration-scripts-skill/     # ──┘
 └── docs/                                  # repo-level documentation (not skill content)
 ```
 

@@ -121,7 +121,8 @@ python3 -c "
 import re, os, sys
 broken = []
 for skill in ['atlassian-jira-forge-skill', 'atlassian-confluence-forge-skill',
-              'atlassian-organizations-api-skill', 'jira-api-skill', 'confluence-api-skill']:
+              'atlassian-organizations-api-skill', 'jira-api-skill', 'confluence-api-skill',
+              'atlassian-migration-scripts-skill']:
     roots = [f'{skill}/SKILL.md']
     for d in ['docs', 'templates', 'scripts']:
         p = f'{skill}/{d}'
