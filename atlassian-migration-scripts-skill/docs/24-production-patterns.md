@@ -1,6 +1,6 @@
 # Production Patterns
 
-Thirty patterns extracted from real production migration scripts. Each is a small, self-contained idiom you can adapt for new jobs.
+Thirty-five patterns extracted from real production migration scripts. Each is a small, self-contained idiom you can adapt for new jobs.
 
 ## 1. Resumable plan with autosave
 
@@ -553,7 +553,157 @@ if (excludedContainers.has(node.tag)) {
 
 **When to use:** any structural rewrite (un-nesting, splitting, flattening) where the tree shape constrains what's mechanically possible. The choice is per-migration — document the default in the sub-project README.
 
+## 31. Streaming multipart upload with retry-safe body factory
+
+The naive multipart upload (`Buffer.concat([head, fileContents, tail])`) reads the whole file into memory and dies on big attachments — and worse, it cannot be retried after a 429/5xx because the request body has already been consumed. The correct shape is a *body factory* that returns a fresh `Readable` every time the HTTP client needs to send the request:
+
+```javascript
+const mp = buildSingleFileMultipart({ filePath, filename, mimeType });
+await client.makeMultipartRequest(
+  "POST", `/rest/api/3/issue/${key}/attachments?notifyUsers=false`,
+  mp.contentType, mp.contentLength, mp.createBodyStream,
+  { "X-Atlassian-Token": "no-check" },
+);
+```
+
+Inside the client's retry loop:
+
+```javascript
+const bodyStream = bodyFactory();          // fresh Readable on every attempt
+bodyStream.on("error", (err) => { req.destroy(); reject(err); });
+bodyStream.pipe(req);
+```
+
+**When to use:** every multipart upload in a script that retries. Required for attachments > a few MB. See `templates/multipart-builder.js`.
+
+## 32. Streaming binary download with redirect-following
+
+Jira DC attachments respond with absolute URLs (or 302/303/307 redirects to signed storage URLs). A correct downloader streams the response straight to disk, follows redirects, and applies the same 429 / 5xx / network retry policy as the JSON client — but with a longer timeout and a re-creatable destination file.
+
+```javascript
+async function downloadAttachmentToFile(downloadUrl, destPath, retryState = null) {
+  // parse URL; pick http/https module by scheme
+  // on 301/302/303/307/308 → recurse with state.redirects + 1 (cap at 5)
+  // on 429 → honor Retry-After, exp-backoff cap 120s, cap 5 attempts
+  // on 5xx → exp-backoff cap 30s, cap 5 attempts
+  // on 2xx → res.pipe(fs.createWriteStream(destPath)); resolve({ bytesWritten, mimeType })
+  // on out.error → fs.unlinkSync(destPath) so the next attempt starts clean
+}
+```
+
+Three things the naive version gets wrong:
+- Forgetting `res.resume()` on a redirect leaves the socket half-read.
+- Not following 307/308 — those are the modern signed-URL redirects from Jira DC.
+- Not deleting the partial file on disk error — the next retry sees a half-file and either appends garbage or silently succeeds.
+
+**When to use:** any post-JCMA / Cloud-to-Cloud script that needs the actual bytes of an attachment, not just the metadata. `sync_issue_attachments` in jira-data is the canonical reference.
+
+## 33. Filename + size fingerprint as idempotency key
+
+Attachment IDs change between systems. Filename alone collides (two `screenshot.png` files on the same issue is normal). Use `${filename}::${size}` as the join key — this is exactly what Jira's web UI does for deduplication too:
+
+```javascript
+const fingerprint = (filename, size) => `${filename}::${size == null ? "?" : size}`;
+
+const cloudFps = new Set(cloudAttachments.map((a) => fingerprint(a.filename, a.size)));
+for (const dc of dcAttachments) {
+  if (cloudFps.has(fingerprint(dc.filename, dc.size))) {
+    // Already there — skip the upload
+  }
+}
+```
+
+Re-check the fingerprint set **at execute time**, not just at plan time. Between plan and execute, someone (or another worker) may have uploaded the same file:
+
+```javascript
+async _processIssue(issueKey, data) {
+  this.cloudClient.invalidateAttachmentCache(issueKey);
+  const fresh = await this.cloudClient.listAttachments(issueKey);
+  const freshFps = new Set(fresh.map((a) => fingerprint(a.filename, a.size)));
+  for (const att of data.attachments) {
+    if (att.status === "pending" && freshFps.has(fingerprint(att.filename, att.size))) {
+      att.status = "skipped-already-present";       // dedup during execute
+    }
+  }
+}
+```
+
+**When to use:** any attachment re-stitching after JCMA, any Cloud↔Cloud attachment copy, any idempotent file-import script. The cost is one extra HEAD-equivalent per issue; the value is never double-uploading.
+
+## 34. Destination policy preflight with override
+
+Jira Cloud's `GET /rest/api/3/configuration` returns `maxAttachmentSize` (in bytes) and `attachmentsEnabled` (boolean). Check this *before* planning so the plan can classify oversize attachments as `skipped-too-large` instead of failing them at upload time. Also accept a `--max-bytes` CLI override for instances where the operator already knows the limit was raised:
+
+```javascript
+const cfg = await cloud.getConfiguration();       // cached on client (_configCache)
+const maxBytes = opts.maxBytes > 0 ? opts.maxBytes
+              : cfg.attachmentsEnabled === false ? 0
+              : typeof cfg.maxAttachmentSize === "number" ? cfg.maxAttachmentSize
+              : null;
+
+for (const att of dcAttachments) {
+  if (maxBytes != null && att.size != null && att.size > maxBytes) {
+    plan.push({ ...att, status: "skipped-too-large", error: `size ${att.size} > max ${maxBytes}` });
+    oversizeRows.push({ issueKey, filename: att.filename, size: att.size, maxAllowed: maxBytes });
+  }
+}
+```
+
+At execute time, **still handle a 413 from the actual upload** and reclassify the row as `skipped-too-large` even if the preflight said it was fine — the tenant config may have changed mid-run:
+
+```javascript
+if (result.statusCode === 413) {
+  att.status = "skipped-too-large";
+  att.error = `upload 413: ${result.error}`;
+}
+```
+
+Always emit a separate `oversize_<runId>.csv` so the operator has a clean list of files that need to be migrated by some other means (shared drive, Confluence space, etc.).
+
+**When to use:** every attachment migration. Also useful as a template for *any* destination-policy preflight where the destination publishes a configuration endpoint (e.g. Confluence page size limits).
+
+## 35. Graceful shutdown that flushes plan + master index
+
+Long-running scripts must save state on SIGINT and SIGTERM. Otherwise an operator's Ctrl+C destroys the last N updates and a re-run repeats them. Install handlers in `main()` *before* constructing the sync class, and have them save both the plan and the master index:
+
+```javascript
+async function main() {
+  let sync = null;
+  const shutdown = () => {
+    if (sync?.planManager) {
+      console.log("\nShutting down gracefully...");
+      if (sync.planManager.plan)        sync.planManager.savePlan();
+      if (sync.planManager.masterIndex) sync.planManager.saveMasterIndex();
+    }
+    process.exit(0);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
+  try {
+    sync = new SyncClass(parseArgs());
+    await sync.run();
+    process.exit(0);
+  } catch (error) {
+    // ALSO save plan + master here — uncaught throws from the run path are the
+    // most common reason state goes missing.
+    if (sync?.planManager?.plan)        sync.planManager.savePlan();
+    if (sync?.planManager?.masterIndex) sync.planManager.saveMasterIndex();
+    console.error("Fatal:", error.message);
+    process.exit(1);
+  }
+}
+```
+
+Two subtle requirements:
+- **The throw path saves too.** A bug in the run path is the most common reason state goes missing. The catch block must mirror the SIGINT handler.
+- **`kill -9` skips Node's signal handlers.** If an operator needs to force-stop, they lose the last autosave window of work. Document this — Ctrl+C is safe; SIGKILL is not.
+
+**When to use:** every entry point in `main/*.js`. The skill's `templates/sync-script.template.js` ships the handler — keep it when you copy.
+
 ## See also
+
+- [`13-running-and-monitoring.md`](13-running-and-monitoring.md) — the progress-line contract used by an agent observer (patterns 31, 32, 35)
 
 - [`templates/`](../templates/) — all of these patterns are implemented in the templates
 - [`27-rate-limits-and-quotas.md`](27-rate-limits-and-quotas.md) — points math behind pattern 12

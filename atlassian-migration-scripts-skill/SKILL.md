@@ -25,12 +25,14 @@ Skip this skill for:
 
 - **Scaffolding a new migration sub-project**: `templates/sub-project-skeleton.md` — copy the folder tree, drop in the clients you need, fill the TODOs in the three script templates.
 - **The mental model** (Plan→Sync→Audit, two-phase, two-gate): `docs/01-core-concepts.md`.
-- **25 production patterns** lifted from real shipped scripts: `docs/24-production-patterns.md`.
+- **35 production patterns** lifted from real shipped scripts: `docs/24-production-patterns.md`.
 - **Rate limits in March 2026** (you almost certainly need to read this): `docs/27-rate-limits-and-quotas.md`.
 - **Post-JCMA filter / JQL cleanup**: `docs/10-jql-and-aql-rewriting.md` + `templates/jql-rewriter.js` + `templates/jql-sanitizer.js` + `templates/asset-field-rewriter.js`.
 - **Backup & rollback** (Confluence version history, per-entity Jira backups, semantic-hash no-op detection): `docs/09-backup-and-rollback.md`.
 - **ADF construction & storage-format surgery**: `docs/11-storage-format-and-adf.md` + `templates/adf-builders.js`.
 - **Preflight & drift detection** (don't apply a stale plan): `docs/12-preflight-and-staleness.md` + `templates/preflight.js`.
+- **Running & monitoring** (how an AI agent should launch & observe long-running scripts): `docs/13-running-and-monitoring.md`.
+- **Attachment migration** (streaming download/upload, filename+size fingerprint, retry-safe multipart): `docs/28-adf-and-attachments.md` + `templates/multipart-builder.js` + patterns 31–35 in `docs/24-production-patterns.md`.
 - **Forge app-data mending** from outside the app: `docs/29-forge-kvs-remote-mending.md`.
 
 ## Quick Reference
@@ -43,6 +45,8 @@ Skip this skill for:
 | Verify the source hasn't drifted since planning | `templates/preflight.js` | `docs/12-preflight-and-staleness.md` |
 | Verify changes via sampling | `templates/audit-script.template.js` | `docs/07-audit-and-sampling.md` |
 | Make rate-limit-aware API calls | `templates/cloud-jira-client.js` / `templates/cloud-confluence-client.js` | `docs/03-http-client-pattern.md` |
+| Upload attachments with retry-safe streaming multipart | `templates/multipart-builder.js` | `docs/28-adf-and-attachments.md` |
+| Launch a long-running script and report progress back to the user | (no template — convention) | `docs/13-running-and-monitoring.md` |
 | Paginate Jira (post-Aug 2025) | (use `cloud-jira-client.js#searchJql`) | `docs/04-pagination.md` |
 | Map DC users/groups → Cloud `accountId`/`groupId` | `templates/identity-resolver.js` | `docs/05-identity-resolution.md` |
 | Map source custom field IDs → destination | `templates/cloud-catalog.js#buildFieldMapFrom` | `docs/post-jcma-id-mapping.md` |
@@ -212,6 +216,7 @@ Pace at ~60 % of burst and ~40 % of hourly to absorb retries without ever surfac
 | [`10-jql-and-aql-rewriting.md`](docs/10-jql-and-aql-rewriting.md) | Filter ID rewriting, custom-field ID rewriting, JQL sanitization, AQL bodies inside JQL, Assets-field rewriting (ARI / key / objectId resolution) |
 | [`11-storage-format-and-adf.md`](docs/11-storage-format-and-adf.md) | Storage XHTML surgery (regex vs tree), ADF builders, walker, semantic hash |
 | [`12-preflight-and-staleness.md`](docs/12-preflight-and-staleness.md) | Drift detection between plan and apply time, abort thresholds, forward-roll vs backward-roll |
+| [`13-running-and-monitoring.md`](docs/13-running-and-monitoring.md) | Progress-line contract, background launch, completion + stall detection, how an AI agent should report status to the user |
 
 ### Patterns, limits, references
 | File | Topic |
@@ -250,6 +255,7 @@ Copy-paste-ready files in `templates/`:
 | [`identity-resolver.js`](templates/identity-resolver.js) | Email-first + displayName fallback, on-disk cache, CSV override |
 | [`worker-pool.js`](templates/worker-pool.js) | Zero-dep bounded concurrency (~30 lines) |
 | [`csv-writer.js`](templates/csv-writer.js) | Streaming RFC-4180 CSV writer, zero-dep |
+| [`multipart-builder.js`](templates/multipart-builder.js) | RFC-7578 multipart/form-data envelope with a retry-safe body factory — use for any binary upload that must survive 429/5xx |
 
 ### Transform helpers
 | Template | Purpose |
@@ -285,6 +291,7 @@ Recommended workflow: `preflight-check.sh` → `test-auth.sh` → `new-script.sh
 
 ## Changelog
 
+- **2026-05-19 (attachment sync + agent-observation pass)** Distilled the new `sync_issue_attachments` sub-project (jira-data) into the skill. Added `docs/13-running-and-monitoring.md` — the first doc explicitly aimed at an *AI agent observer* of a long-running script (progress-line contract, background launch, FINAL REPORT marker, stall detection, how to report status back to the user without echoing the log). Added `templates/multipart-builder.js` — retry-safe streaming multipart with a body-factory pattern, the upload primitive missing from `cloud-jira-client.js#uploadAttachment` (which buffers the whole file in memory and cannot be retried after a 429). Added patterns 31–35 to `24-production-patterns.md`: streaming multipart with body factory, streaming binary download with redirect-following, filename+size fingerprint as idempotency key, destination-policy preflight (Cloud `/configuration` + `--max-bytes` override + 413 reclassification), graceful shutdown that flushes both plan and master index. Expanded `28-adf-and-attachments.md` with the canonical attachment re-upload pattern (plan→download→upload with disk staging). Expanded `gotchas.md` with seven attachment-specific footguns (retry-safety of multipart, 413 mid-upload, redirect handling, filename sanitization for disk, fingerprint re-check at execute, single-element response array) and a new "Running and monitoring (agent observation)" section.
 - **2026-05-18 (exhaustive sweep)** Fourth pass added 3 more templates derived from sub-projects I'd previously only sampled: `workflow-transformer.js` (status / custom-field / screen / group / role ID remap + ScriptRunner-rule drop + JMWE prefix cleanup), `cloud-config-comparator.js` (diff fields/statuses/issueTypes/linkTypes/priorities/resolutions between two Cloud tenants), `excel-report-writer.js` (optional exceljs-based multi-sheet workbook with color fills). Added patterns 26-30: two-sided DC↔Cloud backup-restore pair, stratified bucket sampling, discovery-dump for reverse-engineering vendor macros, lossy-parameter audit CSV, excluded-container fallback strategies. Expanded gotchas.md with workflow migration (status uniqueness, ScriptRunner drop, JMWE prefix, system post-functions), Cloud-to-Cloud config differences, Excel writer constraints, stratified-sampling bias, and discovery-dump leakage.
 - **2026-05-18 (deep enrichment)** Third pass over the source library added 5 more templates and 1 more doc: `asset-field-rewriter.js` (ARI / key / DC objectId resolution for Assets/CMDB field refs, with aqlFunction-block masking), `owner-swap.js` (try/finally + orphan-CSV for filter/dashboard owner-swaps), `preflight.js` (drift detection with bucket reporting), `logger.js` (dual-sink console+file with level filtering), `csv-reader.js` (RFC-4180 reader for scope inputs). Enhanced `identity-resolver.js` with accountId passthrough, 4-token-type support (accountId, email, displayName, userKey), and negative caching to avoid retry loops. Added `docs/12-preflight-and-staleness.md`. Patterns 22-25 added: preflight staleness check, owner-swap with try/finally + orphan CSV, ARI parsing for asset references, stable cursor sorting. Expanded `gotchas.md` with owner-swap, asset/CMDB, preflight, and stable-cursor sections. Added stable cursor sorting + page-id dedup to `04-pagination.md`. `new-script.sh` now includes `instance-fingerprint.js` by default and the new transforms via `--with-transforms`.
 - **2026-05-18 (enrichment)** Deepened the skill with 6 new templates and 3 new docs from a second pass over the source library: `instance-fingerprint.js` (refuse wrong-tenant writes), `jql-rewriter.js` + `jql-sanitizer.js` (post-JCMA filter cleanup, the single most common migration task), `adf-builders.js` (zero-dep ADF construction + walker + semantic hash), `backup-manager.js` (Confluence version-history rollback + intervention detection + per-entity Jira snapshots), `cloud-catalog.js` (one-shot field/status/role/group snapshot). Added docs/09 (backup & rollback), docs/10 (JQL/AQL rewriting), docs/11 (storage format & ADF). Expanded production patterns from 12 to 21 (semantic-hash no-op, intervention detection, multi-pass pipeline, state machine, owner-swap, multi-source resolution, sub-plan splitting, Cloud catalog snapshot, instance fingerprinting). Expanded gotchas.md with JQL/AQL, storage/ADF, backup/rollback, identity edge cases, and Cloud catalog sections. Added sub-plan splitting + instance signature sections to `02-plan-manager.md`.

@@ -142,13 +142,35 @@ For post-JCMA mending where attachment IDs changed:
 2. Re-stitch references in custom fields, descriptions, comments, or app data.
 3. Don't re-upload — wastes storage and bandwidth.
 
-If you must re-upload (rare; JCMA didn't include some attachments):
+#### Re-uploading missing attachments
+
+If JCMA left attachments behind (which it does silently for files that were uploaded to DC between JCMA's snapshot and cutover, or for issues moved between projects, or when a vendor app intercepts attachment storage), use the **`sync_issue_attachments`** pattern from `VAL-migration-scripts/jira/jira-data/`:
 
 ```javascript
-const buffer = await downloadFromSource(`/secure/attachment/${oldId}/${filename}`);
-const result = await cloud.uploadAttachment(destIssueKey, filename, buffer);
-mapping[oldId] = result[0].id;
+// PLAN: discover the gap
+const cloudAtt = await cloud.listAttachments(issueKey);     // primed from JQL response if possible
+const dcAtt    = await dc.getIssueAttachments(issueKey).attachments;
+const cloudFps = new Set(cloudAtt.map((a) => `${a.filename}::${a.size}`));
+const missing  = dcAtt.filter((a) => !cloudFps.has(`${a.filename}::${a.size}`));
+
+// EXECUTE: download → upload, one attachment at a time
+for (const att of missing) {
+  const tempPath = `/tmp/${issueKey}__${att.id}__${sanitize(att.filename)}`;
+  await dc.downloadAttachmentToFile(att.content, tempPath);
+  const result = await cloud.uploadAttachment(issueKey, tempPath, att.filename, att.mimeType);
+  fs.unlinkSync(tempPath);
+}
 ```
+
+Five things this pattern gets right that a naive script doesn't:
+
+1. **Filename + byte-size fingerprint** (`filename::size`) — see pattern 33. Filename alone collides; ID won't survive migration.
+2. **Streaming download → disk → upload**, not buffer-in-memory. Big attachments (10s of MB) OOM the script otherwise.
+3. **Retry-safe multipart factory** — see pattern 31. Without it, a 429 mid-upload kills the run.
+4. **Per-attachment status nested in per-issue plan row.** Resume picks up at the exact attachment, not at the issue.
+5. **Re-check fingerprints at execute time** — between plan and execute, another worker (or another script run) may have uploaded the same file.
+
+See `templates/multipart-builder.js` for the upload helper and `docs/24-production-patterns.md#31-35` for the full set of patterns.
 
 ### Attachment size limits
 
