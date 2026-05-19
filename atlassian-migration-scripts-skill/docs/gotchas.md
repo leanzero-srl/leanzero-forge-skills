@@ -43,6 +43,12 @@ Specific things that bite migration engineers. Each entry is something that has 
 - **`100 MB default size limit`**, configurable up to 2 GB. Files >50 MB benefit from a longer HTTP timeout (≥5 min).
 - **Match by filename + size + issue/page** when re-stitching attachment references — IDs change, this combo doesn't.
 - **JCMA can pre-stage attachments** via "Migrate attachments in advance". Use it to shrink the cutover window.
+- **`Buffer.concat([head, file, tail])` is not retry-safe.** Once the buffered body has been written to the socket, you can't replay it on a 429. Use a body-factory pattern that returns a fresh `Readable` each call — see `templates/multipart-builder.js` and pattern 31.
+- **413 mid-upload reclassifies as `skipped-too-large`**, not `failed`. The tenant config can change between plan and execute time; defend on both ends — preflight via `GET /rest/api/3/configuration` *and* handle 413 from the upload itself.
+- **DC attachment downloads issue 302/307 redirects to signed storage URLs.** Your downloader must follow them and re-apply auth. Forgetting `res.resume()` before recursing on the redirect leaves the socket half-read and the pool stalls.
+- **Sanitize filenames for disk, not for the wire.** `/`, `\\`, ASCII control chars, `<>:|?*"` are illegal on at least one major filesystem. Store as `dcId__sanitized-name`; use the original name in the multipart `Content-Disposition`.
+- **Filename + size fingerprint** must be re-checked at execute time. Another worker (or another sub-project running in parallel) may have uploaded the same file between plan and execute.
+- **`POST /attachments` returns an array of 1**, not a single object. Pull `result[0].id` not `result.id`.
 
 ## CSV / file I/O
 
@@ -200,6 +206,15 @@ Specific things that bite migration engineers. Each entry is something that has 
 ## Discovery dump
 
 - **Discovery dumps can leak content.** Raw storage XHTML and macro JSON can contain user-identifiable information. Treat the dump directory like `logs/` — gitignored, not shared in tickets.
+
+## Running and monitoring (agent observation)
+
+- **`tail -f` inside an agent tool call never returns.** Use bounded snapshots (`tail -50`) at intervals instead.
+- **`kill -9` skips Node's signal handlers** — the autosave window of work is lost. Use Ctrl+C / SIGTERM and let the script flush.
+- **The `FINAL REPORT` string is the completion marker.** Greppable, stable across sub-projects.
+- **Progress lines arrive every ~25 entries.** Absence for ≥ 5× the normal gap means a 429 storm or a slow upload — wait, then verify with `lsof -p <pid>`.
+- **The `master_<runId>.json`** is the canonical resume pointer, not the `plan_<runId>.json` directly. Always pass `--plan-file logs/master_<runId>.json` so the script can reload both the index and the entries.
+- **Background-running long jobs is mandatory** for populations >100 entities. A foreground tool call holds the agent's turn for the entire run.
 
 ## See also
 
