@@ -13,6 +13,18 @@ CLOUD_BASE_URL=https://your-site.atlassian.net
 CLOUD_EMAIL=you@example.com
 CLOUD_API_TOKEN=your-cloud-api-token
 
+# ── Multi-key parallelism (optional, mega-scale runs only) ───────────
+# Atlassian rate-limits burst caps per-USER. Adding a token from a
+# DIFFERENT service account doubles effective throughput (until the
+# tenant-wide hourly pool runs out). See docs/08-concurrency-and-pool.md
+# section "Multi-key parallelism".
+#
+# Format is identical to CLOUD_API_TOKEN: base64("email:api_token").
+# Numbering starts at _2 (CLOUD_API_TOKEN is slot 1).
+# CLOUD_API_TOKEN_2=other-account-1-token
+# CLOUD_API_TOKEN_3=other-account-2-token
+# CLOUD_API_TOKEN_4=other-account-3-token
+
 # ── Source: Atlassian Data Center / Server (optional) ────────────────
 # Use either DC_USERNAME + DC_PASSWORD (Basic auth)
 # OR DC_PAT (Personal Access Token, DC 8.14+ / Confluence DC 7.9+).

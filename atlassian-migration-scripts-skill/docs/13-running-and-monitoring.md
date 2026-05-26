@@ -207,6 +207,88 @@ Two sinks. Console output is human-friendly (no leading timestamp); the file get
 
 For very long runs (1M+ lines), prefer `templates/logger.js` which holds a `WriteStream` open instead of `appendFileSync` per line. `appendFileSync` blocks the event loop and serializes writes — fine for tens of thousands of lines, painful past that.
 
+## Unattended start: the AI-agent contract
+
+A common operator pattern: **"start the script and check on it every X seconds — tell me when it's done or if it stalls."** This is the right way to delegate a multi-hour migration to an agent without holding the CLI session open. The contract below is what an agent should follow when given this instruction (or when it makes sense without an explicit one — e.g., the user asked to "run the migration" and the dry-run/plan already showed > 5 minutes of work pending).
+
+### The pattern (in seven steps)
+
+1. **Refuse to start without two-gate safety.** If the user asks for an unattended run, verify the command includes `--confirm`. Dry-runs may be launched without it, but a real mutation requires it explicitly — never default to mutation. If missing, ask once.
+2. **Smoke test first.** One `--plan-only --limit 5` or `--dry-run` invocation in the foreground, ≤ 30 seconds, to catch auth or config errors before committing to a multi-hour run. Refuse to skip this on populations > 100 entries.
+3. **Launch in background.** Use the Bash tool with `run_in_background: true` and direct stdout/stderr to `/dev/null` (the script writes its own `logs/<script>_<ts>.log`). Record the bash process ID returned by the harness.
+4. **Capture the latest log path** before any polling. `ls -t logs/*.log | head -1` once, store the result. The script appends to this one file for the run's lifetime; you don't have to re-discover it on every check.
+5. **Poll on an interval the user specified, or 60 s by default.** Use a `/loop` skill invocation or `ScheduleWakeup` (dynamic-pacing mode). NEVER busy-wait with `sleep` in foreground — that burns the cache and blocks the agent.
+6. **Each tick: snapshot, distill, decide.** Read only the tail of the log + the latest plan/master file stats; do not echo the log. Distill into a one-line state update (see "How to report progress to the user" above). Compute deltas vs. the previous tick. Decide: still progressing → keep polling. Stalled (> 5× normal gap with no `progress:` line) → flag to the user. `FINAL REPORT` seen or process exited → report completion and stop polling.
+7. **End loudly.** When the run finishes (clean or crashed), send one final message with: the runId, the log file path, the per-status counts from the master index, and — if crashed — the last 5 log lines.
+
+### Polling cadence — picking X
+
+The Bash tool's "you'll be notified when the process exits" notification handles the **completion** signal for you. The polling interval is only for **progress reports during the run**:
+
+| Run length | Cadence | Why |
+|---|---|---|
+| < 5 min | don't poll — wait for the exit notification | Polling overhead exceeds the run |
+| 5–30 min | every 60–120 s | One progress line every 25 entries × ~1 s = 25 s; 60 s sees 2–3 new lines |
+| 30 min–4 h | every 5–10 min (300–600 s) | Cache miss vs. 60s polling pays off in fewer wakeups |
+| > 4 h | every 15–30 min (900–1800 s) | Long-tail mode; just confirm forward progress |
+
+If using `ScheduleWakeup` (the /loop dynamic-pacing mechanism), respect the prompt-cache TTL math: a 60–270 s wake stays in cache; a 5-minute (300 s) wake is the worst-of-both. Prefer 270 s for fast cadence, 1200–1800 s for slow.
+
+### Snapshot commands per tick
+
+Run these in parallel via a single Bash tool call (independent reads):
+
+```bash
+# 1. Is the process still alive? Harness will notify on exit, but a
+#    belt-and-braces check is cheap when polling.
+ps -p <PID> -o pid=,etime=,rss= 2>/dev/null || echo "EXITED"
+
+# 2. Latest progress line — distill into "X/Y, U uploaded, F failed"
+grep -E "^\[.*\]\s+progress:" "$LOGFILE" | tail -1
+
+# 3. Final-report marker — appears once when the script finishes happy
+grep -c "FINAL REPORT" "$LOGFILE"
+
+# 4. Memory line if heap-bumper-style scripts log it
+grep -E "heap=|rss=" "$LOGFILE" | tail -1
+
+# 5. Recent errors (last 5)
+grep -E "^\[.*\]\s+(ERROR|FAIL|crashed|FATAL)" "$LOGFILE" | tail -5
+```
+
+Combine into a one-line state message per tick.
+
+### Stall detection
+
+You decide "stalled" by combining three signals — any TWO of these means stalled:
+
+1. **No new `progress:` line for > 5× the historical gap** (measure the gap on the first 3 lines, then compare).
+2. **`rss=` line shows monotonic growth with no new `scanned=` increment** — leak rather than work.
+3. **`ps` shows the process still running but `lsof -p <PID> | grep ESTABLISHED` shows zero active sockets** — wedged in a sleep loop or in a 429 backoff storm.
+
+When stalled, surface the diagnosis to the user — don't kill it on your own without asking. Suggest the right action (wait 5 min for 429 to clear; `kill -SIGTERM <PID>` for a wedged process so the plan saves; `--retry-failed` on resume).
+
+### Example agent transcript
+
+> **User**: Kick off the full plan in execute mode against PROD, check in every 5 minutes, ping me when it's done.
+> **Agent**: *(verifies `--confirm` is set, runs `--dry-run --limit 5` smoke test, confirms clean)* Smoke test passed. Launching in background. Plan has 12,400 pending entries, expected wall-clock ~45 min at the current per-batch rate.
+> *(launches with `run_in_background: true`, captures PID, schedules a 300s wakeup)*
+> Started. PID 84321. Log: `logs/sync_1716489000.log`. Next check in 5 min.
+> *(5 min later, on wakeup, snapshots log)*
+> 2,800/12,400 done, 0 failures, RSS 1.2 GB stable. ETA ~38 min from now. Next check in 5 min.
+> *(continues polling; final-report appears, harness notifies on exit)*
+> Finished. 12,400 processed, 12,387 uploaded, 13 skipped (cloud-issue-not-found), 0 failed. Log: `logs/sync_1716489000.log`. Master: `logs/master_1716489000.json`.
+
+### When NOT to auto-start
+
+The agent must NOT silently launch a destructive run, even with `--confirm`, if:
+- The user asked a research question ("what does this script do?"). Explain, don't run.
+- The dry-run flagged a destination drift > 5%. Report and wait.
+- The plan is empty. Report and wait.
+- The `.env` doesn't match the production base URL the user mentioned. Confirm tenant ID with the user first.
+
+The cost of one missed launch is seconds; the cost of mutating the wrong tenant is hours of rollback. **Ask once if anything looks off.**
+
 ## Smoke test before a real run
 
 The skill's standard order, for any new sub-project or any production-touching run:

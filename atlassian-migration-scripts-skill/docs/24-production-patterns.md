@@ -701,6 +701,76 @@ Two subtle requirements:
 
 **When to use:** every entry point in `main/*.js`. The skill's `templates/sync-script.template.js` ships the handler — keep it when you copy.
 
+## 36. Three-way overwrite policy on value writes
+
+When a sync writes a value to a destination field that may already have a value, three flags control the outcome — `--skip-empty` (default true), `--overwrite-existing` (default false), `--treat-equal-as-noop` (default true). The decision matrix:
+
+| Source | Dest | Flag state | Action |
+|---|---|---|---|
+| empty | – | `skipEmpty` | skip-empty |
+| non-empty | empty | – | write |
+| non-empty | equal to source | `noopEqual` | skip-noop (no version bump) |
+| non-empty | different, non-empty | `!overwrite` | **skip-target-not-empty** (default-safe) |
+| non-empty | different, non-empty | `overwrite` | overwrite |
+
+The dangerous case is "destination has a different non-empty value." A long-running migration's plan may be hours old by the time apply reaches a given issue; a user editing the same field in the meantime is silently overwritten by a naive script. **Default to skip with reason `dest-non-empty-no-overwrite`**, let the operator opt in per-run.
+
+```javascript
+const { decide } = require("./overwrite-policy");
+const d = decide({
+  source: planEntry.sourceValue,
+  dest:   currentCloudValue,
+  opts:   { overwrite: opts.overwriteExisting },
+});
+if (d.action === "write" || d.action === "overwrite") {
+  await client.setField(planEntry.key, planEntry.fieldId, planEntry.sourceValue);
+  planManager.updateEntryStatus(planEntry.key, "completed", d.action);
+} else {
+  planManager.updateEntryStatus(planEntry.key, "skipped", d.reason);
+}
+```
+
+Equality detection is type-aware: strings compare ===, options compare by `id` (then `value`/`name`), arrays compare set-equal after normalization. Anything else falls through to "not equal" → write (safer than silent equality).
+
+**See:** `templates/overwrite-policy.js`. Lifted from `field-merge-script/merge_field_data.js`.
+
+## 37. Auxiliary cache flush on shutdown
+
+Pattern 35 saves the plan and master index. That covers the **per-entity** state. But long runs also build **auxiliary** caches in memory that aren't part of the plan: email→accountId lookups, fieldName→fieldId resolution, projectKey→permissions, attachment-list-per-issue. Each is small, but together they represent thousands of API calls already paid for.
+
+Lose them on Ctrl-C and resume re-queries every single one. On a 4-hour run with 3,000 identity resolutions, that's an extra 3,000 rate-limit points on resume — sometimes enough to push the run into the next hour's quota window.
+
+Add cache-flush calls to the shutdown handler for every cache holder:
+
+```javascript
+const shutdown = () => {
+  // Per-entity state (pattern 35)
+  if (sync?.planManager?.plan)        sync.planManager.savePlan();
+  if (sync?.planManager?.masterIndex) sync.planManager.saveMasterIndex();
+
+  // Auxiliary caches — each owns its own disk file
+  if (sync?.identityResolver) {
+    const info = sync.identityResolver.flushCache();
+    console.log(`  identity: ${info.userEntries} users, ${info.groupEntries} groups → disk`);
+  }
+  if (sync?.fieldCatalog?.flush)      sync.fieldCatalog.flush();
+  if (sync?.permsCache?.flush)        sync.permsCache.flush();
+  if (sync?.cloudClient?.flushAttachmentCache)
+    sync.cloudClient.flushAttachmentCache();
+
+  process.exit(0);
+};
+```
+
+The skill's `templates/identity-resolver.js` ships a `flushCache()` method — it's a defensive sync write that ensures the OS buffer is committed. Most caches in the skill's templates already persist per-write, but several intentionally batch (perms cache, field catalog), and those MUST flush on shutdown.
+
+### Caches that should NOT flush
+
+- **Negative caches** keyed on transient state (e.g. "this account was 404 once"). On resume, the user may have been re-invited; let the next run re-check.
+- **Per-run caches** sized in MB+ (e.g. an attachment-list-by-issue cache). These exist to skip duplicate calls within the run and aren't useful across runs.
+
+Default: flush by default, opt out for the two cases above. The downside of an extra disk write is zero; the downside of a missing flush is rate-limit money next run.
+
 ## See also
 
 - [`13-running-and-monitoring.md`](13-running-and-monitoring.md) — the progress-line contract used by an agent observer (patterns 31, 32, 35)

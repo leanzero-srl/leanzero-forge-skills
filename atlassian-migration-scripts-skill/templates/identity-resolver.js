@@ -260,6 +260,38 @@ class IdentityResolver {
     this._saveCache(this.groupCacheFile, this.groupCache);
   }
 
+  /**
+   * Flush both caches to disk synchronously. Call this from a SIGINT /
+   * SIGTERM handler so a long run's resolved identities survive a
+   * Ctrl-C — the alternative is paying for thousands of email→accountId
+   * lookups again on resume.
+   *
+   * The per-write _saveCache calls already keep the caches durable, so
+   * this is mostly defensive — but if you've recently added entries in
+   * a tight loop and the OS has buffered the write, fsync via a fresh
+   * writeFileSync forces it through.
+   *
+   *   const resolver = new IdentityResolver(...);
+   *   const shutdown = (sig) => {
+   *     planManager?.savePlan();
+   *     planManager?.saveMasterIndex();
+   *     resolver.flushCache();
+   *     process.exit(0);
+   *   };
+   *   process.on("SIGINT",  () => shutdown("SIGINT"));
+   *   process.on("SIGTERM", () => shutdown("SIGTERM"));
+   */
+  flushCache() {
+    this._saveCache(this.userCacheFile, this.userCache);
+    this._saveCache(this.groupCacheFile, this.groupCache);
+    return {
+      userCacheFile: this.userCacheFile,
+      groupCacheFile: this.groupCacheFile,
+      userEntries: Object.keys(this.userCache).length,
+      groupEntries: Object.keys(this.groupCache).length,
+    };
+  }
+
   /** Clear all negative entries — re-run will re-query everything. */
   clearNegativeCache() {
     for (const k of Object.keys(this.userCache)) {

@@ -128,8 +128,129 @@ The current pool doesn't support `AbortController` — once `runPool` is called,
 - For "stop on first failure", throw inside the worker AND catch outside `runPool` (in-flight workers still finish their current item, but no new items are claimed).
 - For "user pressed Ctrl-C", catch `SIGINT` in `main`, call `planManager.savePlan()`, then `process.exit(130)`. The worker pool's in-flight items will not commit, but the plan is saved with the items they did manage to complete.
 
+## Multi-key parallelism (multiply throughput by N tokens)
+
+Atlassian's rate limits are **per-user** for the burst and per-issue caps, and **per-tenant** for the hourly point pool. One `CLOUD_API_TOKEN` = one user's bucket. If you have N service accounts (each with its own token), you can run **N independent buckets in parallel** and multiply effective throughput by ~N — as long as the work is partitionable and the tenant pool isn't your bottleneck.
+
+Two implementation shapes; pick by scale:
+
+### A. In-process multi-key pool — `templates/multi-key-pool.js`
+
+K clients × W workers per client = K·W total workers, all inside one Node process. Each worker holds a fixed reference to one client so per-client caches (attachment cache, perms cache, config cache) are preserved.
+
+```javascript
+const { runMultiKeyPool, clientsFromEnv } = require("./multi-key-pool");
+
+const clients = clientsFromEnv("CLOUD_API_TOKEN", (token) =>
+  new CloudJiraClient(process.env.CLOUD_BASE_URL, token));
+
+await runMultiKeyPool(items, async (item, client, ctx) => {
+  await client.updateIssue(item.key, item.payload);
+}, { clients, workersPerClient: 3, log: console.log, progressEvery: 50 });
+```
+
+When to use:
+- The whole sweep fits in one process's heap (see `docs/14-heap-and-memory.md`).
+- You want one log file, one progress stream, one PID to monitor.
+- ≤ 6 tokens. Past that, you've got 18+ concurrent workers in one process and the shared event loop becomes the bottleneck.
+
+When NOT to use:
+- A worker error can corrupt the V8 state for the others — e.g. a leaked TCP handle, a pinned big buffer in a closure.
+- You need per-token logs (auditing which user did what).
+- You want process-isolated crash recovery.
+
+### B. Out-of-process dispatcher — `templates/run-driver.sh.template` / `templates/dispatcher.js`
+
+One child Node process per slot. The slot binds an `envVar` (e.g. `CLOUD_API_TOKEN_3`) and the parent only ever sets that one as `CLOUD_API_TOKEN` for the child. Each child has its own heap, retry budget, log file, file descriptors.
+
+Pattern lifted from `sync_asset_ticket_associations/`:
+
+```bash
+# 1. Pre-split the plan ONCE during the plan phase
+#    (sub-plan per project / per field — see docs/02-plan-manager.md).
+# 2. Each driver shell pins one CLOUD_API_TOKEN_X.
+# 3. xargs -P N keeps N children alive per driver.
+
+TOKEN="$(grep '^CLOUD_API_TOKEN_3=' .env | head -1 | cut -d= -f2-)"
+printf '%s\n' "${QUEUE[@]}" | xargs -I {} -P 3 bash -c '
+  IFS="|" read -r label master slug <<< "$1"
+  CLOUD_API_TOKEN="$TOKEN" node main/sync.js \
+    --execute-only --plan-file "$master" \
+    > logs/driver_${slug}.out 2>&1
+' _ {}
+```
+
+Run multiple drivers in parallel (one per terminal or via tmux), each pinned to a different token. Total parallelism = (# drivers) × (xargs -P value).
+
+When to use:
+- Mega-scale sweeps (100k+ entities, multi-hour runs).
+- Multiple tokens from different users (audit trail per user).
+- The plan is naturally splittable (per project, per field, per partition).
+- You want a crash in one shard to leave the others untouched.
+
+For programmatic dispatch (state file, retry on non-zero exit, dynamic queue), use the JS dispatcher:
+
+```javascript
+const { Dispatcher } = require("../src/dispatcher");
+const d = new Dispatcher({
+  stateFile: `logs/dispatcher_state_${Date.now()}.json`,
+  scriptPath: "main/sync_xxx.js",
+  slots: [
+    { id: 1, envVar: "CLOUD_API_TOKEN",   owner: "mihai" },
+    { id: 2, envVar: "CLOUD_API_TOKEN_2", owner: "jan"   },
+    { id: 3, envVar: "CLOUD_API_TOKEN_3", owner: "akash" },
+  ],
+  jobs: subPlanFiles.map((pf, i) => ({
+    id: `job-${i}`, planFile: pf, args: ["--execute-only", "--retry-failed"],
+  })),
+  logDir: "logs",
+});
+d.attachSignalHandlers();
+await d.run();
+```
+
+The state JSON (`logs/dispatcher_state_*.json`) is rewritten on every transition. Re-launching the same dispatcher resumes — any "running" jobs become pending and get reassigned.
+
+### Choosing between A and B
+
+| Question | In-process pool (A) | Out-of-process dispatcher (B) |
+|---|---|---|
+| Entities to process? | < 50k | ≥ 50k or unknown |
+| Token count? | 2–6 | 2–12+ |
+| Wall-clock budget? | minutes | hours |
+| Tolerable to lose progress on a process crash? | yes | no |
+| Want per-token log/audit? | no | yes |
+| Run on a CI box with shared disk? | yes | yes |
+
+### Where the gain comes from (and where it doesn't)
+
+The per-user burst cap is 100 GET/s + 50 PUT/s. One client at concurrency 4 hits ~30-50 writes/s before the rate-limit retry path kicks in. Adding a second user's token doubles that — until the tenant hourly point pool runs out. Math:
+
+- Tier 1 tenant pool: **65,000 pts/hour** = ~18/s sustained.
+- Tier 4 (Enterprise): up to **500,000 pts/hour** = ~139/s sustained.
+- A bulk-write costs the same as a single write (use bulk!). A single PUT/POST costs ~1 pt.
+
+If the math says your job needs 130/s sustained on a Tier-1 tenant, **more tokens won't help** — you're rate-limited by the tenant pool. Either:
+- Switch to bulk endpoints (`POST /issue/bulk`, `POST /issue/bulkfetch`) — 100× point efficiency.
+- Negotiate a higher tier with Atlassian for the duration of the migration.
+- Spread the run over a longer window (e.g. overnight + business hours = 2× the pool).
+
+See `docs/27-rate-limits-and-quotas.md` for the full table.
+
+### Token hygiene
+
+- **One token per service account.** Don't reuse the same token across drivers — that collapses K buckets back into one.
+- **Pin slot → owner.** The dispatcher_state JSON records `owner` so a 429 storm on slot 3 can be traced to the right user account.
+- **Rotate before each major migration.** Compromised tokens have done damage in this exact pattern before.
+- **`.env` is gitignored.** Never commit tokens.
+- **At least one token must be admin-level.** Permission checks (preflight) need full read on the source and write on the dest. If only one of your tokens has it, route the plan phase to that slot.
+
 ## See also
 
 - [`03-http-client-pattern.md`](03-http-client-pattern.md) — the retry budget the pool's concurrency interacts with
+- [`14-heap-and-memory.md`](14-heap-and-memory.md) — multi-key in-process pools amplify memory pressure
 - [`27-rate-limits-and-quotas.md`](27-rate-limits-and-quotas.md) — the per-issue and burst caps that drive the sizing table
-- [`templates/worker-pool.js`](../templates/worker-pool.js) — the implementation
+- [`templates/worker-pool.js`](../templates/worker-pool.js) — single-client pool
+- [`templates/multi-key-pool.js`](../templates/multi-key-pool.js) — K-client × W-worker pool
+- [`templates/dispatcher.js`](../templates/dispatcher.js) — out-of-process dispatcher
+- [`templates/run-driver.sh.template`](../templates/run-driver.sh.template) — bash xargs driver
