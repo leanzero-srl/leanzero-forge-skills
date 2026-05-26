@@ -255,6 +255,29 @@ class CloudJiraClient {
     return out;
   }
 
+  /**
+   * Approximate issue count for a JQL. One call, ~1 point, no pagination.
+   * Returns a number; throws if Atlassian's response shape is unexpected.
+   *
+   * Useful for population checks, empty-project detection, budgeting,
+   * field-population audits. See `docs/17-post-jcma-audit-endpoints.md`.
+   *
+   * The endpoint's response key has shipped under several names over
+   * different Cloud rollouts — try each known name and the first
+   * `data.count` nested shape before giving up.
+   */
+  async approximateCount(jql) {
+    const data = await this.makeRequest(
+      "POST", "/rest/api/3/search/approximate-count", { jql },
+    );
+    const keys = ["count", "issueCount", "approximateIssueCount", "approximate_count", "total"];
+    for (const k of keys) {
+      if (typeof data?.[k] === "number") return data[k];
+    }
+    if (typeof data?.data?.count === "number") return data.data.count;
+    throw new Error(`approximate-count: unexpected shape — ${JSON.stringify(data).slice(0, 400)}`);
+  }
+
   async bulkFetchChangelogs(issueIdsOrKeys) {
     const out = [];
     for (let i = 0; i < issueIdsOrKeys.length; i += 100) {
