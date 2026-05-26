@@ -1,0 +1,93 @@
+#!/bin/bash
+# ─────────────────────────────────────────────────────────────────────
+# Multi-key parallel driver — bash + xargs -P
+#
+# Pattern lifted from sync_asset_ticket_associations/logs/run_*.sh.
+# Each `--execute-only --plan-file <sub-plan>` invocation is independent
+# and idempotent, so the simplest way to scale a long batch is:
+#
+#   1. Split the plan once (sub-plan per project / per field / per
+#      partition key — see docs/02-plan-manager.md and pattern 19).
+#   2. Pin each driver shell to ONE CLOUD_API_TOKEN_X.
+#   3. Use `xargs -P N` to keep N children active per driver.
+#
+# Total concurrent processes = (# driver shells) * N.
+# Each process gets its own V8 heap, log file, retry budget, and stdio.
+#
+# Why this beats an in-process multi-key pool for huge batches:
+#   - One OOM crashes one shard, not the whole sweep.
+#   - Per-job logs are easy to grep / tar / share with reviewers.
+#   - Pause + resume is trivial: Ctrl-C the bash; rerun the same script
+#     — completed plan files won't have pending entries left.
+#   - Each Node process is hands-off after launch; no shared mutable
+#     state to corrupt.
+#
+# Usage:
+#   cp templates/run-driver.sh.template logs/run_<token-owner>.sh
+#   # edit the QUEUE and TOKEN_VAR for this shell
+#   bash logs/run_<token-owner>.sh
+#
+# Run multiple drivers in different terminals (or via tmux) — one per
+# CLOUD_API_TOKEN_X you have access to. Each driver runs independently;
+# no coordination needed because each job operates on its own sub-plan.
+# ─────────────────────────────────────────────────────────────────────
+
+set -u
+
+cd "$(dirname "$0")/.."   # repo root: <sub-project>/
+SCRIPT="main/<script_name>.js"
+
+# Which token this driver uses. Change to CLOUD_API_TOKEN_2, _3, ... to
+# pin different drivers to different users' rate buckets.
+TOKEN_VAR="CLOUD_API_TOKEN"
+TOKEN="$(grep "^${TOKEN_VAR}=" .env | head -1 | cut -d= -f2-)"
+if [ -z "$TOKEN" ]; then
+  echo "ERROR: ${TOKEN_VAR} not set in .env" >&2
+  exit 1
+fi
+
+# How many children this driver runs concurrently. Multiply by
+# the number of drivers to get total parallelism. 3 is a safe default
+# per token — past 4 you start hitting per-user burst (50/s writes).
+PARALLEL=3
+
+STATUS_LOG="logs/run_driver_$(date +%s).status"
+: > "$STATUS_LOG"
+echo "[$(date +%H:%M:%S)] Driver up; ${PARALLEL} parallel children on ${TOKEN_VAR}." >> "$STATUS_LOG"
+
+# QUEUE entries: <label>|<plan-file>|<short-slug>
+# `label` is a human-readable name for the status log.
+# `plan-file` is the sub-plan to execute.
+# `short-slug` becomes part of the per-job log filename.
+QUEUE=(
+  "Project A|logs/master_split_PROJ_A.json|proj_a"
+  "Project B|logs/master_split_PROJ_B.json|proj_b"
+  "Project C|logs/master_split_PROJ_C.json|proj_c"
+  # ... add more sub-plans here
+)
+
+run_job() {
+  local entry="$1"
+  IFS='|' read -r label master slug <<< "$entry"
+  local out="logs/driver_${TOKEN_VAR}_${slug}.out"
+  local start=$(date +%s)
+  echo "[$(date +%H:%M:%S)] START: $label" >> "$STATUS_LOG"
+  CLOUD_API_TOKEN="$TOKEN" node "$SCRIPT" \
+    --execute-only --retry-failed \
+    --plan-file "$master" > "$out" 2>&1
+  local rc=$?
+  local elapsed=$(( $(date +%s) - start ))
+  # Extract whatever stat is meaningful for this script:
+  local updated=$(grep -E '^\s+Issues updated:'  "$out" | tail -1 | awk '{print $NF}')
+  local failed=$( grep -E '^\s+Issues failed:'   "$out" | tail -1 | awk '{print $NF}')
+  echo "[$(date +%H:%M:%S)] DONE : $label  rc=$rc  updated=${updated:-?}  failed=${failed:-?}  elapsed=${elapsed}s" >> "$STATUS_LOG"
+}
+export -f run_job
+export TOKEN STATUS_LOG SCRIPT TOKEN_VAR
+
+# xargs keeps PARALLEL children alive — when one finishes, the next
+# queue item is launched on the freed slot.
+printf '%s\n' "${QUEUE[@]}" | xargs -I {} -P "${PARALLEL}" bash -c 'run_job "$@"' _ {}
+
+echo "[$(date +%H:%M:%S)] Driver done. ${#QUEUE[@]} jobs processed." >> "$STATUS_LOG"
+cat "$STATUS_LOG"
