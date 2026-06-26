@@ -16,7 +16,7 @@ Use this skill when:
 
 Skip this skill for:
 - Apps that run *inside* Atlassian as Forge functions → use `atlassian-confluence-forge-skill`.
-- Pure org-admin operations (users/groups/policies across products) → use `atlassian-organizations-api-skill`.
+- Pure org-admin operations (users/groups/policies across products) → use `atlassian-organizations-api-skill`. Also go there for **per-product license management** and **suspended-user visibility** — Confluence group reads silently omit suspended accounts (see `docs/31-groups-users-and-activity.md`).
 - Jira Cloud → use `jira-api-skill` or `atlassian-jira-forge-skill`.
 
 ## Pick a starting point
@@ -117,6 +117,13 @@ Refresh tokens via `grant_type=refresh_token` before `expires_in` lapses. See `d
 | List spaces | `/wiki/api/v2/spaces?limit=25&cursor=...` | GET |
 | Upload attachment (legacy v1) | `/wiki/rest/api/content/{pageId}/child/attachment` | POST |
 | Search (CQL — v1 only) | `/wiki/rest/api/search?cql=...` | GET |
+| Add/remove group member (v1 only) | `/wiki/rest/api/group/userByGroupId?groupId={id}` (POST `{accountId}` / DELETE `&accountId=`) | POST/DELETE |
+| List/count group members (v1) | `/wiki/rest/api/group/{id}/membersByGroupId?start=0&limit=200` (`&limit=1&shouldReturnTotalSize=true` to count) | GET |
+| Guest group seat semantics | `confluence-guests-{site}` (built-in) — adding a revoked user keeps login but drops the seat; see `31-groups-users-and-activity.md` | — |
+| User's group memberships (v1) | `/wiki/rest/api/user/memberof?accountId={aid}` | GET |
+| User email (needs `read:email-address`) | `/wiki/rest/api/user/email?accountId={aid}` | GET |
+| Last activity from history (CQL v1) | `/wiki/rest/api/search?cql=contributor="{aid}" ORDER BY lastmodified DESC` | GET |
+| Email a user (no native API → via Jira) | `/rest/api/3/issue/{key}/notify` (Jira) | POST |
 
 > Page bodies use **ADF** (`?body-format=atlas_doc_format`) or **storage format** (XHTML). PUT requires the current `version.number` + 1. See `docs/28-adf-and-storage.md`.
 
@@ -168,7 +175,7 @@ A mismatched `version.number` returns `409 Conflict`. GET → bump → PUT, neve
 | Status | First-pass fix | Detail |
 |---|---|---|
 | 401 | Token missing/expired/revoked. Refresh OAuth or rotate API token. | `01-core-concepts.md` |
-| 403 | Token's user/scope lacks the operation. Add scope or grant space permission. | `07-permissions-scopes.md` |
+| 403 | Token's user/scope lacks the operation. Add scope or grant space permission. | `12-permissions-scopes.md` |
 | 404 | Page/space/property doesn't exist *or* isn't visible to the auth context. | — |
 | 409 | Stale `version.number` on PUT — GET → bump → PUT. | `28-adf-and-storage.md` |
 | 410 | Endpoint removed; check v1 → v2 migration. | `08-api-endpoints.md` |
@@ -182,7 +189,7 @@ A mismatched `version.number` returns `409 Conflict`. GET → bump → PUT, neve
 |---|---|
 | `01-core-concepts.md` | API overview, auth, versioning |
 | `08-api-endpoints.md` | Endpoint reference (with per-resource appendix in `docs/api/`) |
-| `07-permissions-scopes.md` | OAuth 2.0 scopes |
+| `12-permissions-scopes.md` | OAuth 2.0 scopes |
 
 ### Production
 | File | Topic |
@@ -191,6 +198,7 @@ A mismatched `version.number` returns `409 Conflict`. GET → bump → PUT, neve
 | `27-rate-limits-and-quotas.md` | 429 behavior, per-endpoint guidance, batching |
 | `28-adf-and-storage.md` | ADF vs storage format, version handling, building ADF nodes |
 | `30-testing-rest-integrations.md` | Mocking, fixtures, dev-loop patterns |
+| `31-groups-users-and-activity.md` | v1-only group membership/audit, user/email lookup, CQL activity backfill, multi-site filtering, seat management (License Leash) |
 
 ### Topical (inherited content)
 | File | Topic |
@@ -216,6 +224,7 @@ Copy-paste-ready helpers in `templates/`:
 | `space-properties.yml` | Space-property CRUD shape |
 | `attachment-management.yml` | Attachment upload/list/delete |
 | `scheduled-trigger.yml` | Periodic sync skeleton (Forge or external scheduler) |
+| `group-membership.yml` | v1 group add/remove/list/count, user/email lookup, CQL last-active recipes |
 
 ## Scripts
 
@@ -240,6 +249,7 @@ CI-safe helpers in `scripts/`:
 
 ## Changelog
 
+- 2026-06-26 — Added `docs/31-groups-users-and-activity.md` + `templates/group-membership.yml` distilling the v1-only group/user/activity cluster from **License Leash** (axpo-license-manager): membership add/remove/list/count (`userByGroupId`, `membersByGroupId?shouldReturnTotalSize=true`), `user/memberof`, scoped `user/email`, CQL last-active backfill (`contributor`/`creator`/`watcher`), multi-site group filtering, guest-group seat semantics, and notify-via-Jira email. Added pattern 12 (privileged-identity-first group writes) to `24-rest-integration-patterns.md`; expanded `gotchas.md` (suspended-user invisibility, eventual consistency, multi-site contamination, email scope). Cross-skill see-also → `atlassian-organizations-api-skill` for suspended visibility and license management.
 - Replaced the legacy "JWT — Server-to-server authentication" claim with the three actually-valid Cloud REST options (API token Basic auth, OAuth 2.0 3LO, Forge `api.asUser/asApp`). Locally-signed JWTs are an Atlassian Connect pattern and are not validated by the v2 REST API.
 - Added four new REST-API-specific docs: `24-rest-integration-patterns.md`, `27-rate-limits-and-quotas.md`, `28-adf-and-storage.md`, `30-testing-rest-integrations.md`.
 - Standardized scripts: stripped emoji, added `set -euo pipefail`, made CI-safe.

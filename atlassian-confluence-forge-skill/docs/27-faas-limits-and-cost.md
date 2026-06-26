@@ -79,6 +79,35 @@ When fetching a page with `?body-format=atlas_doc_format`, the ADF JSON is seria
 - First fire ~5 min after deploy.
 - No automatic retry — handle errors in code.
 
+## Long-running consumers: budget + cursor-resume
+
+A consumer can declare `timeoutSeconds` up to 900 s, but don't run to the edge. License Leash's sync/inactivity consumers self-impose an **~890 s budget with a 10 s margin** under the 900 s cap, then **persist a cursor and stop** so the next run resumes exactly where it left off:
+
+```typescript
+const BUDGET_MS = 890_000;            // 900s cap minus ~10s safety margin
+const startedAt = Date.now();
+while (cursor && Date.now() - startedAt < BUDGET_MS) {
+  const page = await drainOneChunk(cursor);   // process a bounded batch
+  cursor = page.nextCursor;
+  await saveCursor(cursor);                    // resumable: persist after each chunk
+}
+// out of budget → return; the next scheduled run (or re-enqueue) continues from saveCursor
+```
+
+Pair this with keyset pagination over a stable order (see `17-forge-sql.md`) so resume never skips or re-processes a row.
+
+## Single-flight consumer (don't fan out duplicate work)
+
+To stop a scheduled trigger from launching a second sync while one is already running, gate the queue on a single-flight key with `concurrency.limit: 1` (or guard with a KVS "in-flight" flag checked before `queue.push`). Sentinel Vault's realm-scan trigger checks a `space-scan-status-{spaceId}` record and skips spaces already `scanning` (see `24-production-patterns.md` Pattern 7).
+
+## Cross-product storage is siloed
+
+Forge KVS/storage is **scoped per product**. An app installed on both Jira and Confluence does **not** see the same KVS namespace from both sides — a value written from a Confluence context is not readable from a Jira context. For credentials/config that genuinely must be shared across products, prefer **environment variables** (`forge variables set`) over storage, or designate one product as the writer and pass data across via an explicit call. (Observed in License Leash, which spans Confluence triggers + Jira `notify`.)
+
+## Forge SQL limits
+
+If the app uses `@forge/sql`, its limits (200 tables, 1 GiB prod storage, one statement per `.execute()`, no foreign keys, SELECT 5 s / DML 10 s / DDL 20 s timeouts, 150 DML/s, 25 DDL/min) are documented in `17-forge-sql.md`. The official source is https://developer.atlassian.com/platform/forge/limits-sql.
+
 ## Resolver invoke payload
 
 The Custom UI ↔ resolver bridge has practical payload limits in the ~250 KB range. Past that, persist the data in KVS and pass an id.

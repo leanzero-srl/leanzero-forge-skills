@@ -207,7 +207,7 @@ For sensitive data like API keys, use Forge's Key-Value Storage:
 
 ```javascript
 // Store a secret (in your resolver function)
-import kvs from '@forge/kvs';
+import { kvs } from '@forge/kvs';
 await kvs.set('MY_API_KEY', 'secret-value');
 
 // Retrieve in your function:
@@ -219,7 +219,7 @@ const apiKey = await kvs.get('MY_API_KEY');
 Use the `@forge/kvs` module in your JavaScript code:
 
 ```javascript
-import kvs from '@forge/kvs';
+import { kvs } from '@forge/kvs';
 
 // Get a value
 const value = await kvs.get('MY_KEY');

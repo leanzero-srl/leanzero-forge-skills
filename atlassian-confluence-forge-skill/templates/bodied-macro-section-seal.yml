@@ -1,0 +1,115 @@
+# Bodied Macro + Section Sealing Template
+#
+# A `bodied` macro that wraps a region of a page and carries a stable, app-issued
+# `sectionId` so a page-content trigger can detect tampering and restore the
+# sealed body across arbitrary user edits.
+#
+# Auth: backend uses api.asApp()/asUser() from @forge/api; Custom UI uses
+#   @forge/bridge (NEVER AP.context.getToken — that's Atlassian Connect).
+# Storage: import { kvs } from '@forge/kvs' (named import; legacy `storage` from
+#   @forge/api is deprecated since 2025-03-17).
+# See: docs/14-macros-and-section-sealing.md, docs/16-unified-content-triggers.md
+
+modules:
+  macro:
+    # Bodied macro — user content lives inside the wrapper's content[].
+    - key: {{APP_KEY}}-sealed-section
+      resource: section-setup-ui
+      resolver:
+        function: action-router
+      title: Sealed Section
+      description: Locks the content inside this section against unauthorized edits
+      layout: bodied                 # bodied → ADF node type is `bodiedExtension`
+      config:
+        resource: section-setup-ui
+        openOnInsert: true           # open config on insert → mint + persist sectionId here
+        viewportSize: medium
+
+  # Single unified page-content trigger (one read → passes → one write).
+  trigger:
+    - key: {{APP_KEY}}-page-content
+      function: page-content-trigger
+      events:
+        - avi:confluence:updated:page
+        - avi:confluence:created:page
+      # No filter.ignoreSelf here — it is Jira-only and does NOT suppress Confluence
+      # self-events. The handler guards self-loops via a cached app accountId.
+
+  function:
+    - key: action-router
+      handler: index.actionRouter
+    - key: page-content-trigger
+      handler: index.pageContentTrigger
+
+resources:
+  - key: section-setup-ui
+    path: static/section-setup/build
+
+permissions:
+  scopes:
+    - read:page:confluence
+    - write:page:confluence
+    - read:content.property:confluence
+    - write:content.property:confluence
+    - read:confluence-user
+    - storage:app
+
+app:
+  id: ari:cloud:ecosystem::app/{{APP_ID}}
+  runtime:
+    name: nodejs22.x
+
+---
+# Backend: build the wrapper with a stable sectionId, and restore on tamper.
+#
+# KVS key schemes (see docs/14):
+#   section-protection-{sectionId}   → { pageId, lockedBy, expiresAt, contentHash, ... }
+#   section-snapshot-{sectionId}     → { wrapperNode, bodyContent, hash, originalIndex }
+#   app-account-id                   → cached app accountId (loop prevention)
+
+```javascript
+// src/index.js
+import { asApp, route, getAppContext } from '@forge/api';
+import { kvs } from '@forge/kvs';
+
+const SECTION_KEY_SUFFIX = '/static/{{APP_KEY}}-sealed-section';
+
+// Extension key is <appId>/<envId>/static/<module-key> — derive at runtime,
+// never hardcode (it differs per environment). Cache in KVS.
+async function resolveSectionKey() {
+  const cached = await kvs.get('section-macro-extension-key');
+  if (cached) return cached;
+  const { appAri, environmentAri } = getAppContext();
+  if (!appAri?.appId || !environmentAri?.environmentId) return null;
+  const key = `${appAri.appId}/${environmentAri.environmentId}/static/{{APP_KEY}}-sealed-section`;
+  await kvs.set('section-macro-extension-key', key);
+  return key;
+}
+
+// Read the app-issued sectionId (falls back to the platform localId).
+function getSectionId(node) {
+  return node?.attrs?.parameters?.guestParams?.sectionId
+      || node?.attrs?.parameters?.sectionId
+      || node?.attrs?.localId
+      || null;
+}
+
+function buildSealedSectionNode({ sectionId, extensionKey, bodyContent }) {
+  const [appId, envId] = extensionKey.split('/');
+  return {
+    type: 'bodiedExtension',
+    attrs: {
+      extensionType: 'com.atlassian.ecosystem',
+      extensionKey,
+      layout: 'default',
+      parameters: {
+        extensionId: `ari:cloud:ecosystem::extension/${appId}/${envId}${SECTION_KEY_SUFFIX}`,
+        extensionTitle: 'Sealed Section',
+        guestParams: { sectionId },   // stable correlation key
+      },
+    },
+    content: Array.isArray(bodyContent) && bodyContent.length
+      ? bodyContent : [{ type: 'paragraph', content: [] }],
+  };
+}
+```

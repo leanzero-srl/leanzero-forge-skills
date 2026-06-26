@@ -283,6 +283,41 @@ async function postMentionComment({ pageId, accountId, message }) {
 
 Confluence emails the mentioned user according to *their* preferences — no external mail provider needed.
 
+## 12. Group writes: privileged-identity-first, REST-fallback
+
+**Problem:** Adding/removing a user from a group
+(`POST/DELETE /wiki/rest/api/group/userByGroupId`) needs a privileged identity. A
+**background job** (cron, webhook handler, scheduled trigger) has no end-user
+context, so a user-scoped OAuth token can't perform the write — and in Forge an
+`asUser()` call doesn't merely 401, it *throws* (`PROXY_ERR` /
+`AUTH_TYPE_UNAVAILABLE`).
+
+**Pattern:** Drive group writes with an app/service identity. License Leash
+prefers the Org API (org-admin key, no user context required) and falls back to
+the Confluence REST group endpoint, recording which path won:
+
+```javascript
+async function addToGroupWithFallback(groupId, accountId) {
+  if (await isOrgApiConfigured()) {
+    const org = await addUserToGroupViaOrgApi(groupId, accountId); // Org API
+    if (org.success) return { ok: true, via: 'org-api' };
+    console.warn(`Org API add failed (${org.status}); falling back to REST.`);
+  }
+  await addUserToGroup(groupId, accountId);  // POST /wiki/rest/api/group/userByGroupId
+  return { ok: true, via: 'forge' };
+}
+```
+
+In an external (non-Forge) integration the same lesson holds: use an
+**API-token / client-credentials** identity for background group writes, not a
+3LO user token, and keep the Org API as the primary writer when you have an
+org-admin key. Interpret failures for humans — License Leash maps `Hystrix` /
+`IdentityPlatform` 500s to "try again in a minute", `403` to "ask an admin to
+grant it manually", `404` to "account or group not found".
+
+> The same Forge ladder also tolerates transient `500 … Hystrix` responses: retry
+> once after ~2 s before giving up. See `31-groups-users-and-activity.md`.
+
 ## See also
 
 - `27-rate-limits-and-quotas.md` — limits these patterns work around

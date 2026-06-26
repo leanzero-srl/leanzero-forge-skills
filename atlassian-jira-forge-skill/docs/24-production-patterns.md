@@ -18,6 +18,14 @@ Use these as templates for non-trivial Forge work — they encode lessons that a
 10. [Workflow injection (programmatic rule add)](#10-workflow-injection-programmatic-rule-add)
 11. [Hourly lazy-refresh scheduled trigger](#11-hourly-lazy-refresh-scheduled-trigger)
 12. [Resolver registration as factory functions](#12-resolver-registration-as-factory-functions)
+13. [Concurrency deep-dive: stale-draft invalidation + cleanup](#13-concurrency-deep-dive-stale-draft-invalidation--cleanup)
+14. [Chunked write-back with a post-write VERIFY step](#14-chunked-write-back-with-a-post-write-verify-step)
+15. [Two-engine parity (backend authoritative + frontend mirror)](#15-two-engine-parity-backend-authoritative--frontend-mirror)
+16. [Layered config loader, loaded fresh per invocation](#16-layered-config-loader-loaded-fresh-per-invocation)
+17. [KVS cost control (zero writes during edit)](#17-kvs-cost-control-zero-writes-during-edit)
+18. [Issue-link inward/outward semantics](#18-issue-link-inwardoutward-semantics)
+19. [Custom-field auto-setup: the 4-step screen chain](#19-custom-field-auto-setup-the-4-step-screen-chain)
+20. [Field-screen warning preflight](#20-field-screen-warning-preflight)
 
 ---
 
@@ -678,9 +686,243 @@ export function registerWriteResolvers(resolver) {
 
 ---
 
+## 13. Concurrency deep-dive: stale-draft invalidation + cleanup
+
+**Problem:** Patterns 4–5 set up drafts + locks. But after user A writes, user B's draft now describes a world that no longer exists. And abandoned drafts accumulate forever.
+
+**Pattern:** After a successful write-back, **flag overlapping drafts stale** (don't delete — the owner should see *why* their draft is invalid). On plan load, **garbage-collect** drafts older than 24 h. The write lock has a **5-min TTL refreshed per chunk** (pattern 4), so an abandoned tab self-heals.
+
+```javascript
+// src/services/concurrency/draft-manager.js
+export async function invalidateStaleDrafts(planId, writerAccountId, writtenKeys) {
+  const registry = await kvsStore.getDraftsRegistry(planId);   // p:{id}:drafts
+  const written = new Set(writtenKeys);
+  for (const [accountId, entry] of Object.entries(registry)) {
+    if (accountId === writerAccountId) continue;
+    if ((entry.issueKeys || []).some((k) => written.has(k))) {
+      const draft = await kvsStore.getDraft(planId, accountId);
+      if (draft) {
+        draft.stale = true;
+        draft.staleReason = `Issues were written by another user at ${new Date().toISOString()}`;
+        await kvsStore.saveDraft(planId, accountId, draft);
+      }
+      entry.stale = true;                                       // mirror on the lightweight registry
+    }
+  }
+  await kvsStore.saveDraftsRegistry(planId, registry);
+}
+
+const MAX_AGE_MS = 24 * 60 * 60 * 1000;                         // 24h GC on load
+export async function cleanupExpiredDrafts(planId) {
+  const registry = await kvsStore.getDraftsRegistry(planId);
+  const now = Date.now();
+  for (const [accountId, entry] of Object.entries(registry)) {
+    if (now - new Date(entry.timestamp || 0).getTime() > MAX_AGE_MS || entry.stale) {
+      await kvsStore.deleteDraft(planId, accountId).catch(() => {});
+      delete registry[accountId];
+    }
+  }
+  await kvsStore.saveDraftsRegistry(planId, registry);
+}
+```
+
+**TOCTOU caveat (important):** `acquireLock` does check-then-set, but **Forge KVS has no atomic compare-and-set**, so two users who pass the check in the same window can both `setLock` — last write wins. SE-PPM narrows (does not eliminate) the race with an **acquire-then-reread** backstop:
+
+```javascript
+// se-ppm src/services/concurrency/write-lock.js (lines 44-50)
+await kvsStore.setLock(planId, lockData);
+const confirm = await kvsStore.getLock(planId);       // re-read after writing
+if (confirm && confirm.accountId !== accountId) {
+  return { acquired: false, holder: confirm };        // someone else's write landed last → lost the race
+}
+return { acquired: true };
+```
+
+This is a documented limitation — true safety would need a CAS primitive Forge KVS doesn't expose. `completeWrite` re-reads the holder before finishing as a second backstop.
+
+**Source:** lz-ppm-forge / se-ppm-forge `src/services/concurrency/{draft-manager,write-lock}.js`. See `gotchas.md` for the TOCTOU note.
+
+---
+
+## 14. Chunked write-back with a post-write VERIFY step
+
+**Problem:** Pattern 4 writes issues in chunks. But a write can be **silently dropped** — a validator, automation rule, or screen config can reject a field without surfacing an error to the REST caller. The user thinks their schedule was applied; it wasn't.
+
+**Pattern:** After writing, **re-fetch the written issues and compare intended vs actual**. Normalise so "no value" forms compare equal, and compare *every load-bearing field*, not just the obvious ones.
+
+```javascript
+// src/resolvers/write-resolvers.js — verifyWrittenIssues
+async function verifyWrittenIssues(planId, writtenKeys) {
+  if (writtenKeys.length === 0) return { verified: 0, mismatches: [] };
+  const fresh = await jiraClient.bulkFetch(writtenKeys);   // POST /rest/api/3/issue/bulkfetch
+  const mismatches = [];
+  for (const key of writtenKeys) {
+    const expected = await kvsStore.getIssue(planId, key); // intended values (verify runs BEFORE re-index)
+    const got = fresh.get(key);
+    const diff = {};
+    if (normDate(got.startDate) !== normDate(expected.startDate)) { diff.startDate = { expected: expected.startDate, actual: got.startDate }; }
+    if (normDate(got.dueDate)   !== normDate(expected.dueDate))   { diff.dueDate   = { expected: expected.dueDate,   actual: got.dueDate }; }
+    if (normDur(got.duration)   !== normDur(expected.duration))   { diff.duration  = { expected: expected.duration,  actual: got.duration }; } // load-bearing — a silently-dropped duration used to pass unnoticed
+    if (Object.keys(diff).length) mismatches.push({ key, diff });
+  }
+  return { verified: writtenKeys.length - mismatches.length, mismatches };
+}
+```
+
+**Throughput:** with `WRITE_CHUNK_SIZE=10` + `WRITE_DELAY_MS=250` (pattern 4) you write **~10–13 issues/s**, comfortably under Jira's ~50/s ceiling and the per-issue ~20/2 s limit. Surface `mismatches` in the UI so the user knows exactly which issues didn't take.
+
+**Source:** lz-ppm-forge `src/resolvers/write-resolvers.js` (`verifyWrittenIssues`, `completeWrite`).
+
+---
+
+## 15. Two-engine parity (backend authoritative + frontend mirror)
+
+**Problem:** A Gantt UI computes a *preview* of a schedule edit in the browser (instant feedback, zero KVS writes during drag), then the backend recomputes the *authoritative* result on Apply. If the two diverge, the user sees one thing and Apply writes another — a trust-destroying bug.
+
+**Pattern:** The frontend preview must be a **fixed point** of the backend engine — same inputs, identical outputs. SE-PPM keeps the schedule math in `src/services/calculation/*` (authoritative) and a faithful mirror in the browser (`utils/user-intent.js` mirrors `services/calculation/user-intent.js`, same decision matrix, same `changeType` strings). The engine pipeline order is fixed and both sides follow it:
+
+1. topological sort (processing order)
+2. per issue: **iron-clad rule → user-intent → buffer logic**
+3. cascade to successors (smart cascading)
+4. parent roll-up from children
+5. working-day snap throughout (duration is **working days**, 1-indexed: `duration === 1` ⇒ start == due)
+
+**Prove it:** a Node **engine-parity harness** runs the frontend `utils/` mirror against `src/services/calculation/*` over all date primitives + the full user-intent matrix and must report identical results (last run **232/232**). Any scheduling-rule change must keep both 1:1, then prove `preview == applied` on a plan with dependencies, a buffer issue, and a parent roll-up.
+
+**When to apply:** any app with optimistic client-side compute that a server later authoritatively redoes (schedulers, pricing, validation previews).
+
+**Source:** se-ppm-forge `AGENTS.md` (Golden rules), `src/services/calculation/engine.js`, `static/ppm-ui/src/{hooks,utils}/`.
+
+---
+
+## 16. Layered config loader, loaded fresh per invocation
+
+**Problem:** Field ids, link-type names, engine limits, and working-day calendars are all admin-configurable. Hard-coding them breaks on the next tenant; caching them in a module global breaks because **Forge functions are stateless** — a warm container may serve a *different* install.
+
+**Pattern:** One `loadConfig()` that reads KVS and deep-merges over a `DEFAULTS` object, **called once per resolver invocation** and threaded through the pipeline. Never a global cache.
+
+```javascript
+// src/services/config-loader.js
+const DEFAULTS = {
+  fields: { startDate: 'customfield_10015', dueDate: 'duedate', rank: 'customfield_10019', /* ... */ },
+  dependencies: { linkTypeName: 'Blocks', inwardDescription: 'is blocked by', outwardDescription: 'blocks' },
+  engine: { maxCascadeDepth: 10, maxIssuesPerTraversal: 150 /* circuit breaker */ },
+  indexing: { issuesPerShard: 100, batchSize: 5 },
+  workingDays: { activeCalendar: 'standard', calendars: { standard: { days: [1,2,3,4,5] } } },
+};
+
+export async function loadConfig() {                       // call ONCE per invocation
+  const [fieldCfg, engineCfg, wdCfg] = await Promise.all([
+    storage.get(keys.fieldConfig()), storage.get('cfg:engine'), storage.get('cfg:working-days'),
+  ]);
+  return {
+    fields: { ...DEFAULTS.fields, ...(fieldCfg || {}) },
+    engine: { ...DEFAULTS.engine, ...(engineCfg?.engine || {}) },
+    indexing: { ...DEFAULTS.indexing, ...(engineCfg?.indexing || {}) },
+    workingDays: mergeWorkingDays(wdCfg),
+  };
+}
+```
+
+Offer lightweight variants (`loadFieldConfig`, `loadEngineConfig`) so a hot path doesn't read KVS keys it won't use.
+
+**Source:** lz-ppm-forge `src/services/config-loader.js`.
+
+---
+
+## 17. KVS cost control (zero writes during edit)
+
+**Problem:** A drag-heavy UI that writes to KVS on every interaction shreds the 1 MB/s-per-key write limit and runs up cost.
+
+**Pattern:** Drive cost to near-zero with five rules lz-ppm follows:
+
+- **Frontend-only editing** — drag/recalculate entirely in the browser (pattern 15); **zero KVS writes during the edit**.
+- **Batch save on an explicit button** — one chunked write-back (pattern 14) when the user commits, not continuously.
+- **Poll at 60 s, not 10 s** — multi-user awareness reads the lightweight drafts registry on a slow timer; realtime (`32-forge-realtime.md`) shortens perceived latency without more polling.
+- **Lean issue model** — store ~15 fields per issue, truncate summaries (`maxSummaryLength: 80`), not the whole Jira issue.
+- **Index-then-shard lookup** — one small index value maps `issueKey → shardIdx`; reads hit only the shards they need (pattern 1).
+
+**Source:** lz-ppm-forge `src/services/{kvs-store,config-loader}.js`, `src/resolvers/write-resolvers.js`.
+
+---
+
+## 18. Issue-link inward/outward semantics
+
+**Problem:** `POST /rest/api/3/issueLink` takes `inwardIssue` and `outwardIssue` and the mapping to "blocker/blocked" is counter-intuitive — get it backwards and every dependency points the wrong way.
+
+**Pattern:** For a `Blocks` link, **`outwardIssue` is the blocker / predecessor** and **`inwardIssue` is the blocked / successor**. Wrap it so call sites read naturally, and **test against a real instance** — link-type direction wording varies per site.
+
+```javascript
+// src/services/jira-client.js
+// outwardKey BLOCKS inwardKey  (outward = predecessor, inward = successor)
+export async function createIssueLink(outwardKey, inwardKey, linkTypeName = 'Blocks') {
+  return requestWithRetry(() => api.asApp().requestJira(route`/rest/api/3/issueLink`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: { name: linkTypeName },
+      outwardIssue: { key: outwardKey },   // the blocker
+      inwardIssue:  { key: inwardKey },    // the blocked
+    }),
+  }), `createLink ${outwardKey} blocks ${inwardKey}`);
+}
+```
+
+The default link type names (`Blocks` / `is blocked by` / `blocks`) are themselves config (pattern 16) — don't hard-code the descriptions.
+
+**Source:** lz-ppm-forge `src/services/jira-client.js` (`createIssueLink`, `findLinkId`).
+
+---
+
+## 19. Custom-field auto-setup: the 4-step screen chain
+
+**Problem:** Creating a custom field via `POST /rest/api/3/field` is the easy part. A created field is **invisible until it's on a screen tab** — and finding the right edit screen per project is a four-hop traversal. Requires `manage:jira-configuration`.
+
+**Pattern:** Create the field, then for each project walk the screen chain and `POST` the field onto the first tab of the edit screen (plus the Default Screen as a fallback for project types you missed):
+
+```text
+POST /rest/api/3/field                                              → fieldId
+per project:
+  1. GET /rest/api/3/issuetypescreenscheme/project?projectId={id}   → issueTypeScreenSchemeId
+  2. GET /rest/api/3/issuetypescreenscheme/mapping
+         ?issueTypeScreenSchemeId={id}                              → screenSchemeId (default mapping)
+  3. GET /rest/api/3/screenscheme?id={screenSchemeId}              → screens.editIssue
+  4. GET /rest/api/3/screens/{editScreenId}/tabs                   → first tab id
+  5. POST /rest/api/3/screens/{editScreenId}/tabs/{tabId}/fields   → { fieldId }
+fallback: also add to the Default Screen for any project type missed above
+```
+
+De-dupe processed screen ids (multiple projects share screens) so you don't `POST` the same field twice.
+
+**Source:** lz-ppm-forge `src/services/field-setup.js` (`addFieldsToEditScreens`). See `29-custom-field-types.md` for the field *type* module.
+
+---
+
+## 20. Field-screen warning preflight
+
+**Problem:** "Apply" can silently no-op if your fields aren't on a project's edit screen — the write succeeds at REST level but the field never lands (the silent-drop class verify step 14 catches *after* the fact). Better to warn *before* the user commits.
+
+**Pattern:** Sample **one issue per project** via `GET /rest/api/3/issue/{key}/editmeta` and check the target fields appear in `editMeta.fields`. If a field is missing, warn the user that Apply would silently skip it for that project — and offer the auto-setup (pattern 19).
+
+```javascript
+const editMeta = await (await api.asApp().requestJira(
+  route`/rest/api/3/issue/${sampleKey}/editmeta`, { headers: { Accept: 'application/json' } })).json();
+const missing = targetFieldIds.filter((id) => !editMeta.fields[id]);
+if (missing.length) warn(`These fields aren't on ${projectKey}'s edit screen and won't be written: ${missing.join(', ')}`);
+```
+
+`editmeta` also tells you each field's `operations` (must include `"set"`) and `schema` — the same pre-flight CogniRunner runs before a semantic post-function (`25-workflow-modules-deep-dive.md`).
+
+**Source:** lz-ppm-forge field setup + CogniRunner `src/index.js` editmeta pre-flight.
+
+---
+
 ## See also
 
 - `26-async-events-and-queues.md` — full `@forge/events` reference
 - `27-faas-limits-and-cost.md` — quotas these patterns work around
 - `19-rate-limit-handling.md` — rate-limit deep dive
+- `25-workflow-modules-deep-dive.md` — workflow rule internals (agentic validation, editmeta pre-flight)
+- `31-forge-ai-and-llm.md` — cost guards + BYOK for AI patterns
+- `32-forge-realtime.md` — live multi-user awareness on top of patterns 5/13/17
 - `templates/async-queue-consumer.yml`, `templates/capability-token-webtrigger.yml` — copy-paste skeletons for patterns 6 and 7

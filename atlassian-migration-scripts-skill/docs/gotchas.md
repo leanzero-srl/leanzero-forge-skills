@@ -216,8 +216,53 @@ Specific things that bite migration engineers. Each entry is something that has 
 - **The `master_<runId>.json`** is the canonical resume pointer, not the `plan_<runId>.json` directly. Always pass `--plan-file logs/master_<runId>.json` so the script can reload both the index and the entries.
 - **Background-running long jobs is mandatory** for populations >100 entities. A foreground tool call holds the agent's turn for the entire run.
 
+## JSM actor / role gotchas
+
+- **`Service Desk Team` role, not site-admin.** A JSM mutation that runs as an actor (automation rule import, asset/ticket association, transition, comment) fails `400 component.missing.permissions.actor` unless the actor is in the project's `Service Desk Team` (agent) role. Being a Jira/site admin is NOT enough.
+- **`/mypermissions` lies.** `GET /rest/api/3/mypermissions` can report `havePermission: true` for EDIT_ISSUES/TRANSITION_ISSUES even when the automation engine will reject the actor. Trust real role membership, not the permissions endpoint.
+- **App actors use a different role.** "Run rule as Jira" / Automation-for-Jira app actors (accountId prefix `557058:`) act through `atlassian-addons-project-access`, granted via the **permission scheme** — not the Service Desk Team role. Dedupe scheme grants by scheme id (schemes are shared across projects).
+- **Role ids aren't stable.** Resolve the role id per project, by name, every time.
+- **Assets `cmdb.object.create` object-type ids are workspace-local.** They don't remap with the generic field-mapper; remap by `schemaLabel::objectTypeLabel`, or create fails with "User does not have permission to create rule with this object type."
+
+## Automation rule migration gotchas
+
+- **DC has no Automation REST API.** A GET against the Cloud automation path returns `{}` on Data Center; rules live behind the UI/WebSudo. DC→Cloud must be hybrid: manual UI export → bash mapping gen → node transform/import.
+- **import dedupes by rule NAME.** `import_clean.js` skips any source rule whose name already exists on the target. Per-project copies of a same-named rule are silently skipped after the first — rename uniquely if you need all copies.
+- **`state` on create is not reliably honored.** After `POST .../rest/v1/rule`, enforce ENABLED/DISABLED with an explicit enable/disable call.
+- **Cross-site app actors 400.** The source rule's actor (`557058:<source-uuid>`) doesn't exist on the target → set the target's app actor (auto-discovered) or `ACTOR_OVERRIDE`/`APP_ACTOR`.
+- **Email-action rules import DISABLED** regardless of source state — re-enable deliberately so a half-migrated tenant can't blast notifications.
+- **Cloud field list incompleteness:** `GET /rest/api/3/field` omits some fields on some tenants; use `GET /rest/api/3/field/search?type=custom` (paginated) for a complete custom-field list.
+
+## Post-JCMA issue-recovery gotchas
+
+- **DC and Cloud search differ.** DC `/rest/api/2/search` takes `startAt` and allows `maxResults=1000` with `fields=*none`; Cloud `/rest/api/3/search/jql` has no `startAt`, uses an opaque `nextPageToken`, and caps at **100/page**. Mixing them up under-reports missing issues.
+- **Re-keyed ≠ missing.** A moved/re-created Cloud issue keeps its old key as a **label** and resolves by `key = "OLD"` via its move-alias. Check both before counting a key missing, and always apply a `created < MIGRATION_CUTOFF` filter.
+- **CSV importer key preservation is conditional.** The System CSV importer keeps the original key only if it's still **FREE**; if TAKEN it silently **EDITs** the existing issue. Re-run `check_keys_free` right before import.
+- **REST create cannot set the key.** The next-in-counter issue keeps its key; below-counter issues get a new key with the old key kept as a label.
+- **Status names must match exactly.** The importer matches status by exact name; DC Title Case vs Cloud sentence case silently fails the row — build a per-project status-name map.
+- **`createmeta` under-reports required fields.** Validator/behaviour/ScriptRunner-enforced fields show `required: false`; discover the real set by trial-create, then delete the probe issue.
+- **JCMA truncates descriptions > 65k chars.** Long issue descriptions are cut at the field limit; recover the full text from the DC source (e.g. rebuild as a DOCX attachment) rather than trusting the migrated body.
+
+## Confluence app-macro migration gotchas
+
+- **App macros collide with native macro names.** JCMA can land Appfire Composition `deck`/`card` as raw storage names that collide with native Cloud macros and break rendering. Rewrite to `tab-group`/`tab` in storage format.
+- **Default-deny on ambiguous macros.** A CQL hit on `macro = "card"` is not proof it's the app macro — Cloud has its own `card`. Only rewrite with positive evidence (Composition ancestor or shaped param); skip the rest with a recorded reason.
+- **Splice rewrites must run back-to-front.** Apply edits descending by span start, or earlier rewrites shift later offsets.
+- **Record the server-truth post-PUT version.** A 409 retry that raced a third-party edit lands at `freshVersion + 2`, not `+1`. Recording `result.newVersion` keeps rollback from clobbering the third party's edit.
+
+## Org-level account operations
+
+- **Account suspension/removal is ORG-admin, not tenant-admin.** It runs against the Atlassian Admin API (`https://api.atlassian.com/admin/v1/orgs/{orgId}/...`) with an **org admin API key**, not a Jira/Confluence API token. Suspend = `POST .../directory/users/{accountId}/suspend-access`; remove = `DELETE .../directory/users/{accountId}` (async, permanent). See `atlassian-organizations-api-skill`.
+- **Filter by `account_type` first.** Only `atlassian` accounts are staff; skip `customer` (JSM portal users) and `app` (Connect/Forge service accounts) unless you explicitly mean to touch them.
+- **`GET /users` only returns *managed* accounts.** Invited-but-unclaimed users (a different email domain) never appear there. Use `POST /v1/orgs/{orgId}/users/search` to cover both. (Search endpoint deprecated after 2026-06-30 — acceptable for a one-off migration script; verify before reuse.)
+- **Privacy-restricted accounts have no email.** They're skipped silently — you can't safely match a domain without an email.
+
 ## See also
 
+- [`19-jsm-migration-patterns.md`](19-jsm-migration-patterns.md) — JSM role/actor model in full
+- [`20-automation-rule-migration.md`](20-automation-rule-migration.md) — automation migrator
+- [`21-post-jcma-issue-recovery.md`](21-post-jcma-issue-recovery.md) — find-missing recovery suite
+- [`22-confluence-app-macro-migration.md`](22-confluence-app-macro-migration.md) — macro rewriter
 - [`27-rate-limits-and-quotas.md`](27-rate-limits-and-quotas.md) — full rate-limit semantics
 - [`04-pagination.md`](04-pagination.md) — the pagination footguns
 - [`05-identity-resolution.md`](05-identity-resolution.md) — identity footguns

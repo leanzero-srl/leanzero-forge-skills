@@ -24,6 +24,10 @@ Each pattern lists the problem it solves, a copy-pasteable code excerpt, and a s
 13. [Atlassian Admin (Org) API integration from a Forge app](#13-atlassian-admin-org-api-integration-from-a-forge-app)
 14. [Email without a third-party provider (Jira issue notify trick)](#14-email-without-a-third-party-provider-jira-issue-notify-trick)
 15. [Eventual-consistency protection (trust your local audit, not the REST group)](#15-eventual-consistency-protection-trust-your-local-audit-not-the-rest-group)
+16. [In-isolate config cache for high-frequency handlers](#16-in-isolate-config-cache-for-high-frequency-handlers)
+17. [Debounced activity writes (adaptive window)](#17-debounced-activity-writes-adaptive-window)
+18. [Dual `index.ts` handler resolution (TypeScript Forge apps)](#18-dual-indexts-handler-resolution-typescript-forge-apps)
+19. [Custom UI: relative assets, portal dialogs, dark mode](#19-custom-ui-relative-assets-portal-dialogs-dark-mode)
 
 ---
 
@@ -200,7 +204,7 @@ export function injectExtensionAtTop(adfDoc, extensionKey, parameters) {
 
 **Problem:** Your trigger fires on `avi:confluence:updated:page`. Your handler updates the page. The update fires the trigger again. Infinite loop.
 
-**Pattern:** First defense is `filter.ignoreSelf: true` in the manifest. Belt-and-braces: cache the app's own `accountId` in KVS and discard events where the actor matches.
+**Pattern:** `filter.ignoreSelf: true` is **Jira-only — it is not supported for Confluence product events**, so the cached-app-accountId comparison *is* the defense here (not a fallback): cache the app's own `accountId` in KVS and discard events where the actor matches. (Confluence still delivers self-generated events; they carry `selfGenerated: true` on the payload, which you can also check.)
 
 ```javascript
 // One-time bootstrap, cached in KVS
@@ -684,9 +688,130 @@ if (!(await isUserDeactivatedByApp(accountId))) {
 
 ---
 
+## 16. In-isolate config cache for high-frequency handlers
+
+**Problem:** A trigger that fires on `avi:confluence:viewed:page` runs on every page open across the site. Re-reading config from KVS/SQL on each invocation adds latency and rate-limit pressure to your hottest path.
+
+**Pattern:** Cache config at **module scope** (the variable lives as long as the warm isolate) so repeated invocations within the same isolate reuse it. The cache evaporates naturally when the platform recycles the isolate, so there's no stale-forever risk — and a short TTL bounds it further.
+
+```typescript
+// Module scope — shared across invocations on the SAME warm isolate.
+let cachedKey: string | null = null;
+let cachedOrgId: string | null = null;
+
+async function getCredentials() {
+  if (!cachedKey || !cachedOrgId) {
+    cachedKey   = process.env.ORG_API_KEY ?? (await kvs.getSecret('org_api_key'));
+    cachedOrgId = process.env.ORG_ID      ?? (await kvs.get('org_id'));
+  }
+  return cachedKey && cachedOrgId ? { apiKey: cachedKey, orgId: cachedOrgId } : null;
+}
+
+// Or with an explicit TTL when the value can change at runtime:
+let cfg: { v: any; at: number } | null = null;
+const TTL = 60_000;
+async function getConfigCached() {
+  if (cfg && Date.now() - cfg.at < TTL) return cfg.v;
+  const v = await loadConfig();
+  cfg = { v, at: Date.now() };
+  return v;
+}
+```
+
+> **Caveat:** module-scope state is per-isolate and not shared across concurrent isolates — never use it for correctness-critical coordination (use KVS/SQL for that). It's a *latency* optimisation only. The migration-runner's `let migrationRan = false` guard (see `17-forge-sql.md`) is the same idea.
+
+**Source:** License Leash `src/services/org-api-service.ts`, `migration-service.ts`.
+
+---
+
+## 17. Debounced activity writes (adaptive window)
+
+**Problem:** A high-frequency event (page views) would hammer a single per-user row far beyond what you need — the data only needs day-level freshness.
+
+**Pattern:** Before writing, do a cheap PK read and skip the write unless the stored timestamp is older than a debounce window. License Leash adapts the window to whether the Org API daily sync is available (24h with it, 4h without, because without it real-time is the only signal). Combine with a `GREATEST` upsert so the timestamp never regresses (see `17-forge-sql.md`).
+
+```typescript
+export const DEBOUNCE_WITH_KEY_MS = 24 * 60 * 60 * 1000;
+export const DEBOUNCE_WITHOUT_KEY_MS = 4 * 60 * 60 * 1000;
+export const debounceWindowMs = (orgApiConfigured: boolean) =>
+  orgApiConfigured ? DEBOUNCE_WITH_KEY_MS : DEBOUNCE_WITHOUT_KEY_MS;
+
+export async function recordActivityDebounced(accountId, eventType, windowMs) {
+  const existing = await getUserActivity(accountId);            // cheap PK lookup
+  if (!isWriteDue(existing?.last_active_at ?? null, Date.now(), windowMs)) return false;
+  await upsertActivity(accountId, eventType);                   // ON DUPLICATE KEY UPDATE
+  return true;
+}
+```
+
+> Forge product-event **subscriptions are static** (declared in `manifest.yml`). A runtime "tracked events" toggle reduces DB *writes* but not Forge *invocations* — to cut invocations you must trim the manifest and redeploy.
+
+**Source:** License Leash `src/services/activity-service.ts`, `src/utils/tracked-events.ts`.
+
+---
+
+## 18. Dual `index.ts` handler resolution (TypeScript Forge apps)
+
+**Problem:** With a TypeScript app whose source is under `src/`, `forge lint` resolves `manifest.yml` `handler:` paths from the **repo root**, but the Forge bundler auto-prepends `src/`. A single entry file can't satisfy both.
+
+**Pattern:** Keep **two** barrel files that re-export the same handlers, and reference them with **no path** in the manifest (`handler: index.fn`):
+
+```typescript
+// /index.ts  (repo root — satisfies `forge lint`)
+export { handler as trackActivity } from './src/handlers/track-activity';
+export { handler as adminResolver } from './src/resolvers/admin-resolver';
+// …
+
+// /src/index.ts  (bundler auto-prepends `src/`)
+export { handler as trackActivity } from './handlers/track-activity';
+export { handler as adminResolver } from './resolvers/admin-resolver';
+// …
+```
+
+```yaml
+# manifest.yml — note: index.<fn>, no directory prefix
+function:
+  - key: trackActivity
+    handler: index.trackActivity
+  - key: checkInactivity
+    handler: index.checkInactivity
+    timeoutSeconds: 900
+```
+
+`package.json` `"main": "src/index.ts"`. Keep the two barrels in sync (same export names).
+
+**Source:** License Leash `/index.ts`, `/src/index.ts`, `manifest.yml`.
+
+---
+
+## 19. Custom UI: relative assets, portal dialogs, dark mode
+
+**Problem:** Custom UI iframes are easy to misconfigure: absolute asset paths 422 on deploy, overlay components get clipped by `overflow: hidden`, and Forge doesn't theme the iframe for you.
+
+**Patterns (each independent):**
+
+- **Relative asset paths** — set `"homepage": "."` in each Custom UI app's `package.json` so the production build emits relative `./static/...` URLs. Without it the build references absolute `/static/...` paths and the Forge CDN returns `422`. (License Leash sets this in all three of `static/{admin-dashboard,reactivation-page,reactivation-banner}/package.json`.)
+
+- **Portal overlays to `document.body`** — render Tooltip/ConfirmDialog/menus through a portal anchored at `document.body` so they escape any ancestor `overflow: hidden`/`transform` and aren't clipped inside the panel.
+
+- **Dark mode is opt-in** — Forge does **not** auto-theme Custom UI iframes. Read the theme from the bridge and apply it yourself:
+
+```javascript
+import { view } from '@forge/bridge';
+const theme = await view.theme();           // { colorMode: 'light' | 'dark' | ... }
+document.documentElement.dataset.theme = theme.colorMode;
+```
+
+- **Custom UI ↔ resolver auth** — never `AP.context.getToken()` (Atlassian Connect). Use `requestConfluence`/`invoke` from `@forge/bridge`; see the auth table in `SKILL.md`.
+
+**Source:** License Leash `static/*/package.json`; general Custom UI practice corroborated across Sentinel Vault's Custom UI surfaces.
+
+---
+
 ## See also
 
 - `26-async-events-and-queues.md` — `@forge/events` reference (queues, retries)
 - `27-faas-limits-and-cost.md` — quotas these patterns work around
 - `28-adf-and-storage-format.md` — page body formats, `version.number`, ADF construction helpers
 - `12-permissions-scopes.md` — required scopes for the REST calls used above
+- `14-macros-and-section-sealing.md`, `15-forge-llm-integration.md`, `16-unified-content-triggers.md`, `17-forge-sql.md`, `18-unlicensed-access-and-web-triggers.md` — deep dives on the features these patterns come from

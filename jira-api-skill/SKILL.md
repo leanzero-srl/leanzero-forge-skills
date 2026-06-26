@@ -111,7 +111,10 @@ Refresh tokens via `grant_type=refresh_token` before `expires_in` lapses (defaul
 | List transitions | `/rest/api/3/issue/{issueIdOrKey}/transitions` | GET |
 | Add comment (ADF body) | `/rest/api/3/issue/{issueIdOrKey}/comment` | POST |
 | Get project | `/rest/api/3/project/{projectIdOrKey}` | GET |
-| Search (JQL) | `/rest/api/3/search/jql` | POST |
+| Search (JQL, `nextPageToken` cursor) | `/rest/api/3/search/jql` | POST |
+| Bulk-read issues (chunk 100) | `/rest/api/3/issue/bulkfetch` | POST |
+| Editable fields pre-flight | `/rest/api/3/issue/{issueKey}/editmeta` | GET |
+| Create/delete issue link | `/rest/api/3/issueLink` (`/{linkId}` to delete) | POST/DELETE |
 | Get current user | `/rest/api/3/myself` | GET |
 | User search | `/rest/api/3/user/search?query=...` | GET |
 | Notify users about issue | `/rest/api/3/issue/{issueKey}/notify` | POST |
@@ -180,7 +183,7 @@ Accept: application/json
 | `01-core-concepts.md` | API overview, auth, versioning |
 | `06-api-endpoints.md` | Endpoint reference (with per-resource appendix in `docs/api/`) |
 | `07-permissions-scopes.md` | OAuth 2.0 scopes |
-| `13-cli-commands.md` *(if present)* | curl & dev-loop helpers |
+| `08-cli-commands.md` | curl & dev-loop helpers |
 
 ### Production
 | File | Topic |
@@ -233,6 +236,7 @@ CI-safe helpers in `scripts/`:
 
 ## Changelog
 
+- 2026-06-26: Distilled REST edge-cases from production Forge apps (se-ppm-forge `services/jira-client.js`, CogniRunner) into `06-api-endpoints.md` and `gotchas.md`: issue-link inward/outward direction (counter-intuitive — verify before bulk), cursor-paginated `POST /rest/api/3/search/jql` (`nextPageToken`), `POST /rest/api/3/issue/bulkfetch` (chunk 100), `GET /editmeta` pre-flight to avoid silent no-op field writes, verify-after-write (re-read + diff), and `notifyUsers=false` / `overrideScreenSecurity=true` write flags.
 - Replaced the legacy "JWT — Server-to-server authentication" claim with the three actually-valid Cloud REST options (API token Basic auth, OAuth 2.0 3LO, Forge `api.asUser/asApp`). Locally-signed JWTs are an Atlassian Connect pattern and are not validated by the v3 REST API.
 - Added four new REST-API-specific docs: `24-rest-integration-patterns.md`, `27-rate-limits-and-quotas.md`, `28-adf-construction.md`, `30-testing-rest-integrations.md`.
 - Standardized scripts: stripped emoji, added `set -euo pipefail`, made CI-safe.

@@ -42,3 +42,29 @@ In Custom UI, `view.getContext()` is asynchronous and returns a Promise.
 Fetching large pages via `requestConfluence` can impact performance and memory in the Custom UI sandbox.
 - **Issue**: Slow UI response or browser tab crashes when handling large page bodies.
 - **Fix**: Use pagination where possible, or fetch only the necessary parts of the page (e.g., using specific fields in the REST API).
+
+## Groups, users & activity (v1-only surfaces)
+
+Source: License Leash (axpo-license-manager). Full detail in `31-groups-users-and-activity.md`.
+
+### Group + CQL endpoints live only on v1
+The v2 API (`/wiki/api/v2`) has **no group-member endpoints, no `user/memberof`, and no CQL search.** For seat management, membership audits, and content-activity lookups you must use v1 (`/wiki/rest/api/group/...`, `/wiki/rest/api/user/memberof`, `/wiki/rest/api/search?cql=...`). Membership reads use `start`/`limit` **offset** pagination (max `limit=200`), not v2 cursor pagination — stop when `results.length < limit`. Count members cheaply with `membersByGroupId?limit=1&shouldReturnTotalSize=true` and read `totalSize`.
+
+### Suspended users are invisible to Confluence
+- **Issue**: `membersByGroupId` results carry no `status`/`active` field, and a **suspended account is silently omitted** from the list. You cannot tell from Confluence alone whether a missing user is removed or merely suspended.
+- **Fix**: Cross-reference the Org API (`/v1/orgs/{orgId}/directory/users`) for suspended visibility — see `atlassian-organizations-api-skill`.
+
+### Eventual consistency after suspend/reactivate
+- **Issue**: Suspending or reactivating a user at `admin.atlassian.com` / the Org API is **not** immediately reflected in Confluence group reads — propagation takes minutes (observed in production, 2026-06). The admin/org view can show the user Active while a group read still lags.
+- **Fix**: Re-check the more-authoritative Org API before acting on a membership read; don't treat a just-changed user's stale membership as truth.
+
+### Multi-site group contamination
+- **Issue**: `GET /wiki/rest/api/group` returns groups from **all sites in the org**, not just the current site. A naive audit mixes `confluence-users-siteA` with `confluence-users-siteB`. The live listing also takes **20–30 s on large orgs** (observed 2026-06) and pickers hit it twice.
+- **Fix**: Derive the site name from the `confluence-users-{site}` group (`/^confluence-users-(.+)$/`), filter to `*-{site}` plus explicit global admin groups (`site-admins`, `org-admins`), and cache the group list rather than paging it live on every UI load.
+
+### Email address needs a scope
+- **Issue**: A user-context token often can't read email; `GET /wiki/rest/api/user` usually returns `publicName` only.
+- **Fix**: Read email from the separate `GET /wiki/rest/api/user/email?accountId=...` endpoint with the `read:email-address:confluence` scope (or an `asApp()` Forge call granted that scope).
+
+### Not every group grants a seat — and revokes can strip admin rights
+- Guest groups (`confluence-guests-{site}`) and `confluence-user-access-admins` grant **no** product seat; admin groups (`confluence-admins`, `site-admins`, `org-admins`) grant a seat **and** admin rights. A license-revoke that blindly removes a user from every Confluence group can strip admin access or push them into a guest group (a soft reactivation backdoor to unlicensed content). Only the `confluence-users[-{site}]` membership reclaims a plain seat.

@@ -46,6 +46,13 @@ runtime:
 - **12 MB/s read per key** → cache the read result in a downstream KVS or in-memory in the same invocation; spread reads across shards.
 - **`RATE_LIMIT_EXCEEDED` (HTTP 429 from KVS)** → exponential backoff, then route the work through a queue.
 
+### Hot-key throughput in practice (observed)
+
+When reading or deleting many sharded keys, batch and pace them rather than firing all at once:
+- **Reads:** batch ~**5 shards in parallel** per round (PPM `getIssuesByKeys`), which keeps you under per-key limits while still parallel.
+- **Deletes:** batches of **~3 with ~200 ms pauses** between rounds — deletes are heavier and a tight loop trips `RATE_LIMIT_EXCEEDED` fast.
+- **Ops budget:** a warm container can exhaust the per-minute KVS ops budget during a bulk transition; cache hot read-only data module-scoped with a short TTL (e.g. a registry, `25-workflow-modules-deep-dive.md`) and invalidate on every write.
+
 ## Queue (`@forge/events`) limits
 
 | Limit | Value |
@@ -64,13 +71,17 @@ runtime:
 - Burst limit: ~100 writes / s.
 - See `19-rate-limit-handling.md` for backoff implementations.
 
-## Forge LLM API (EAP — subject to change)
+## Forge LLM API (`@forge/llm` — Preview as of 2026-06)
 
 | Limit | Value |
 |---|---|
 | Context window | 200,000 tokens |
 | Requests per minute | 100 |
 | Inference timeout | 5 minutes (requires async events config) |
+| Models | Claude Haiku / Sonnet / Opus (platform-level) |
+| Billing | app vendor's Forge bill — no free quota |
+
+Adding the `llm` module is a **major version bump + admin re-consent**. Cost-guard every call. See `31-forge-ai-and-llm.md`.
 
 ## Egress / external fetch
 

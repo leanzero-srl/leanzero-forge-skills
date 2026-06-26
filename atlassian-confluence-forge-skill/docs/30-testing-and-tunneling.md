@@ -179,6 +179,56 @@ test('queues a scan job when a new page is created', async () => {
 });
 ```
 
+## Multi-layer test harness (production example)
+
+License Leash and Sentinel Vault both layer tests so each layer runs without the Forge runtime. Three layers, fastest first:
+
+### 1. Pure-function unit tests (no Forge at all)
+Keep ADF surgery, JSON salvage, token parsing, rule evaluation, and pagination math as **pure functions** in Forge-free modules and test them with plain Node — Sentinel runs `node test/doc-surgery.test.mjs && node test/json-salvage.test.mjs && ...` with a tiny `_assert.mjs`, no jest needed. This is why `json-salvage.js` and `auth-service.ts` carry no `@forge/*` imports.
+
+### 2. Backend integration tests (in-memory `@forge/*` fakes)
+Run resolvers/handlers under jest with `@forge/api`, `@forge/resolver`, and `@forge/sql` aliased to **in-memory fakes that record calls**, so a test can drive a handler and assert on the SQL/REST it issued:
+
+```
+test-harness/backend/__mocks__/forge-api.ts      # records requestConfluence/requestJira
+test-harness/backend/__mocks__/forge-resolver.ts
+test-harness/backend/__mocks__/forge-sql.ts      # in-memory table store, records queries
+test-harness/backend/*.int.test.ts               # jest -c test-harness/backend/jest.config.cjs
+```
+
+### 3. Custom UI E2E (Playwright + bridge mock via craco)
+Build each Custom UI app with `@forge/bridge` aliased to a mock **only when a flag is set**, so production bundles are byte-for-byte unchanged. License Leash uses craco:
+
+```javascript
+// static/<app>/craco.config.js — flag-gated alias
+if (process.env.REACT_APP_BRIDGE_MOCK === '1') {
+  webpackConfig.resolve.alias['@forge/bridge'] =
+    path.resolve(__dirname, '../../test-harness/bridge-mock');
+  // CRA's ModuleScopePlugin forbids imports outside src/ — drop it (E2E build only)
+  webpackConfig.resolve.plugins = webpackConfig.resolve.plugins
+    .filter((p) => p?.constructor?.name !== 'ModuleScopePlugin');
+}
+```
+
+```jsonc
+// package.json — E2E build emits to a SEPARATE dir so it never ships
+"build:e2e": "REACT_APP_BRIDGE_MOCK=1 BUILD_PATH=build-e2e craco build"
+```
+
+The bridge mock seeds per-test responses on `window.__E2E__` (resolver name → value or `(payload) => value`) and **records** `invoke()` / `requestConfluence` / `view` calls so specs assert on backend interactions. Playwright then serves `build-e2e/` statically and drives the app outside any Forge iframe.
+
+### Live smoke tests (gated by `.env`, fail-soft when absent)
+A fourth, optional layer hits a real dev site (web-trigger smoke, event smoke) — gated behind a `.env` (`test-harness/.env.example`, `playwright.live.config.ts`) so the suite **fails soft / skips** when credentials aren't present, and never runs in CI by accident.
+
+### Screenshot / video harness (light + dark)
+For marketing/docs assets, a separate webpack config (`webpack.screenshot.js`) aliases `@forge/bridge` to a screenshot mock and renders each surface standalone to `build-shot`; a Playwright driver captures **both themes** via an env flag:
+
+```javascript
+const THEME = process.env.THEME === "dark" ? "dark" : "light";
+// inject before bundle load:
+if (theme === "dark") document.documentElement.setAttribute("data-color-mode", "dark");
+```
+
 ## Lint your manifest
 
 ```bash

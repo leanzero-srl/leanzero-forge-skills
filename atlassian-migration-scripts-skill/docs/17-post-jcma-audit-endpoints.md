@@ -158,8 +158,44 @@ Three small scripts beat one big one for this audit work because each step is th
 
 All are GET-equivalent in rate-limit terms (~1 point each). None requires admin permission unless explicitly noted — most work with a regular user token.
 
+## 4. The c2c-postmigration suite (JCMA "Requires Attention")
+
+A Cloud→Cloud JCMA run produces a **"Requires Attention" CSV** (`PostMigrationRequiresAttention_<timestamp>.csv`). It's the official list of what JCMA couldn't fully migrate — and it's the entry point for a small audit suite (`c2c-postmigration/`).
+
+### analyse-migration.js — parse and categorize the report
+
+```
+node analyse-migration.js PostMigrationRequiresAttention_20251013T07_52_48.792Z.csv
+```
+
+It parses the CSV (papaparse), groups rows **by Problem category**, and emits:
+- a summary of the issues encountered in the data copy,
+- a JSON of **missing issue links** (`{ "JRA-101": ["JRA-207","JRA-330"], ... }`) that feeds `verify-issue-links.js`,
+- a list of **workflows with post-functions that need fixing**.
+
+Categorize by the report's Problem column — most rows fall into a handful of buckets (missing links, dropped post-functions, unmapped users, field-value issues). Triage by bucket, not row-by-row.
+
+### verify-issue-links.js — confirm links actually landed
+
+JCMA sometimes reports a link as "requires attention" when it actually migrated fine, and sometimes drops one silently. So you verify against the live target. Input is the `{ sourceKey: [expectedLinkedKeys] }` JSON from the analysis step; for each key it fetches the issue and checks every expected linked key is present:
+
+```
+GET /rest/api/3/issue/{key}?fields=issuelinks   → assert each expected key appears
+```
+
+Auth via `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN`. Output: the subset of links genuinely missing (the real re-link work list).
+
+### compare-jira-changelogs.js — DC-vs-Cloud audit-trail integrity
+
+Changelogs (the issue history / change-groups) are easy to lose or reorder in migration. This compares change-group items **across two sites** (`SOURCE_URL` / `TARGET_URL`, one `JIRA_EMAIL` + `JIRA_API_TOKEN` valid on both). Input is `[{ issueId, groupIds:[...] }]`; output is a CSV of per-change-group differences — use it to prove the audit trail survived, or to quantify what didn't.
+
+### The shape of the suite
+
+Same three-stage discipline as §3: **discover** (parse the Requires-Attention CSV) → **verify** (re-check links / changelogs against live Cloud) → **act** (the real, much smaller, re-link / re-fix list). Don't trust the JCMA report as ground truth — it's the *candidate* list; verification against the live target is what produces the work list.
+
 ## See also
 
+- [`21-post-jcma-issue-recovery.md`](21-post-jcma-issue-recovery.md) — recovering whole issues JCMA dropped
 - [`07-audit-and-sampling.md`](07-audit-and-sampling.md) — the sampling layer that uses these endpoints
 - [`12-preflight-and-staleness.md`](12-preflight-and-staleness.md) — pre-execute checks use approximate-count too
 - [`post-jcma-id-mapping.md`](post-jcma-id-mapping.md) — why the (migrated) suffix appears in the first place

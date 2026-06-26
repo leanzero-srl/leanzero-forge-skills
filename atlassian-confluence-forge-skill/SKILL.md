@@ -22,8 +22,12 @@ Skip this skill for:
 ## Pick a starting point
 
 - **Scaffolding a new module**: copy a template from `templates/`.
-- **Production patterns** (KVS prefix indexing, ADF surgery, content-property version handling, capability-token web triggers, dual-strategy API fallback): `docs/24-production-patterns.md`.
-- **Limits & quotas** (timeouts, KVS quotas, queue limits, ADF size): `docs/27-faas-limits-and-cost.md`.
+- **Production patterns** (KVS prefix indexing, ADF surgery, content-property version handling, capability-token web triggers, dual-strategy API fallback, in-isolate cache, dual `index.ts`): `docs/24-production-patterns.md`.
+- **Macros that survive edits / content protection** (bodied macros, stable `sectionId`, attachment reversion): `docs/14-macros-and-section-sealing.md` + `docs/16-unified-content-triggers.md`.
+- **AI inside the app** (`@forge/llm`, Claude, JSON-mode, async offload): `docs/15-forge-llm-integration.md`.
+- **Relational store** (`@forge/sql`, migrations, limits, upserts): `docs/17-forge-sql.md`.
+- **Reach unlicensed users / signed email links**: `docs/18-unlicensed-access-and-web-triggers.md`.
+- **Limits & quotas** (timeouts, KVS quotas, queue limits, ADF size, consumer budget): `docs/27-faas-limits-and-cost.md`.
 - **ADF vs storage format**: `docs/28-adf-and-storage-format.md`.
 
 ## Quick Reference
@@ -43,7 +47,11 @@ Skip this skill for:
 | Per-content app data (CQL-indexed) | `confluence:contentProperty` |
 | Cron-style background job | `scheduledTrigger` |
 | Long-running work (>25s) | `trigger` → `consumer` (`@forge/events`, `timeoutSeconds:` up to 900) |
-| Public HTTPS endpoint into the app | `webtrigger` |
+| Public HTTPS endpoint into the app | `webtrigger` (sign tokens — `18-...`) |
+| Bodied macro that wraps/seals page content | `macro` (`layout: bodied`) — `14-...` |
+| Claude inside the app, no egress | `llm` (`@forge/llm`) — `15-...` |
+| Relational store (audit, aggregation) | `sql` (`@forge/sql`) — `17-...` |
+| Surface reachable by unlicensed/guest users | `unlicensedAccess:` on `globalPage`/`pageBanner` — `18-...` |
 
 > There is no `confluence:pageCustomUi` or `confluence:blogPostCustomUi` module. Use `confluence:pageBanner` for "render on every page" and `confluence:contentAction` for "menu item that opens a modal."
 
@@ -131,7 +139,7 @@ app:
 | Function timed out (~25s) | Push the work to an async queue | `26-async-events-and-queues.md` |
 | "Refused to load script" / CSP errors | Allowlist host in `permissions.external.fetch.client` (or `.backend`); bundle scripts | `gotchas.md` |
 | Tunnel doesn't apply manifest changes | Restart tunnel; `forge install --upgrade` if scopes changed | `gotchas.md` |
-| Trigger fires on your own writes | Add `filter.ignoreSelf: true` and check `event.atlassianId` against your app's accountId | `24-production-patterns.md` (Pattern 5) |
+| Trigger fires on your own writes | Check `event.atlassianId` against your app's cached accountId (`filter.ignoreSelf` is **Jira-only** — not supported for Confluence product events) | `24-production-patterns.md` (Pattern 5) |
 
 ## Documentation map
 
@@ -150,7 +158,15 @@ app:
 | `03-space-settings.md` | Space settings panels |
 | `04-blogpost-custom-ui.md` | Blog post extensions |
 | `05-dashboard-widgets.md` | Dashboard gadgets |
+| `14-macros-and-section-sealing.md` | Bodied macros, stable `sectionId`, seal KVS schemes, attachment reversion |
+| `18-unlicensed-access-and-web-triggers.md` | `unlicensedAccess`, HMAC capability tokens, tiered eligibility |
 | `21-custom-content.md` | `confluence:customContent` |
+
+### AI & Data
+| File | Topic |
+|---|---|
+| `15-forge-llm-integration.md` | `@forge/llm` (Claude), cost clamp, JSON-mode, json-salvage, async offload |
+| `17-forge-sql.md` | `@forge/sql` migrations, official limits, upserts, keyset pagination |
 
 ### REST & Data
 | File | Topic |
@@ -165,6 +181,7 @@ app:
 | File | Topic |
 |---|---|
 | `07-webhooks-events.md` | Trigger events and payloads |
+| `16-unified-content-triggers.md` | Single-read/passes/single-write page trigger, loop prevention, canonical ADF hashing |
 | `26-async-events-and-queues.md` | `@forge/events` queues, retries, long-running consumers |
 
 ### Performance, Limits, Patterns
@@ -172,7 +189,7 @@ app:
 |---|---|
 | `20-performance-optimization.md` | Caching, batching, pagination |
 | `27-faas-limits-and-cost.md` | Timeouts, KVS quotas, queue limits |
-| `24-production-patterns.md` | 15 production patterns from Sentinel Vault and License Leash |
+| `24-production-patterns.md` | 19 production patterns from Sentinel Vault and License Leash |
 
 ### Testing
 | File | Topic |
@@ -206,6 +223,10 @@ Copy-paste-ready manifests in `templates/`:
 | `scheduled-trigger.yml` | `scheduledTrigger` |
 | `remote-webhook-handler.yml` | Routing events to an external service |
 | `custom-content-module.yml` | `confluence:customContent` |
+| `bodied-macro-section-seal.yml` | Bodied `macro` with a stable `sectionId` + unified content trigger |
+| `forge-sql-migration.js` | `@forge/sql` migration runner, GREATEST upsert, keyset pagination |
+| `unlicensed-access-page.yml` | `globalPage`/`pageBanner` with `unlicensedAccess` |
+| `hmac-web-trigger.js` | HMAC capability-token sign/verify (`timingSafeEqual`) web trigger |
 
 ## Scripts
 
@@ -222,6 +243,7 @@ Recommended workflow: `preflight-check.sh` → make changes → `validate-manife
 
 ## Changelog
 
+- **2026-06-26** — Folded battle-tested learnings from **Sentinel Vault** (content protection / Forge LLM) and **License Leash / Axpo License Manager** (cross-product license manager). Added docs `14-macros-and-section-sealing.md`, `15-forge-llm-integration.md`, `16-unified-content-triggers.md`, `17-forge-sql.md`, `18-unlicensed-access-and-web-triggers.md`. Enhanced `24-production-patterns.md` (4 new patterns: in-isolate cache, debounced writes, dual `index.ts`, Custom UI assets/dialogs/theme), `27-faas-limits-and-cost.md` (consumer budget + cursor-resume, siloed cross-product storage, Forge SQL limits), `28-adf-and-storage-format.md` (canonical ADF hashing), `30-testing-and-tunneling.md` (multi-layer harness), and `gotchas.md` (`asUser()` in background jobs, event field parsing, group-API quirks, HTTPS egress ports). New templates: `bodied-macro-section-seal.yml`, `forge-sql-migration.js`, `unlicensed-access-page.yml`, `hmac-web-trigger.js`. Forge-LLM model ids per the `claude-api` skill; `@forge/sql` limits per the official docs. Cross-skill see-also: Forge LLM (`atlassian-jira-forge-skill` + `claude-api`), license-via-group-membership (`atlassian-organizations-api-skill` + `confluence-api-skill`).
 - Replaced the legacy "Authentication via OAuth 2.0 (3LO) or JWT from Forge" claim with the three actually-valid patterns; added an explicit "Auth note" preamble to every doc/template that still contained `AP.context.getToken()` (Atlassian Connect, not Forge).
 - Standardized on the named KVS import: `import { kvs } from '@forge/kvs'`. Legacy `storage` from `@forge/api` flagged with the 2025-03-17 deprecation date.
 - Removed the spurious `forge register` step from `templates/page-custom-ui.yml` (no such command — use `forge install --upgrade`).
@@ -229,8 +251,15 @@ Recommended workflow: `preflight-check.sh` → make changes → `validate-manife
 - Added five new docs: `24-production-patterns.md` (15 patterns from Sentinel Vault and License Leash), `26-async-events-and-queues.md`, `27-faas-limits-and-cost.md`, `28-adf-and-storage-format.md`, `30-testing-and-tunneling.md`. Removed `24-real-world-patterns.md` (folded in).
 - Stripped emoji from shell scripts; added `set -euo pipefail` headers.
 
+## Related skills
+
+- **Forge LLM (Claude)** — canonical model ids/pricing/params: `claude-api` skill; Forge-hosted-LLM coverage also in `atlassian-jira-forge-skill`.
+- **License via group membership** (deactivate/reactivate, guest groups, last-active): `atlassian-organizations-api-skill` (Org API) + `confluence-api-skill` (group REST).
+- **Jira Forge** modules and shared FaaS limits: `atlassian-jira-forge-skill`.
+
 ## Support & Resources
 
 - [Forge Documentation](https://developer.atlassian.com/cloud/forge/)
 - [Confluence REST API v2](https://developer.atlassian.com/cloud/confluence/rest/v2/)
+- [Forge SQL limits](https://developer.atlassian.com/platform/forge/limits-sql)
 - [Atlassian Developer Community](https://community.developer.atlassian.com/)

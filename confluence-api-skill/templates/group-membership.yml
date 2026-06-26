@@ -1,0 +1,111 @@
+---
+
+# Confluence Group Membership & User Activity (v1 REST) Template
+#
+# Purpose: manage Confluence seats and audit memberships from an EXTERNAL app.
+# These operations exist ONLY on the v1 REST API (/wiki/rest/api) — the v2 API
+# has no group-member endpoints, no user/memberof, and no CQL search.
+#
+# Auth: API token (Basic) or OAuth 2.0 (Bearer). Group WRITES and the email
+# endpoint need a privileged identity / scope:
+#   - read:email-address:confluence  (for /user/email)
+#   - manage:confluence-configuration or admin permission (for group writes)
+# For background jobs prefer an app/service identity (or the Org API) over a
+# 3LO user token — see docs/24-rest-integration-patterns.md pattern 12.
+#
+# Source: License Leash (axpo-license-manager). Detail: docs/31-groups-users-and-activity.md
+
+## Resolve a group id by name (you need the id for *ByGroupId calls)
+
+```http
+GET /wiki/rest/api/group/by-name?name=confluence-users-mysite HTTP/1.1
+Host: {your-domain}.atlassian.net
+Authorization: Basic <base64(email:api_token)>
+Accept: application/json
+```
+
+Response: `{ "id": "abc123", "name": "confluence-users-mysite", ... }`
+
+---
+
+## List members (offset pagination, max limit=200)
+
+```http
+GET /wiki/rest/api/group/{groupId}/membersByGroupId?start=0&limit=200 HTTP/1.1
+```
+
+Loop, incrementing `start += 200`, until `results.length < 200`.
+
+## Count members without paging the whole group
+
+```http
+GET /wiki/rest/api/group/{groupId}/membersByGroupId?limit=1&shouldReturnTotalSize=true HTTP/1.1
+```
+
+Read `totalSize` (fall back to `size`). One call instead of paging thousands.
+
+---
+
+## Add / remove a user (seat grant / revoke)
+
+```http
+POST /wiki/rest/api/group/userByGroupId?groupId={groupId} HTTP/1.1
+Content-Type: application/json
+
+{ "accountId": "557058:..." }
+```
+
+```http
+DELETE /wiki/rest/api/group/userByGroupId?groupId={groupId}&accountId=557058:... HTTP/1.1
+```
+
+A 404 on DELETE means the user was already absent — treat as success.
+
+---
+
+## A user's real group memberships
+
+```http
+GET /wiki/rest/api/user/memberof?accountId=557058:...&start=0&limit=200 HTTP/1.1
+```
+
+Paginated; the authoritative answer to "what groups is this user actually in".
+
+---
+
+## User profile and email (email is a separate, scoped call)
+
+```http
+GET /wiki/rest/api/user?accountId=557058:... HTTP/1.1
+# -> displayName, accountType, profilePicture.path, publicName (no email on most tenants)
+
+GET /wiki/rest/api/user/email?accountId=557058:... HTTP/1.1
+# -> { "email": "user@example.com" }   (requires read:email-address:confluence)
+```
+
+---
+
+## Approximate "last active" from content history (CQL — v1 only)
+
+Combine three signals and take the most recent. Cannot see logins / pure views.
+Quote the accountId; never interpolate raw user input (CQL injection).
+
+```http
+GET /wiki/rest/api/search?cql=contributor="557058:..." ORDER BY lastmodified DESC&limit=3&expand=content.version
+GET /wiki/rest/api/search?cql=creator="557058:..." ORDER BY created DESC&limit=1
+GET /wiki/rest/api/search?cql=watcher="557058:..." ORDER BY lastmodified DESC&limit=1
+```
+
+Read timestamps from `content.version.when`, `content.history.createdDate`,
+and `result.lastModified` respectively; sort descending, keep the newest.
+
+---
+
+## Gotchas (see docs/31-groups-users-and-activity.md)
+# - Suspended users are silently OMITTED from membersByGroupId (no status field).
+# - /wiki/rest/api/group returns groups from ALL sites in the org — filter by
+#   the confluence-users-{site} naming convention.
+# - Suspend/reactivate is eventually consistent (minutes) — re-check the Org API.
+# - confluence-guests-* and confluence-user-access-admins grant NO seat;
+#   removing a user from admin groups (site-admins/org-admins/confluence-admins)
+#   strips admin rights, not just a seat.

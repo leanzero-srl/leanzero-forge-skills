@@ -323,6 +323,8 @@ await api.asApp().requestJira('/rest/api/3/bulk/issues/move', {
 
 ## Issue Search (JQL)
 
+> **CORRECTION (2026):** the old `GET`/`POST /rest/api/3/search` (offset-paged with `startAt`/`total`) has been **removed**. Use **`POST /rest/api/3/search/jql`** with **`nextPageToken` cursor** pagination — there is no `total`. The example just below shows the legacy shape for historical context; the production shape is in [Production endpoint patterns](#production-endpoint-patterns).
+
 ### Search Issues
 
 Search for issues using JQL.
@@ -1084,6 +1086,85 @@ try {
 | Workflow validators/post-functions | Forge workflow modules |
 | Frontend UI rendering | Forge UI modules |
 | Complex business logic | Combine both approaches |
+
+---
+
+## Production endpoint patterns
+
+Battle-tested shapes from PPM (`src/services/jira-client.js`) and CogniRunner — these correct or extend the examples above.
+
+### Cursor-paged JQL search (the current API)
+
+```javascript
+// POST /rest/api/3/search/jql — nextPageToken cursor, NO startAt / total
+let nextPageToken = null;
+const issues = [];
+do {
+  const body = { jql, maxResults: 100, fields: ['summary', 'status', 'duedate'] };
+  if (nextPageToken) body.nextPageToken = nextPageToken;
+  const res = await api.asApp().requestJira(route`/rest/api/3/search/jql`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  issues.push(...(data.issues || []));
+  nextPageToken = data.nextPageToken || null;       // absent on the last page
+} while (nextPageToken && issues.length);
+```
+
+### Bulk fetch by key — chunk at 100
+
+```javascript
+// POST /rest/api/3/issue/bulkfetch — far cheaper than N GETs; chunk the key list at 100.
+for (let i = 0; i < keys.length; i += 100) {
+  const res = await api.asApp().requestJira(route`/rest/api/3/issue/bulkfetch`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ issueIdsOrKeys: keys.slice(i, i + 100), fields: ['summary', 'duedate'] }),
+  });
+  // ... merge (res.json()).issues
+}
+```
+
+### Update issue — suppress noise, override screen security
+
+```javascript
+// PUT /rest/api/3/issue/{key}?notifyUsers=false&overrideScreenSecurity=true
+// notifyUsers=false: no email storm on a bulk write.
+// overrideScreenSecurity=true: write fields not on the edit screen (app context; needs the scope).
+await api.asApp().requestJira(
+  route`/rest/api/3/issue/${key}?notifyUsers=false&overrideScreenSecurity=true`,
+  { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) }
+);
+```
+
+### editmeta pre-flight (before you write)
+
+```javascript
+// GET /rest/api/3/issue/{key}/editmeta → editMeta.fields[fieldId] tells you:
+//   - whether the field is editable on THIS issue (missing key = not on the edit screen)
+//   - field.operations (must include "set") and field.schema (type/items/allowedValues)
+// Sample one issue per project to warn that Apply would silently no-op. See docs/24 pattern 20.
+```
+
+### Agile board + ranking
+
+```javascript
+// GET /rest/agile/1.0/board/{boardId}/issue?startAt=&maxResults=&fields=  (board contents, paged)
+// PUT /rest/agile/1.0/issue/rank  — reorder up to 50 keys at once
+await api.asApp().requestJira(route`/rest/agile/1.0/issue/rank`, {
+  method: 'PUT', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ issues: keys, rankBeforeIssue: 'PROJ-10' }),  // or rankAfterIssue
+});
+```
+
+### Concrete rate limits (design targets)
+
+| Operation | Approx ceiling |
+|---|---|
+| GET / POST | ~100 / s |
+| PUT / DELETE | ~50 / s |
+| Per-issue writes | ~20 / 2 s and ~100 / 30 s |
+
+Honor `Retry-After`, back off with jitter (`19-rate-limit-handling.md`). Chunked write-back at ~10–13 issues/s (`24-production-patterns.md` pattern 14) stays comfortably under these.
 
 ---
 

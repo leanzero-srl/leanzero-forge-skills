@@ -183,6 +183,56 @@ export async function onIssueCreated(event) {
 }
 ```
 
+## Consumer error handling & idempotency (production)
+
+Three hard-won rules from PPM (`queue-consumer.js`) and CogniRunner (`async-handler.js`):
+
+### 1. Do NOT re-throw on a *permanent* failure
+
+A throw (or an `InvocationError` retry) makes the platform retry the whole event — repeatedly, across the retention window (**~96 h, observed**). For a permanent failure (bad JQL, missing config) that's wrong: it burns budget retrying something that can never succeed. Instead, **record the failure as state and return normally**:
+
+```javascript
+// PPM queue-consumer.js — runIndexing records status:'error' on the plan itself,
+// so the consumer deliberately does NOT re-throw a permanent failure.
+export async function handler(event) {
+  const planId = event?.body?.planId;
+  if (!planId) { console.error('[PPM] missing planId'); return; }   // drop, don't retry
+  try {
+    const result = await runIndexing(planId);                       // catches its own errors, sets status
+    if (!result.success) console.error(`indexing failed for ${planId}: ${result.error}`);
+  } catch (err) {
+    // Guard against an UNEXPECTED throw so the queue doesn't endlessly retry.
+    console.error(`[PPM] unexpected error for ${planId}:`, err?.message || err);
+  }
+}
+```
+
+Reserve `InvocationError` (retry) for genuinely **transient** failures — upstream 429/5xx — as shown in the consumer signature above.
+
+### 2. Heartbeat + self-heal cap
+
+A long job can die mid-flight (OOM, platform kill) leaving its status stuck at `processing` forever. Write a `updatedAt` heartbeat as the job progresses, and treat a status that hasn't advanced past a cap (e.g. **>960 s** — above the 900 s max consumer runtime) as failed on the next read, so the UI and re-drive logic self-heal instead of hanging.
+
+### 3. Idempotency via `FAIL_IF_EXISTS` (at-least-once delivery)
+
+Forge async events are **at-least-once** — a *successful* invocation can be redelivered (~1 s apart, observed). For any side-effectful consumer, **claim the task atomically before executing**:
+
+```javascript
+await kvs.set(`pf_exec:${taskId}`, { claimedAt: new Date().toISOString() }, {
+  keyPolicy: 'FAIL_IF_EXISTS',                 // atomic conditional write — no CAS needed
+  ttl: { value: 6, unit: 'HOURS' },
+});
+// catch: e.code === 'KEY_ALREADY_EXISTS' || 409 || /already exist/i  → return { deduped: true }
+```
+
+Claim-**first** means a crash mid-execution is *not* retried with side effects — for fail-open automations, duplicates are the worse failure. See `31-forge-ai-and-llm.md` for the full claim/skip flow.
+
+### 4. Single-flight per entity
+
+Serialize work per entity so two events for the same issue/plan can't interleave: `concurrency: { key: issueKey, limit: 1 }` on `queue.push` (limits are per `key` value, not per queue).
+
+**Source:** PPM `src/queue-consumer.js`, CogniRunner `src/async-handler.js` (`executeQueuedPostFunction`).
+
 ## Migrating from `@forge/events` v1
 
 | v1 (deprecated) | v2 |
@@ -195,7 +245,7 @@ The retry context is the same except v2 adds `retentionWindow`. Existing `Invoca
 ## Gotchas
 
 - **`forge tunnel` doesn't pick up manifest changes** — restarting alone isn't enough; `forge deploy` first.
-- **Self-loops**: a trigger that writes to a Jira issue and listens for `avi:jira:updated:issue` will fire on its own writes. Set `filter.ignoreSelf: true`.
+- **Self-loops**: a trigger that writes to a Jira issue and listens for `avi:jira:updated:issue` will fire on its own writes. Set `filter.ignoreSelf: true` (Jira-only — Confluence product triggers must guard self-loops in code via a cached app accountId).
 - **`InvocationError` is *returned*, not thrown.** Throwing won't trigger the retry pipeline.
 - **Concurrency limits** are per `key` value, not per queue. Use the issue key (or whatever id makes sense) to serialize work.
 - **Don't put large payloads in `retryData`** — 4 KB ceiling. Persist big state in KVS and reference by key.

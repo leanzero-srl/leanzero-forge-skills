@@ -9,7 +9,7 @@ Use a queue when work won't fit in 25 seconds — large space scans, bulk page r
 | Trigger handler that fans out into many REST calls | Yes |
 | Need to scan every page in a large space | Yes |
 | Bulk-update page properties or labels | Yes |
-| Trigger fires on your own writes (self-loop) | Yes — set `filter.ignoreSelf: true` on the trigger |
+| Trigger fires on your own writes (self-loop) | Guard in code via cached app accountId — `filter.ignoreSelf` is Jira-only, not Confluence |
 | In-iframe Custom UI fetch | No — keep that in a resolver |
 
 ## Manifest shape (v2)
@@ -21,8 +21,8 @@ modules:
       function: enqueue
       events:
         - avi:confluence:updated:page
-      filter:
-        ignoreSelf: true        # critical when your consumer also writes pages
+      # NOTE: filter.ignoreSelf is Jira-only — it does NOT suppress Confluence
+      # self-events. Guard self-loops in code via a cached app accountId (below).
 
   consumer:
     - key: long-job-consumer
@@ -158,12 +158,12 @@ trigger:
     function: enqueue
     events:
       - avi:confluence:updated:page
-    filter:
-      ignoreSelf: true       # drop events caused by *this app's* writes
+    # filter.ignoreSelf is Jira-only — for Confluence, guard self-loops in code (below)
 ```
 
 ```javascript
-// Belt-and-braces: also check the actor at runtime in case ignoreSelf misses
+// Confluence self-loop guard — filter.ignoreSelf does not apply to Confluence events,
+// so always check the actor at runtime:
 const appAccountId = await getAppAccountId(); // cache in KVS
 if (event.atlassianId === appAccountId) return;
 ```

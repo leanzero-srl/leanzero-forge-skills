@@ -32,6 +32,17 @@ Wildcards are supported (`*.openai.azure.com`). The leading `*.` matches one or 
 
 > Egress changes require `forge install --upgrade` so the user re-approves. `forge tunnel` will not pick them up while running.
 
+### HTTPS-only + a fixed port allowlist (NOT "443 only")
+
+A common myth — repeated in some app code comments — is that Forge external fetch "only honors the default HTTPS port 443." **That is wrong.** The actual rules:
+
+- **HTTPS only.** Plain `http://` is rejected (HTTP 400). `wss://` is allowed.
+- **Ports are an allowlist, not just 443:** `80, 8080, 443, 8443, 8444, 7990, 8089, 8090, 8085, 8060`. Non-default ports are permitted **only** from this list.
+- A **self-hosted endpoint** (e.g. LM Studio behind a tunnel) must therefore be exposed on one of these supported ports over HTTPS — pick `443` or `8443`, not an arbitrary `10000`.
+- Declare each backend address under `permissions.external.fetch.backend` (and `.client` if the iframe also calls it). Adding the **same** address under a *different* egress category triggers a **major update / re-consent**.
+
+Wildcards are **leftmost-only** (no mid-segment `*`), and a single `*` matches nested subdomains — e.g. `*.amazonaws.com` covers both `bedrock-runtime.<region>.amazonaws.com` and `bedrock.<region>.amazonaws.com` across every region.
+
 ## Remotes (Forge Remote)
 
 When the bulk of your app's code lives on your own backend (rather than as a Forge function), declare a `remote` and route module logic to it via `endpoint:` in module configs.
@@ -113,14 +124,17 @@ permissions:
   external:
     fetch:
       backend:
-        - api.openai.com
-        - "*.openai.azure.com"
-        - openrouter.ai
-        - api.anthropic.com
-        - "*.ts.net"           # Tailscale routes to user-hosted LM Studio
+        - address: https://api.openai.com
+        - address: "*.openai.azure.com"
+        - address: https://openrouter.ai
+        - address: https://api.anthropic.com
+        - address: "*.amazonaws.com"   # one wildcard covers bedrock-runtime.<region> + bedrock.<region>
+        - address: "*.ts.net"          # Tailscale routes to user-hosted LM Studio (served on 443/8443)
 ```
 
 The point: declare the *minimum* set of hosts, but enumerate every variant your users may need (provider, region, custom). Don't try to wildcard your way to `*.com`.
+
+> CogniRunner's own manifest comments claim self-hosted MCPs "MUST be served on Funnel port 443" because "Forge only honors the default HTTPS port." Treat that as an over-cautious simplification — the real rule is the **port allowlist** above (`443` *and* `8443`, etc.). The BYOK provider hosts (`api.anthropic.com`, `*.amazonaws.com`, …) are exactly the egress declarations the adapter in `31-forge-ai-and-llm.md` needs.
 
 ## Gotchas
 

@@ -230,7 +230,76 @@ const lastActive = await getLastActiveDates(orgId, accountId);
 
 ---
 
+## Suspend is Global — Never Use It for Per-Product License Management
+
+This is the single most important license-management gotcha (from License Leash, in
+production):
+
+- `POST /v2/.../users/{accountId}/suspend` removes the user's access to **all products on
+  all sites in the org** — it's an account-level kill switch, not a per-product control.
+- To free **one product's seat on one site**, **remove the user from a license-granting
+  group** instead (`DELETE /v2/.../groups/{groupId}/memberships/{accountId}`). That touches
+  only that group's membership; Jira, other products, and Confluence on other sites are
+  untouched. Re-add to grant it back (idempotent).
+- Rule of thumb: **free a seat by group removal, never by suspend.** Reserve suspend for
+  genuine "offboard this person from everything" cases.
+
+| Action | Scope | Use for license mgmt? |
+|---|---|---|
+| Remove from group | one product, one site | **Yes** |
+| Suspend account | all products, all sites | **No** |
+
+See `docs/15-license-and-activity-patterns.md`.
+
+---
+
+## Admin API Key Specifics (Org Admin only, shown once)
+
+- Created at **admin.atlassian.com → Settings → API keys**; creating one requires the
+  **Organization Admin** role.
+- The key value is **displayed only once** at creation — store it immediately; you can't
+  re-read it later, only rotate (replace) it. Never log it; redact it in audit trails.
+- The **org id** is the UUID after `/o/` in the admin console URL
+  (`admin.atlassian.com/o/<org-id>/…`) — **not** the site name or human-readable org name.
+- From a Forge app the bearer key works inside **scheduled/web triggers with no user
+  context**, where `api.asUser().requestConfluence(...)` throws
+  `PROXY_ERR: AUTH_TYPE_UNAVAILABLE` — a key reason to prefer the Org API there.
+
+---
+
+## Last-Active: "2s view" Definition + Multi-Site Scoping
+
+Beyond the ~24h delay noted above (observed in production, 2026-06):
+
+- **"Active" means the user viewed the product for 2+ seconds** — pure read activity
+  counts. This is the signal content-history APIs (CQL edits/comments/creates) cannot see.
+- **`product_access[].id` is the full site ARI** (`ari:cloud:confluence::site/{cloudId}`),
+  while the `cloudId` you typically hold is the bare UUID. Match with
+  `id === cloudId || id.endsWith('/' + cloudId)`.
+- **In a multi-site org you MUST scope by workspace.** Filter `product_access[]` to the
+  resolved site's ARI, or a user active on a *different* Confluence in the same org will
+  read as active on yours. Resolve the workspace via `POST /v2/orgs/{orgId}/workspaces`,
+  cache it, and **fail closed** (don't run an unscoped query) if it can't be resolved.
+- **Rate limit ~200 req/min/org** on `last-active-dates` (observed; not officially
+  published — verify against current docs). Pace with bounded concurrency + an incremental
+  skip (don't re-query a user refreshed within ~20h).
+
+---
+
+## Group Membership ≠ Product Access; Suspended Users Hidden by Group API
+
+- A user in a group does **not** necessarily hold that product's seat — the **group→product
+  role-assignment** is what grants it. Read it via
+  `GET /v2/.../groups/{groupId}/role-assignments`; a role of **`guest`** or
+  **`user-access-admin`** does **not** consume a license.
+- The **Confluence group REST API silently omits suspended users** (no status field). To
+  see the complete population incl. suspended/deactivated, use the Org API
+  (`GET /v2/orgs/{orgId}/directories/-/users` → each user's `status`).
+
+---
+
 ## Related Documentation
 
 - **[01-core-concepts.md](01-core-concepts.md)** — API overview
+- **[15-license-and-activity-patterns.md](15-license-and-activity-patterns.md)** — license-via-group + per-site activity
 - **[problem-patterns.md](problem-patterns.md)** — Error handling and solutions

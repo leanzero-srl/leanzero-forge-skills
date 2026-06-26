@@ -166,24 +166,27 @@ Exclude conditions:
 ## Forge Implementation Example
 
 ```javascript
-import api, { route } from '@forge/api';
+import api from '@forge/api';
+
+// The Org API (api.atlassian.com/admin) is NOT a product surface, so
+// api.asApp().requestJira/requestConfluence cannot reach it. Call it with
+// api.fetch and a Bearer Admin API key, and declare the egress in the manifest:
+//   permissions.external.fetch.backend: [{ address: api.atlassian.com }]
+// See SKILL.md "Authentication — from a Forge app" and 15-license-and-activity-patterns.md.
+const ORG_API_BASE = 'https://api.atlassian.com/admin';
 
 // Search workspaces
 export const searchWorkspaces = async (orgId, query = {}, limit = 25) => {
-  const response = await api.asApp().requestJira(
-    route`https://api.atlassian.com/admin/v2/orgs/${orgId}/workspaces`,
-    {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        ...query,
-        limit
-      })
-    }
-  );
+  const apiKey = process.env.ORG_API_KEY; // Admin API key via `forge variables set` — never hardcode
+  const response = await api.fetch(`${ORG_API_BASE}/v2/orgs/${orgId}/workspaces`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Accept': 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ ...query, limit })
+  });
   const data = await response.json();
   return data.data;
 };

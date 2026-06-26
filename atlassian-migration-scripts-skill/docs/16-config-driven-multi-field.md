@@ -143,6 +143,46 @@ for (const field of mapper.fields()) {
 
 See `docs/07-audit-and-sampling.md` for the Mulberry32 sampling shape.
 
+## XLSX workbook mapping — the operator-editable alternative to JSON
+
+A field/project/status mapping is reviewed and edited by humans (migration leads, project admins) who live in spreadsheets, not JSON. So the production flow (OpenBet/McLaren) uses an **XLSX workbook** as the operator-editable mapping artifact, with one **sheet per category**:
+
+| Sheet | Columns (DC side filled by generator, Cloud side auto-matched + operator-corrected) |
+|---|---|
+| `CustomFields` | DC Field ID, DC Field Name, Cloud Field ID, Cloud Field Name, Notes |
+| `Projects` | DC ID, Key, Name, Cloud ID |
+| `IssueTypes` | DC ID, Name, Cloud ID |
+| `Statuses` | DC ID, Name, Category, Cloud ID |
+| `Users` | DC accountId/userKey, Email, Display Name, Cloud accountId |
+
+A generator (e.g. `dc-cloud-field-report`) emits the workbook with the DC side populated and the Cloud side auto-matched **by name**; the operator fixes the rows the auto-match got wrong, then `templates/xlsx-mapping-reader.js` loads it back into the same `{customFieldMapping, projectMapping, ...}` object the apply scripts consume — so XLSX and JSON are interchangeable inputs.
+
+The reader is forgiving by design: header matching is case/space-insensitive (minor operator edits to column titles don't break the load), and any row missing a Cloud value is collected into `unresolved[]` and logged as a warning rather than silently dropped — the same "no silent value drops" discipline as the unmapped CSV above.
+
+## Pre-run field analysis / report
+
+Before building the apply plan, run a **field analyze/report** pass to answer "what won't map after migration, and why" (from `dc-cloud-field-report`):
+- Fetch the Cloud custom-field list with **`GET /rest/api/3/field/search?type=custom`** (paginated). **Plain `GET /rest/api/3/field` is INCOMPLETE** on some tenants — on one production site it omitted several fields, producing false "not on Cloud" rows. Always use `/field/search` for completeness.
+- Match DC→Cloud by field **name** (exact, then ignoring a trailing `(migrated)` suffix JCMA sometimes appends — see `docs/17-post-jcma-audit-endpoints.md`). Cloud field ids differ from DC, so **name is the join key**.
+- Emit two sheets: **DC→Cloud Field Map** (the mappable set) and **DC Fields NOT on Cloud** (with a reason). The second sheet is the risk estimate — those fields need a human decision (create on Cloud, or drop the rules/columns that reference them) before any apply run.
+
+## multi_field_copy — one source to many targets
+
+`field-merge-script/multi_field_copy.js` copies a value from **one source field to multiple target fields**, but ONLY if each target is empty — it **never overwrites** an existing value. The config is a list of JQL "sequences", each with a `sourceField` and an array of `targetFields`:
+
+```javascript
+const SEQUENCES = [
+  { name: "P18/P35 initial+final",
+    jql: "cf[13168] is not EMPTY",
+    sourceField: "customfield_13168",
+    targetFields: ["customfield_13140", "customfield_13269", /* ...many... */] },
+  // ...more sequences
+];
+// per issue: read source; for each empty target, PUT the value (skip non-empty targets)
+```
+
+This is the fan-out dual of the one-to-one mapper: same never-overwrite default (`docs/24-production-patterns.md#36`), same per-field/per-sequence resumability, but the write side is 1→N. Use it for "duplicate this field into every phase-specific copy" backfills.
+
 ## When NOT to use this pattern
 
 - One field only. The overhead of a config file isn't worth it for a single field — inline the map.

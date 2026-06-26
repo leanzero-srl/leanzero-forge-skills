@@ -1,0 +1,107 @@
+# =============================================================================
+# Template: Workflow modules with the create / edit / view resource split
+# =============================================================================
+# Purpose: Declare a validator, a condition, and a post-function that each ship
+#          THREE Custom UI resources:
+#            - create + edit  -> the same CRUD config form (config-ui-resource)
+#            - view           -> a read-only summary + execution log
+#                                (config-view-resource), embedded by Jira in the
+#                                rule detail pane.
+#
+# Key facts baked in (see docs/25-workflow-modules-deep-dive.md):
+#   - `expression: "true"` is REQUIRED on jira:workflowCondition, or Jira never
+#     invokes your Forge function to compute transition-button visibility.
+#   - One `resolver` (getDefinitions) backs all the config UIs via invoke().
+#   - The runtime functions are SEPARATE exported handlers (validate /
+#     executePostFunction), not resolver-defined.
+#   - Conditions run on EVERY issue view (keep cheap); validators run only at
+#     transition time (can do expensive work, incl. LLM calls).
+#
+# Auth/caveats:
+#   - Workflow modules are real Forge modules (NOT Connect-only).
+#   - read:workflow:jira / write:workflow:jira are needed only if you also do
+#     programmatic workflow injection (see docs/24, pattern 10).
+#   - Custom UI assets must be built into static/<resource>/build before deploy.
+# Source: CogniRunner manifest.yml + src/index.js
+# =============================================================================
+
+modules:
+  jira:workflowValidator:
+    - key: my-field-validator
+      name: My Field Validator
+      description: Validates a field value before a workflow transition.
+      function: validate                 # runtime handler — called at transition time
+      resolver:
+        function: resolver               # backend for the config Custom UIs (invoke)
+      create:
+        resource: config-ui-resource
+      edit:
+        resource: config-ui-resource
+      view:
+        resource: config-view-resource
+      projectTypes:
+        - company-managed
+        - team-managed
+
+  jira:workflowCondition:
+    - key: my-field-condition
+      name: My Field Condition
+      description: Shows the transition only if a field value passes the check.
+      function: validate                 # same handler; disambiguate via context.extension.type
+      resolver:
+        function: resolver
+      expression: "true"                 # REQUIRED — without it the Forge fn is never invoked
+      create:
+        resource: config-ui-resource
+      edit:
+        resource: config-ui-resource
+      view:
+        resource: config-view-resource
+      projectTypes:
+        - company-managed
+        - team-managed
+
+  jira:workflowPostFunction:
+    - key: my-post-function
+      name: My Post Function
+      description: Runs after the transition and (optionally) edits a field.
+      function: executePostFunction
+      resolver:
+        function: resolver
+      create:
+        resource: config-ui-resource
+      edit:
+        resource: config-ui-resource
+      view:
+        resource: config-view-resource
+      projectTypes:
+        - company-managed
+        - team-managed
+
+  function:
+    - key: validate
+      handler: index.validate            # export const validate = async (args) => {...}
+    - key: executePostFunction
+      handler: index.executePostFunction # export const executePostFunction = async (args) => {...}
+    - key: resolver
+      handler: index.handler             # export const handler = resolver.getDefinitions()
+
+resources:
+  - key: config-ui-resource             # create + edit CRUD form
+    path: static/config-ui/build
+  - key: config-view-resource           # read-only summary + execution log
+    path: static/config-view/build
+
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - storage:app
+    # add these only if you also inject rules programmatically:
+    # - read:workflow:jira
+    # - write:workflow:jira
+
+app:
+  id: ari:cloud:ecosystem::app/YOUR-APP-ID
+  runtime:
+    name: nodejs22.x
