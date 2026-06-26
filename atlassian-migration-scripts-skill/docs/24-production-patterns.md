@@ -771,9 +771,48 @@ The skill's `templates/identity-resolver.js` ships a `flushCache()` method — i
 
 Default: flush by default, opt out for the two cases above. The downside of an extra disk write is zero; the downside of a missing flush is rate-limit money next run.
 
+## 38. Service Desk Team actor pre-flight (JSM)
+
+Any mutation that runs *as an actor* on a JSM project fails `400 component.missing.permissions.actor` unless the actor holds the right project role — and `GET /rest/api/3/mypermissions` lies (reports `havePermission: true` anyway). Before any JSM mutation, grant the actor its role:
+
+```javascript
+// real user actor  -> "Service Desk Team" (agent) role on each project
+const roles = await get(`/rest/api/3/project/${pid}/role`);
+const roleUrl = roles["Service Desk Team"];           // absent => non-JSM, skip
+const roleId = roleUrl.split("/").pop();              // ids NOT stable across projects
+const role = await get(roleUrl);
+if (!(role.actors||[]).some(a => a.actorUser?.accountId === ACTOR))
+  await post(`/rest/api/3/project/${pid}/role/${roleId}`, { user: [ACTOR] });
+```
+
+For an **app** actor ("Run rule as Jira", accountId prefix `557058:`), grant the `atlassian-addons-project-access` role the issue-action perms in each project's permission scheme instead (dedupe by scheme id). Idempotent, resolve role id per project by name. Source: `cloudtocloud-automation-helpers-v3/ensure_actor_access.js`, `templates/jsm-role-preflight.js`. Full detail in `docs/19-jsm-migration-patterns.md`.
+
+## 39. Transitive inverse walk for issue recovery
+
+When recovering issues JCMA dropped, the operator's scoping JQL misses children whose parents/epics it didn't cover. Walk the **inverse** graph: for each recovered issue, pull the subtasks/epic-children that reference it, and resolve each child's parent to the **current Cloud key** — or, if the parent is *also* missing, co-create it in the **same import CSV** with the child referencing the parent's in-file row id (order: parent before child). This recovers whole subtask/epic trees with correct parent links even when the parents were themselves missing. Source: `find_missing_issues` suite; see `docs/21-post-jcma-issue-recovery.md` and `docs/15-transitive-discovery.md`.
+
+## 40. Composition / app-macro splice rewrite (default-deny + back-to-front)
+
+Mis-migrated Confluence app macros (Appfire Composition `deck`/`card` colliding with native Cloud macros) are fixed by a **storage-XHTML splice rewrite**, never ADF — the target is itself storage-format, so splicing preserves macro ids and bodies byte-for-byte. Three load-bearing rules:
+
+```javascript
+// 1. DEFAULT-DENY: rewrite "deck" always; rewrite "card" only with positive evidence
+//    (a Composition ancestor up the ancestorStack, OR a Composition-shaped param).
+//    Ambiguous cards are SKIPPED with a recorded reason (don't touch native cards).
+// 2. BACK-TO-FRONT: apply splices descending by span start so earlier edits never
+//    shift later offsets.
+accepted.sort((a, b) => b.span[0] - a.span[0]);
+// 3. semantic-hash idempotency: if newXml === storage, skip as no-op (already converted).
+```
+
+Plus: re-derive instances from **fresh** storage at execute time (match by `macroId`, ordinal fallback), record the **server-truth** post-PUT version (a 409 retry that raced a third-party edit lands at +2, not +1), and roll back via native version restore. Source: `confluence/composition-tabs/src/compositionMacroProcessor.js`; `templates/composition-macro-rewriter.js`. Full detail in `docs/22-confluence-app-macro-migration.md`.
+
 ## See also
 
 - [`13-running-and-monitoring.md`](13-running-and-monitoring.md) — the progress-line contract used by an agent observer (patterns 31, 32, 35)
+- [`19-jsm-migration-patterns.md`](19-jsm-migration-patterns.md) — the actor/role model behind pattern 38
+- [`21-post-jcma-issue-recovery.md`](21-post-jcma-issue-recovery.md) — the recovery pipeline behind pattern 39
+- [`22-confluence-app-macro-migration.md`](22-confluence-app-macro-migration.md) — the macro rewriter behind pattern 40
 
 - [`templates/`](../templates/) — all of these patterns are implemented in the templates
 - [`27-rate-limits-and-quotas.md`](27-rate-limits-and-quotas.md) — points math behind pattern 12

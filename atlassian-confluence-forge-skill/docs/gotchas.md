@@ -42,3 +42,27 @@ In Custom UI, `view.getContext()` is asynchronous and returns a Promise.
 Fetching large pages via `requestConfluence` can impact performance and memory in the Custom UI sandbox.
 - **Issue**: Slow UI response or browser tab crashes when handling large page bodies.
 - **Fix**: Use pagination where possible, or fetch only the necessary parts of the page (e.g., using specific fields in the REST API).
+
+## Auth & background-job pitfalls
+
+### `asUser()` throws in scheduled triggers and consumers
+Scheduled triggers, consumers, and (often) web triggers run with **no user context**. Calling `api.asUser()` there throws `PROXY_ERR: AUTH_TYPE_UNAVAILABLE`.
+- **Fix**: use `api.asApp()` in any background path. For data only available with user permissions, persist it during a user-initiated flow, or use the Org API with an app credential. A dual-strategy helper (try `asUser`, fall back to `asApp`) keeps one code path working in both UI and background contexts — see `24-production-patterns.md` Pattern 10.
+
+### Content-property PUT needs `version.number = current + 1`
+Updating a content property (or page body) with a stale version returns `409 Conflict`. There is no "upsert" — you must GET the existing property to read its `version.number`, increment, then PUT. First-time create is a POST with no version. See `24-production-patterns.md` Pattern 3.
+
+### Confluence event payloads carry top-level fields
+Confluence product events (e.g. `avi:confluence:updated:page`, `avi:confluence:updated:attachment`) expose the actor and type as **top-level** `event.atlassianId` and `event.eventType`, plus `event.content` / `event.attachment`. Older code that reads `event.context.principal.accountId` will get `undefined` — breaking loop-prevention (the app then reacts to its own writes). Read `event.atlassianId`.
+
+## Group / user API pitfalls
+
+### Suspended users are invisible to the Confluence group API
+A user suspended/deactivated at the org level disappears from Confluence group-membership reads, even though they still occupy state. Don't infer "removed from group → fully gone"; if you need authoritative status for suspended accounts, use the Org API (`atlassian-organizations-api-skill`). License Leash treats any non-`active` org status (`suspended`/`deactivated`/`for_deletion`/`inactive`/`closed` — the value varies by endpoint) as org-disabled.
+
+### Multi-site orgs return groups from every site
+In an org with multiple Confluence sites, group reads can return groups from **all** sites. Site-scoped groups are named `confluence-users-{site}` / `confluence-guests-{site}` — filter by the `-{site}` suffix to act on the right one. Don't assume `confluence-users` is unique.
+
+## External fetch (egress)
+
+Forge external fetch requires **HTTPS** (plain HTTP → HTTP 400; WSS allowed). Allowed ports are **80, 8080, 443, 8443, 8444, 7990, 8089, 8090, 8085, 8060** — not "443 only". Declare each backend host under `permissions.external.fetch.backend`; a self-hosted endpoint must be exposed on a supported port over HTTPS. Adding the same address under a different egress category (backend vs client) triggers a major update + re-consent.

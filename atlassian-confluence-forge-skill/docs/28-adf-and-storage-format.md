@@ -153,6 +153,37 @@ function removeExtensions(node, extensionKey) {
 
 (Pattern lifted from Sentinel Vault's `doc-surgery.js` — see `24-production-patterns.md`.)
 
+## Canonical ADF hashing (tamper detection)
+
+To answer "did this ADF subtree actually change?" you can't hash `JSON.stringify(node)` directly — object key order isn't guaranteed stable across reads, and the editor regenerates some attrs (`localId`) on a no-op save, so you'd get false-positive "changed" verdicts. **Canonicalise first**: recursively sort every object's keys and drop volatile keys, then hash.
+
+```javascript
+const VOLATILE_ADF_KEYS = new Set(["localId"]);   // empirical (2026-06) — extend by round-tripping
+
+function canonicalizeAdf(value) {
+  if (Array.isArray(value)) return value.map(canonicalizeAdf);
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const k of Object.keys(value).sort()) {
+      if (VOLATILE_ADF_KEYS.has(k)) continue;
+      const v = canonicalizeAdf(value[k]);
+      if (v !== undefined) out[k] = v;
+    }
+    return out;
+  }
+  return value;
+}
+
+function hashAdf(node) {                            // FNV-1a 32-bit → 8 hex chars
+  const str = JSON.stringify(canonicalizeAdf(node));
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = (h + ((h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24))) >>> 0; }
+  return ("0000000" + h.toString(16)).slice(-8);
+}
+```
+
+Store the hash at "seal"/baseline time; on each edit, recompute and compare. Full pipeline (compare → restore-or-rebaseline) is in `16-unified-content-triggers.md`.
+
 ## Building an extension node (your macro on a page)
 
 ```javascript
