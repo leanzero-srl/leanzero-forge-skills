@@ -40,6 +40,8 @@ Is it a bulk, one-shot data fixup against Atlassian Cloud?
 └── Yes → this skill is the right tool
 ```
 
+**Scope note — Bitbucket is not covered.** This skill covers Jira (incl. JSM) and Confluence migration scripting. Bitbucket Cloud Migration Assistant (BBMA) repository/PR migration is out of scope — there is no Bitbucket content here yet. The Plan/Sync/Audit triad and HTTP-client patterns would transfer, but the entity model (repos, refs, PRs, pipelines) and BBMA's API surface are different enough that they'd need their own grounding before this skill should claim to cover them.
+
 ## Plan-only, execute-only, or both?
 
 ```

@@ -50,12 +50,27 @@ The legacy `storage` API stopped receiving feature updates after **2025-03-17**.
 ### Secrets need `setSecret` / `getSecret`
 Plain `kvs.set` is *not* encrypted at rest in the same way. Use `kvs.setSecret(key, value)` / `kvs.getSecret(key)` for credentials.
 
+### KVS has no atomic compare-and-set (TOCTOU on locks)
+`acquireLock` style check-then-set is racy: two callers who pass the check in the same window both `set`, last write wins. **There is no CAS primitive.** Narrow the window with **acquire-then-reread** (write, then re-read the holder; if someone else's write landed last, treat it as a lost race and back off) — but understand this does *not* eliminate the race. For exactly-once side effects use `keyPolicy: 'FAIL_IF_EXISTS'` (an atomic conditional create), see `26-async-events-and-queues.md`. Source: se-ppm `src/services/concurrency/write-lock.js:44-50`.
+
 ## Module Specifics
 
 ### Workflow validator error messages
 `{ result: false, errorMessage: "..." }` — the field is `errorMessage`, not `message`. The user sees this string verbatim in the Jira UI.
 - Keep messages short and actionable.
 - Fail-open in `catch` blocks for external-dependency validators — never block a transition on your dependency's outage.
+
+### `expression: "true"` is required on `jira:workflowCondition`
+Without it, Jira treats the condition as static and **never invokes your Forge function** to compute transition-button visibility. With it, the function runs on every issue view — keep it cheap. See `25-workflow-modules-deep-dive.md`.
+
+### Warm-container registry/cache staleness (~30 s)
+A module-scoped cache (e.g. a disabled-rules registry read on the hot path) persists across invocations in a warm container. If you invalidate it only on the resolver write path, *another* warm container won't see the change — so a just-disabled rule can run for up to your cache TTL (~30 s in CogniRunner). Bounded staleness is fine for advisory data; never cache credentials this way (a stale key is binary-wrong).
+
+### Custom UI: stale closures after `await`
+React handlers that read a value *after* an `await` capture the value from render time, not the latest. For values you read post-await (latest payload, a token, an abort flag) store them in a `useRef` and read `.current`, or you'll act on stale state.
+
+### Custom UI manifest layout: `basic` → `blank`
+The Custom UI resource `layout: basic` was deprecated in 2025; use `layout: blank` for full-page Custom UI. Verify against the current manifest reference if a page renders with unexpected Atlassian chrome.
 
 ### Async events: v2 manifest shape
 `@forge/events` v2 declares consumers with `function:` (not v1's `resolver:`). The v1 shape still works but is deprecated. See `26-async-events-and-queues.md`.

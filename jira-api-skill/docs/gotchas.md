@@ -36,3 +36,23 @@ When a `jira:workflowValidator` fails, the error message returned via `errorMess
 ### Custom UI Modal Sizing
 The `viewportSize` property for `contentAction` (e.g., `small`, `medium`, `large`) is a hint, not a strict rule.
 - **Gotcha**: Extremely complex UIs might feel cramped in `small` or `medium` viewports. Test your UI layout across different sizes.
+
+## Writing Fields (REST)
+
+### Field writes can silently no-op (editmeta before write)
+A `PUT /rest/api/3/issue/{key}` to a field that isn't on that issue's **edit screen** (for its project + issue type) returns **2xx but never applies the value** — no error, no warning.
+- **Fix**: Pre-flight with `GET /rest/api/3/issue/{key}/editmeta` and only write fields present in `data.fields`. Run it per project/issue-type combo, not per issue, for homogeneous batches. See `06-api-endpoints.md`.
+- **Escape hatch**: `PUT ...?overrideScreenSecurity=true` writes off-screen fields anyway, but needs admin permission (non-admin → 403) and bypasses the protection editmeta reports on — use deliberately, not as a default.
+
+### Verify after write — re-read to confirm Jira accepted it
+Because writes can be silently dropped (off-screen fields, automation rules, validators, or workflow conditions rewriting your value), a 2xx is **not** proof the change landed. se-ppm-forge re-fetches written issues with `POST /rest/api/3/issue/bulkfetch` and compares each field's actual value against what it intended to write; a mismatch is reported as a real failure.
+- **Fix**: For anything you must guarantee (bulk migrations, scheduling writes), re-read the issues after writing and diff expected vs actual. Normalize before comparing (dates, durations) so formatting differences don't read as false mismatches.
+
+### Suppress notification spam on bulk writes (notifyUsers=false)
+By default every `PUT /rest/api/3/issue/{key}` e-mails watchers and the assignee.
+- **Gotcha**: A loop over hundreds of issues sends hundreds of e-mails and can itself trip rate limits / mail throttling.
+- **Fix**: Append `?notifyUsers=false` to bulk/automation writes. Keep notifications on only for genuinely user-initiated single edits.
+
+### Issue-link direction is counter-intuitive
+`POST /rest/api/3/issueLink` reads as `outwardIssue <type.outward> inwardIssue`. For **Blocks**, `outwardIssue` is the blocker/predecessor and `inwardIssue` is blocked-by/successor — the field names feel reversed vs the UI wording, and admins rename link descriptions per site.
+- **Fix**: Before any bulk link creation, GET `/rest/api/3/issueLinkType` to read the inward/outward labels, create one probe link, and re-read the issue (`?fields=issuelinks`) to confirm direction. Details + worked example in `06-api-endpoints.md`.

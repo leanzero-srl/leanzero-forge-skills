@@ -179,6 +179,33 @@ test('enqueue pushes a task with the issue key', async () => {
 });
 ```
 
+## Offline harnesses & parity testing
+
+Mocked jest tests can pass while real behaviour diverges. Three higher-confidence harnesses from the PPM apps and CogniRunner, none of which need a live Forge bridge:
+
+### Committed offline UI harness (`?harness`)
+
+Ship a **code-split** standalone build of the real UI that loads only on a URL flag, so production never pulls it in. SE-PPM renders the real Gantt + calculation hook with synthetic data and no Forge bridge:
+
+```javascript
+// static/ppm-ui/src/index.jsx
+if (typeof window !== 'undefined' && window.location.search.includes('harness')) {
+  import('./harness/GanttHarness').then(({ default: GanttHarness }) => { /* render */ });
+}
+// GanttHarness.jsx exposes a console/Playwright API:
+window.__ppm = { /* drive synthetic edits, read computed bars, assert cascade scope */ };
+```
+
+Build, serve `static/ppm-ui/build`, open `…/index.html?harness=1`, and drive it from the browser console or Playwright. Cascade scope, row order, and bar colour become testable **outside Atlassian, before deploying**.
+
+### Two-engine parity harness
+
+If a value is computed both in the browser (preview) and the backend (authoritative), a **Node parity harness** runs the frontend `utils/` mirror against `src/services/calculation/*` over all primitives + the full decision matrix and asserts **identical** output (SE-PPM's last run: **232/232**). Run it on every scheduling-rule change, then prove `preview == applied` on a real plan. See `24-production-patterns.md` pattern 15.
+
+### Per-provider barrage test (BYOK)
+
+For a multi-provider AI adapter, a fixture-driven barrage exercises every provider/model against the same prompts and checks the normalised `{ ok, content, tokens }` shape — catching per-provider translation bugs (Anthropic's required `max_tokens`, Bedrock's unencoded model id, OpenRouter rejecting `response_format`). CogniRunner keeps this under `test-harness/` (`PROVIDER-BARRAGE.md`, `fixtures/`, `lib/`). See `31-forge-ai-and-llm.md`.
+
 ## Lint your manifest
 
 ```bash

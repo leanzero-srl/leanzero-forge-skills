@@ -19,8 +19,11 @@ Skip this skill for:
 
 ## Pick a starting point
 
-- **Scaffolding a new module**: copy a template from `templates/` (validator, condition, post-function, async-queue-consumer, custom-field-type, capability-token-webtrigger, etc.).
-- **Production patterns** (sharding, backoff+jitter, drafts/locks, capability tokens, async offload, fail-open validators): `docs/24-production-patterns.md`.
+- **Scaffolding a new module**: copy a template from `templates/` (validator, condition, post-function, async-queue-consumer, custom-field-type, capability-token-webtrigger, workflow-config-view, etc.).
+- **Production patterns** (sharding, backoff+jitter, drafts/locks, write-verify, two-engine parity, capability tokens, async offload, fail-open validators): `docs/24-production-patterns.md`.
+- **Workflow rules in depth** (create/edit/view split, `expression:"true"`, per-instance ids, agentic validation, semantic-PF editmeta pre-flight): `docs/25-workflow-modules-deep-dive.md`.
+- **AI / LLM in a Forge app** (`@forge/llm` hosted, BYOK multi-provider, three-layer cost guard): `docs/31-forge-ai-and-llm.md`.
+- **Live multi-user UI** (`@forge/realtime`): `docs/32-forge-realtime.md`.
 - **Limits & quotas** (timeouts, KVS quotas, queue limits): `docs/27-faas-limits-and-cost.md`.
 - **Decision: which module type?** `docs/when-to-use-which.md`.
 
@@ -146,16 +149,19 @@ app:
 |---|---|
 | `19-rate-limit-handling.md` | Rate-limit / backoff |
 | `20-performance-optimization.md` | Caching, attachment budgets |
-| `24-production-patterns.md` | Production patterns from PPM Pro & CogniRunner |
+| `24-production-patterns.md` | 20 production patterns (PPM Pro / lz-ppm / se-ppm / CogniRunner) |
+| `25-workflow-modules-deep-dive.md` | Workflow rule internals: create/edit/view, instanced ids, agentic validation |
 
 ### Reference (new)
 | File | Topic |
 |---|---|
-| `26-async-events-and-queues.md` | `@forge/events` queues, retries, long-running work |
-| `27-faas-limits-and-cost.md` | Timeouts, memory, KVS quotas, queue limits |
-| `28-forge-remote-and-egress.md` | `permissions.external`, `remotes:`, OAuth providers |
+| `26-async-events-and-queues.md` | `@forge/events` queues, retries, idempotency, long-running work |
+| `27-faas-limits-and-cost.md` | Timeouts, memory, KVS quotas, hot-key batching, queue limits |
+| `28-forge-remote-and-egress.md` | `permissions.external` (HTTPS + port allowlist), `remotes:`, OAuth |
 | `29-custom-field-types.md` | `jira:customField`, `jira:customFieldType` |
-| `30-testing-and-tunneling.md` | `forge tunnel`, mocking, jest |
+| `30-testing-and-tunneling.md` | `forge tunnel`, jest mocks, offline harnesses, parity testing |
+| `31-forge-ai-and-llm.md` | `@forge/llm` hosted, BYOK multi-provider adapter, cost guards |
+| `32-forge-realtime.md` | `@forge/realtime` live multi-user UI |
 
 ### Decision aids
 | File | Topic |
@@ -185,6 +191,10 @@ Copy-paste-ready manifests in `templates/`:
 | `bitbucket-merge-check.yml` | `bitbucket:mergeCheck` |
 | `custom-field-type.yml` | `jira:customFieldType` (view + edit + contextConfig) |
 | `capability-token-webtrigger.yml` | Webtrigger with token + bearer auth |
+| `workflow-config-view.yml` | Validator/condition/post-fn create+edit+view split (`expression:"true"`) |
+| `byok-provider-adapter.js` | Unified BYOK AI adapter (OpenAI/Anthropic/Azure/OpenRouter/Bedrock/LM Studio/`@forge/llm`) |
+| `forge-llm-cost-guard.js` | Three-layer cost guard (kill-switch + caps + cache-only-clean + metering) |
+| `realtime-publisher.js` | `@forge/realtime` metadata-only, never-throw publisher |
 
 ## Scripts
 
@@ -201,6 +211,7 @@ Recommended workflow: `preflight-check.sh` → make changes → `validate-manife
 
 ## Changelog
 
+- **2026-06-26** — Folded in production learnings from **lz-ppm-forge**, **se-ppm-forge**, and **CogniRunner**. New docs `25-workflow-modules-deep-dive.md` (create/edit/view split, `expression:"true"`, per-instance rule ids, agentic validation, semantic-PF editmeta pre-flight), `31-forge-ai-and-llm.md` (`@forge/llm` hosted + BYOK multi-provider adapter + three-layer cost guard), `32-forge-realtime.md`. Enhanced `24` (patterns 13–20: stale-draft invalidation, write-verify, two-engine parity, layered config, KVS cost control, issue-link semantics, custom-field screen chain, field-screen preflight), `26` (consumer error handling + `FAIL_IF_EXISTS` idempotency), `06` (cursor-paged `search/jql`, bulkfetch, agile rank, write flags), `28` (HTTPS + port allowlist, correcting the "443 only" myth), `27` (hot-key batching, Forge LLM = Preview), `30` (offline harnesses + parity), `gotchas` (KVS TOCTOU, `expression:"true"`, registry staleness). New templates `workflow-config-view.yml`, `byok-provider-adapter.js`, `forge-llm-cost-guard.js`, `realtime-publisher.js`.
 - Merged `06-api-endpoints.md` and the prior `-enhanced.md` variant into one canonical reference, with the per-resource `docs/api/` folder linked as an appendix.
 - Renumbered duplicate prefixes: `02-ui-modifications.md` → `14-`, `18-custom-ui-advanced.md` → `23-`.
 - Removed the long-stale claim that workflow validators/conditions/post-functions are Connect-only — they are real, supported Forge modules.

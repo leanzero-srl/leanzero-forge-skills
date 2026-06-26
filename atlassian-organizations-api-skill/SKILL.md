@@ -173,6 +173,17 @@ const orgs = await r.json();
 | Create policy | `/admin/v1/orgs/{orgId}/policies` | POST | v1 |
 | Search workspaces | `/admin/v2/orgs/{orgId}/workspaces` | POST | v2 |
 | List app access domains | `/admin/v2/orgs/{orgId}/app-access-settings/domains` | GET | v2 |
+| Per-product last-active | `/admin/v1/orgs/{orgId}/directory/users/{accountId}/last-active-dates` | GET | v1 |
+| Forward-filter license groups | `/admin/v2/orgs/{orgId}/directories/{dirId}/groups?resourceIds={siteAri}&resourceOwners=confluence` | GET | v2 |
+| Group product access (seat?) | `/admin/v2/.../groups/{groupId}/role-assignments` | GET | v2 |
+| Add user to group (grant seat) | `/admin/v2/.../groups/{groupId}/memberships` | POST | v2 |
+| Remove user from group (free seat) | `/admin/v2/.../groups/{groupId}/memberships/{accountId}` | DELETE | v2 |
+| Assign product role to group | `/admin/v2/.../groups/{groupId}/role-assignments/assign` | POST | v2 |
+
+> **License management, per-product & per-site:** free a seat by **removing the user from
+> a license-granting group**, never by account suspend (suspend is global — all products,
+> all sites). Read per-site activity via `last-active-dates` scoped to the site's workspace
+> ARI. See `docs/15-license-and-activity-patterns.md`.
 
 ---
 
@@ -200,6 +211,11 @@ const orgs = await r.json();
 | API Access (Tokens & Keys) | `docs/13-api-access.md` |
 | Admin Control (Policies & Auth) | `docs/14-admin-control.md` |
 
+### Production Patterns
+| Topic | File |
+|-------|------|
+| License & Activity Patterns (per-product/per-site, last-active, group-membership writes) | `docs/15-license-and-activity-patterns.md` |
+
 ### Permissions
 | Topic | File |
 |-------|------|
@@ -221,6 +237,7 @@ const orgs = await r.json();
 | `role-assignment.yml` | Grant/revoke user roles | Access management |
 | `policy-crud.yml` | Create/update/delete policies | Security policy management |
 | `audit-events.yml` | Query audit log events | Compliance auditing |
+| `last-active-and-membership.js` | Per-site last-active read + idempotent group membership add/remove with 429 pacing | License management from a Forge app |
 
 ---
 
@@ -320,6 +337,27 @@ When an error occurs during execution, follow these patterns:
 - **409 Conflict**: User already exists in the organization, or you've exceeded user limits for a product.
 - **429 Rate Limited**: Implement exponential backoff. The Organizations API has strict rate limits (see [problem-patterns.md](docs/problem-patterns.md)).
 - **500 Internal Error**: Retry with jitter. If persistent, contact Atlassian support.
+
+---
+
+## See Also (other skills)
+
+- **atlassian-confluence-forge-skill** — license-via-group-membership and Org API usage
+  from the Forge/Confluence side (manifest scopes, `api.fetch` to `api.atlassian.com`).
+- **confluence-api-skill** — Confluence group REST endpoints (and their suspended-user
+  blind spot the Org API works around).
+
+---
+
+## Changelog
+
+- **2026-06-26** — Added `docs/15-license-and-activity-patterns.md` and
+  `templates/last-active-and-membership.js`; expanded `gotchas.md` (suspend-is-global,
+  Admin-API-key specifics, last-active "2s view" + multi-site scoping, membership ≠
+  product access). Source: **License Leash** (axpo-license-manager) Forge app — production
+  use of the per-product/per-site license-management + activity endpoint cluster
+  (`last-active-dates`, workspace resolution, forward-filtered license groups, group
+  role-assignments, idempotent membership writes, App Access Funnel role-assign).
 
 ---
 

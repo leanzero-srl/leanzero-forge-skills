@@ -1,0 +1,83 @@
+# Unlicensed-Access Page Template
+#
+# A confluence:globalPage + confluence:pageBanner reachable by users WITHOUT a
+# Confluence license — for self-service flows (reactivation, request access, etc).
+#
+# unlicensedAccess valid values (Confluence):
+#   unlicensed → Guest Users (members of confluence-guests-{site}); context.accountId IS populated
+#   anonymous  → not logged in;                                     context.accountId is null / 'unidentified'
+# ('customer' is the JSM value — do NOT use it on Confluence modules.)
+#
+# See: docs/18-unlicensed-access-and-web-triggers.md
+# Official: developer.atlassian.com/platform/forge/access-to-forge-apps-for-unlicensed-users/#confluence-forge-modules
+
+modules:
+  confluence:globalPage:
+    - key: {{APP_KEY}}-self-service-page
+      resource: selfServicePage
+      resolver:
+        function: selfServiceResolver
+      route: {{APP_KEY}}-self-service          # stable URL slug
+      title: Self-Service Access
+      icon: resource:selfServicePage;logo-48.png
+      unlicensedAccess:
+        - anonymous                            # email recipients following a link while logged out
+        - unlicensed                           # in-product guests
+
+  confluence:pageBanner:
+    - key: {{APP_KEY}}-self-service-banner
+      resource: selfServiceBanner
+      resolver:
+        function: selfServiceResolver
+      unlicensedAccess:
+        - unlicensed                           # banner only fires for in-product guests
+
+  function:
+    - key: selfServiceResolver
+      handler: index.selfServiceResolver
+
+resources:
+  - key: selfServicePage
+    path: static/self-service-page/build
+  - key: selfServiceBanner
+    path: static/self-service-banner/build
+
+permissions:
+  scopes:
+    - read:confluence-user
+    - read:confluence-groups
+    - write:confluence-groups
+    - storage:app
+
+app:
+  id: ari:cloud:ecosystem::app/{{APP_ID}}
+  runtime:
+    name: nodejs22.x
+
+---
+# Resolver: gate on accountId because it may be ABSENT under `anonymous`.
+
+```javascript
+// src/index.js
+import Resolver from '@forge/resolver';
+
+const resolver = new Resolver();
+
+function isAuthenticated(accountId) {
+  return !!accountId && accountId !== 'unidentified';   // 'unidentified' = anonymous context
+}
+
+resolver.define('getState', async ({ context }) => {
+  const accountId = context?.accountId;
+  if (!isAuthenticated(accountId)) {
+    return { signedIn: false, message: 'Please sign in to your Atlassian account.' };
+  }
+  // ... evaluate eligibility for this accountId, return UI state ...
+  return { signedIn: true, accountId };
+});
+
+export const selfServiceResolver = resolver.getDefinitions();
+```
+
+# NOTE: Each Custom UI app's package.json must set "homepage": "." so the build
+# emits relative ./static/... asset URLs — otherwise the Forge CDN returns 422.
