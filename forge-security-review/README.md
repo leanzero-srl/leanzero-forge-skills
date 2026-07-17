@@ -50,6 +50,7 @@ findings ours-vs-SDK with `fixAvailable`, and flags phantom deps, mutable tags a
 | `docs/02-sast-and-sca.md` | Running both properly, and reading them honestly |
 | `docs/03-beyond-scanners.md` | What the scanners can't see — find it by hand |
 | `docs/04-reporting.md` | Writing a pack that holds up; confidentiality rules |
+| `templates/security-review-report.md` | Fill-in report template, with the reject-traps marked inline |
 | `scripts/forge_sec_scan.py` | The scanner |
 
 ## The framing that works

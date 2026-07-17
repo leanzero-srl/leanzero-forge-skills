@@ -42,6 +42,8 @@ emits — it is a draft, not a verdict.** The judgment calls below are yours.
 - **`docs/03-beyond-scanners.md`** — the risk classes SAST/SCA structurally cannot see in a Forge app.
   On a real app these were **worse than the CVE**. You must find these by hand.
 - **`docs/04-reporting.md`** — the pack structure, and the sentences that get a report rejected.
+- **`templates/security-review-report.md`** — the fill-in report template, with the reject-traps marked
+  inline at the point you'd walk into them, and a pre-send checklist.
 
 ## The method
 
