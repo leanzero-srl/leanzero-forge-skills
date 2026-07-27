@@ -105,4 +105,7 @@ The skills are not theoretical. The "production patterns" docs in each skill (`d
 
 ## License
 
-See `LICENSE` (or contact LeanZero).
+Licensed under the Apache License, Version 2.0 — see [LICENSE](LICENSE).
+
+You can use these skills, including in commercial and closed-source work. Keep the copyright and
+NOTICE attribution intact when you redistribute them.
