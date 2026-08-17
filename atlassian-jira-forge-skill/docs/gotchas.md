@@ -96,3 +96,111 @@ The `viewportSize` (`small`, `medium`, `large`) is a hint, not a strict cap. Tes
 | Async retries | — | 4 retries |
 
 If you need >25 s, push to an async queue. See `26-async-events-and-queues.md`.
+
+## Bundling
+
+### An ESM-only subpath export is a landmine in the backend bundle
+The Forge backend bundler is **webpack 5, target node18, CommonJS output**. A
+package whose subpath is exported only under the `import` condition resolves
+fine in plain `node` and fails **only inside the bundle** — which is the one
+place you cannot easily debug.
+
+Real case: `unpdf` loads PDF.js with `await import("unpdf/pdfjs")`. Under
+`require` conditions that throws `ERR_PACKAGE_PATH_NOT_EXPORTED`, surfacing to
+the user as *"Serverless PDF.js bundle could not be resolved"* — which reads
+like a corrupt PDF, not a build problem.
+
+The fix removes both possible mechanisms rather than betting on which one bit:
+
+```js
+import * as pdfjsModule from "unpdf/pdfjs";   // STATIC — same chunk, no runtime resolution
+import { definePDFJSModule } from "unpdf";
+export const ensurePdfjs = () => definePDFJSModule(() => Promise.resolve(pdfjsModule));
+```
+
+Verify against the deployed bundle, never locally: this class of bug is invisible
+in `node`.
+
+### Async chunks land OUTSIDE the Custom UI resource directory
+A Custom UI resource is a **directory** (`resources: [{key, path: src/chat/globalPage}]`).
+Webpack emits async chunks next to `output.path`, which is usually the parent —
+so `import()` anywhere in the frontend produces a chunk that **404s at runtime
+with no useful error**. A third-party library doing `import()` internally
+(tesseract.js does) cannot be fixed by a static import on your side.
+
+```js
+// webpack.config.js
+module: {
+  parser: { javascript: { dynamicImportMode: "eager" } },  // inline every import()
+  rules: [...],
+}
+```
+
+Beware: a second `module:` key silently replaces the first. Merge into the
+existing block.
+
+## Storage
+
+### `kvs.query()` has no `sort()`
+Only the **entity store** sorts. The plain KVS query exposes `where`, `limit`
+and `cursor` — nothing else. Keys come back in an order the docs do not promise,
+so `beginsWith(prefix).limit(50)` on `conv:<id>:msg:<timestamp>` returns the
+**oldest** 50, not the newest.
+
+Symptom in production: past 50 messages a chat silently stops showing the model
+the user's newest turn, sidebar previews show the opening line forever, and a
+message count saturates at exactly the limit. Maintain your own ordered index
+instead, and back it with a cursor walk for rows that predate it.
+
+Other shapes worth knowing: the cursor field is `nextCursor`; `batchGet` answers
+`{successfulKeys, failedKeys}`; and TTL **is** supported —
+`kvs.set(k, v, { ttl: { value: 30, unit: "DAYS" } })`.
+
+### There is no compare-and-swap on a plain KVS key
+`kvs.transact()`'s conditional `check` requires the **entity** store. On plain
+keys, read-modify-write is all you have — so any value written concurrently WILL
+lose writes.
+
+Real case: an index array of uploaded files, updated by up to five concurrent
+uploads. Each read `[]`, each wrote `[itself]`, last writer won, and the losers'
+data rows were orphaned with nothing referencing them. The fix is structural,
+not defensive: **one row per item**, enumerated with a prefix query. Separate
+keys cannot collide.
+
+### `beginsWith` matches more than you think
+`upload:<id>` and `upload:<id>:c:<n>` share a prefix, and KVS has **no keys-only
+projection** — every result carries its full value. A sweep over `upload:` to
+find manifests therefore drags every chunk body through a 25-second resolver.
+Give different record types **different key prefixes**, not different suffixes.
+
+## Jira REST
+
+### `GET /rest/api/3/field/{fieldId}` does not exist
+It answers **405 Method Not Allowed** — "Method 'GET' is not supported" —
+while `GET /rest/api/3/field` (the list form) succeeds on the same credentials.
+Probed live; it is not a permissions problem. Any tool built on it can only ever
+fail.
+
+### Bulk endpoints need the *Global bulk change* permission
+`POST /rest/api/3/bulk/issues/fields`, `/transition` and `/move` all require it,
+and ordinary users do not have it. Treat them as an admin-only accelerator and
+translate the 403 into that sentence; the default path for "change N issues"
+should be a capped sequential loop with partial-failure reporting.
+
+### Creating components and versions needs `manage:jira-project`
+If the app does not hold it, `setComponents` / `setFixVersions` can only use
+values that already exist. Say so rather than failing on a name the user
+invented.
+
+### `archiveIssues` needs Premium/Enterprise AND admin
+Under `asUser` it 403s for almost everyone. A tool that always fails is worse
+than no tool.
+
+### JQL is eventually consistent
+`parent = KEY` can return **zero** seconds after the children were created,
+while a direct `GET /issue/{key}` shows `fields.parent` set correctly. Verified
+live. Read back **by key** after a write; an empty JQL result looks exactly like
+"nothing was created", which is a completely different diagnosis.
+
+Also: `~` is a **tokenised** text match, not a substring match. `summary ~ "a b"`
+matches those words in any order and will not match the phrase you expect.

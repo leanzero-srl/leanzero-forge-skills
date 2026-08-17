@@ -277,3 +277,70 @@ permissions:
 - **API Endpoints**: Each API requires specific scopes to function
 
 **Note on Forge Module Types**: Forge apps use trigger modules (`scheduledTriggers`, `trigger`) rather than workflow-specific module types. Workflow validation, conditions, and post functions are handled via Jira expressions configured in the Jira UI or Management API.
+
+## Classic and granular scopes DO coexist in one manifest
+
+The internet says otherwise and it is wrong. Verified two ways: against three
+shipped apps in one account (`lz-ppm-forge`, `se-ppm-forge`, `CogniRunner`, all
+declaring `read:jira-work` alongside `read:project:jira` and
+`write:sprint:jira-software`), and by linting a fourth that mixes them. Scopes
+are **additive**: there is no migration, no rewrite, and no 403 sweep.
+
+This matters because **Jira Software exposes only granular scopes** — there is
+no classic equivalent for boards and sprints — so any app that wants agile
+features and already uses classic scopes has to mix them.
+
+```yaml
+permissions:
+  scopes:
+    read:jira-work:                  # classic
+      allowImpersonation: true
+    read:board-scope:jira-software:  # granular, alongside it
+      allowImpersonation: true
+    write:sprint:jira-software:
+      allowImpersonation: true
+```
+
+### `allowImpersonation` is required for anything an ASYNC CONSUMER calls
+Not just scheduled triggers. A consumer running `api.asUser(accountId)` **is**
+offline impersonation, and without the flag the call fails at runtime with an
+authorization error that looks like a user-permission problem.
+
+It is accepted on `*:jira-software` scopes in the **map** form —
+`forge lint` passes — which had no public precedent I could find.
+
+### Agile scope pairs
+
+| Operation | Scopes |
+| --- | --- |
+| List boards, read a board's backlog | `read:board-scope:jira-software` |
+| List / create / update sprints | `read:sprint:jira-software`, `write:sprint:jira-software` |
+| Move issues into a sprint or backlog | `write:issue:jira-software` |
+| Rank issues | `write:board-scope:jira-software` |
+| Co-requisites the agile endpoints list | `read:project:jira`, `read:issue-details:jira`, `read:jql:jira` |
+
+`read:epic:jira-software` is **not** needed — an epic's children come from JQL
+`parent = KEY` at zero scope cost.
+
+### Adding ANY scope is a major version, and Rolling Releases ships the code first
+`forge deploy` refuses until you pass `--approve MAJOR_VERSION_RULE`, and every
+install then shows **"Outdated app"** until an admin approves it in
+*Apps → Manage apps*. `forge install --upgrade` from the CLI fails with
+*"Principal has insufficient permissions"* unless your account can approve on
+that site.
+
+So between deploy and approval there is a window — days, on a real customer —
+where the new code runs with the OLD scopes. Anything using a new scope must
+degrade into a sentence a user can act on. A 403 there means *"the app's update
+is unapproved"*, not *"you lack permission"*: completely different problems,
+completely different fixes, and the status code cannot tell them apart.
+
+The pattern that works: probe once, cache the answer, and **omit the affected
+tools entirely** rather than offering ones that can only fail.
+
+```js
+// Cache success for a day; cache FAILURE for ten minutes — a "no" becomes a
+// "yes" the moment an admin approves, and nobody should wait a day to notice.
+const OK_TTL_MS = 24 * 60 * 60 * 1000;
+const FAIL_TTL_MS = 10 * 60 * 1000;
+```

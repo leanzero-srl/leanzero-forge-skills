@@ -132,3 +132,41 @@ The Custom UI ↔ resolver bridge has practical payload limits in the ~250 KB ra
 - `19-rate-limit-handling.md` — backoff strategies
 - https://developer.atlassian.com/platform/forge/limits-kvs-ce
 - https://developer.atlassian.com/platform/forge/runtime-reference/async-events-api
+
+
+## The limits that actually bite (measured, 2026)
+
+Numbers people get wrong, with the trap each one sets.
+
+| Limit | Value | Why it bites |
+| --- | --- | --- |
+| Front-end `invoke` **request** | **500 KB** | Base64 inflates by 4/3, so a single invoke can never carry more than ~370 KB of real file. Client-side "15 MB max" guards are fiction. |
+| Front-end `invoke` response | 5 MB | Generous, so the asymmetry surprises people. |
+| KVS **value** | **240 KiB** | Not the 128 KiB that circulates in community posts. |
+| KVS key | 500 chars | |
+| KVS writes | 4,000/min per installation | |
+| Sync resolver | **25 s hard timeout** | The failure is a bare `Task timed out after 25.00 seconds` with no context. |
+| Async consumer | **900 s** | Where anything slow belongs. |
+| `runtime.memoryMB` | settable **per function** | Not just app-wide. More memory is also more CPU. |
+| Custom UI static resource | 100 MB per resource | Enough to vendor a WASM OCR engine (~22 MB) twice. |
+
+```yaml
+function:
+  - key: file-consumer-function
+    handler: chat/fileConsumer.handler
+    timeoutSeconds: 900
+    runtime:
+      memoryMB: 1024        # per function, not app-wide
+```
+
+### The 500 KB invoke limit is the one that catches people
+It does not announce itself as a size problem. The symptom is "only small files
+work", which reads as a *format* problem — so you go looking at the extractor
+and find nothing wrong with it. Anything above ~370 KB needs a chunked
+transport; see `16-resolver-patterns.md`.
+
+### A Custom UI resource is a DIRECTORY
+Everything under it is served relative to the page. That is what makes vendoring
+binary assets (wasm, language data) practical, and it is also why webpack async
+chunks — emitted next to `output.path`, usually the parent — 404 at runtime. See
+`gotchas.md`.

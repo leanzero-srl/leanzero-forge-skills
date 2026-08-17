@@ -1077,3 +1077,128 @@ function HoverCard() {
 - [UI Kit Components](./17-ui-kit-components.md)
 - [Bridge API Reference](./15-bridge-api-reference.md)
 - [Resolver Patterns](./16-resolver-patterns.md)
+
+## Running WASM in a Custom UI (the recipe that actually works)
+
+This is the answer to every *"I declared `unsafe-eval` and WASM still fails"*
+thread.
+
+**The wall is not the bundler and not the CSP directive.** A library's Web
+Worker, loaded as an ordinary script, runs under a **stricter sandbox of its
+own** that forbids WASM compilation regardless of what the page is allowed to
+do. Loading the worker from a **blob URL** makes it inherit the page's CSP.
+
+Three pieces, all required:
+
+```yaml
+permissions:
+  content:
+    scripts:
+      - unsafe-inline
+      - unsafe-eval
+      - "blob:"        # QUOTED. See below.
+```
+
+```js
+createWorker("eng", 1, {
+  workerBlobURL: true,      // already the default in tesseract.js — restate it anyway
+  workerPath: "ocr/worker.min.js",
+  corePath: "ocr/",
+  langPath: "ocr/",
+  gzip: true,
+});
+```
+
+…plus the assets vendored into the resource directory so nothing is fetched at
+runtime.
+
+### `blob:` "is not a valid CSP value" — it is, you quoted it wrong
+Unquoted, YAML reads `blob:` as a **mapping key with a null value**, and
+`forge lint` rejects it with *"permissions content property scripts must be
+string"*. That is the whole of the folklore. `- "blob:"` lints clean. It did not
+even trigger a major-version bump in my case (a scope did).
+
+### Keep it egress-free, deliberately
+Libraries default their asset paths to a CDN — tesseract.js uses jsDelivr for
+the worker and a tessdata host for language data. Overriding **all** of
+`workerPath`, `corePath` and `langPath` is what keeps a "Runs on Atlassian" app
+eligible. Drop any one of them and OCR keeps working perfectly while the app
+silently starts making cross-origin requests. Assert it:
+
+- statically, that no tracked source names those hosts;
+- at runtime, by recording every request the app's own frame makes. Scope that
+  by **initiator frame** — a shared tenant has other vendors' apps and Jira's
+  own Sentry on the page, none of which is yours.
+
+### Cost, measured
+~22 MB vendored (WASM core variants + worker + English language data), 6.5 s for
+the first image including worker start-up and decompressing ~11 MB of language
+data, ~1 s thereafter. Well inside the 100 MB per-resource budget — but you pay
+it **once per resource directory**, so two surfaces means two copies.
+
+### Two traps in the library integration itself
+- **A memoised worker captures its `logger` at creation.** Binding the first
+  caller's progress callback means every later job reports into the first
+  caller's (long-detached) DOM node — frozen progress bars and an object that
+  can never be collected. Indirect through a mutable slot.
+- **The worker runs jobs SERIALLY with no client-side queue.** Five images
+  started at once share one engine, so per-job timeouts must account for queue
+  depth or images 4 and 5 "time out" having never started.
+
+## Body-level drag-and-drop
+
+Attach to `document.body`, not to the drop target. A body-level zone has no dead
+gaps between elements and needs one listener set, while the *visual* target
+stays wherever the user expects to aim.
+
+```js
+let depth = 0;
+on(document.body, "dragenter", (e) => {
+  if (!carriesFiles(e)) return;      // types.includes("Files")
+  e.preventDefault();
+  if (++depth === 1) setActive(true);
+});
+on(document.body, "dragleave", (e) => {
+  if (!carriesFiles(e)) return;
+  if (--depth === 0) setActive(false);
+});
+on(document.body, "dragover", (e) => {
+  if (!carriesFiles(e)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "copy";   // WITHOUT THIS THE DROP NEVER FIRES
+});
+on(window, "dragover", (e) => e.preventDefault());
+on(window, "drop", (e) => e.preventDefault());
+```
+
+Each line earns its place:
+
+- **The depth counter.** `dragleave` fires every time the cursor crosses into a
+  child node, so toggling on the raw events strobes the highlight continuously.
+- **`dropEffect = "copy"`.** Without it the browser refuses the drop and shows a
+  no-entry cursor — the feature looks dead.
+- **The window-level handlers.** Without them a near-miss navigates the Custom
+  UI iframe to `file://…` and the app vanishes with no error, which is about the
+  worst failure available here.
+- **`types.includes("Files")`.** Dragging selected text fires identical events;
+  lighting up for that is noise.
+
+Two cases worth handling explicitly, because silence reads as broken:
+
+- **Folders**: `item.webkitGetAsEntry()?.isDirectory`. Reject rather than
+  recurse. A folder also arrives as a 0-byte `File` with no type, which is the
+  fallback signal when the entry API is unavailable.
+- **An image dragged from ANOTHER TAB**: `types` contains `"Files"` while
+  `files` is empty. There is no File to read and no retry will produce one, so
+  say "drag it from your computer, or use the paperclip".
+
+**Paste routes to the same handler** (`e.clipboardData.files`). Ten lines, and
+pasting a screenshot is the single most common way an image reaches a chat box.
+
+### Testing it
+Playwright cannot start an OS-level file drag, and a real `new DataTransfer()`
+is only half-usable: outside a genuine drag Chromium **ignores writes to
+`dropEffect`** and will not let `webkitGetAsEntry` be defined on its items. Use
+a plain object shaped like a DataTransfer, shadowed onto the event with
+`Object.defineProperty(ev, "dataTransfer", {value: fake})`. It exercises exactly
+the handler contract and records what the handler wrote back.

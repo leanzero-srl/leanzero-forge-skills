@@ -182,3 +182,53 @@ Claim-**first** means a crash mid-execution is *not* retried with side effects i
 - `26-async-events-and-queues.md` — running >25 s LLM calls off a queue
 - `claude-api` skill — model ids, pricing, params, streaming, tool use
 - https://developer.atlassian.com/platform/forge/manifest-reference/modules/llm/
+
+
+## `@forge/llm` facts you cannot infer (measured, 2026)
+
+### It is TEXT-ONLY
+`type ContentPart = TextPart` in **both** 0.6.7 and 1.0.4. There is no image
+part, so a picture can never reach the model as a picture — this single fact
+determines every "can it read screenshots" answer. If you need image content,
+something else has to turn it into text; doing that **in the browser** avoids
+the 500 KB invoke limit entirely (see `23-custom-ui-advanced.md`).
+
+### Output ceiling is NOT 32k — it is the model's own
+Probed against the gateway: every served model accepts
+`max_completion_tokens` up to **128,000**. A lower cap in your code is
+self-imposed. Verify per tier rather than assuming; it is one call.
+
+### `list()` returns `{model, status}` and nothing else
+No context window, no output limit, no pricing. Budgeting is entirely app-side,
+so you need your own table — and it must be refreshed by probing, not by recall.
+A stale model id fails as a **silent downgrade**, not an error.
+
+### `finish_reason: "length"` is the ONLY truncation signal
+Nothing surfaces it by default. Read `choices[].finish_reason` and propagate it,
+or a reply cut mid-JSON is indistinguishable from a model that answered badly.
+
+Real case: a wizard called `chat()` without `maxTokens`, so the client's own
+4096 default applied; the JSON payload was cut mid-array, a tolerant parser
+still accepted the fragment, and the user saw *"No ticket data in creation
+payload"* — an error message about a completely different thing. The reported
+symptom was "it fails past 7.5k context", which was the token chip in the UI
+showing input+output. It was an OUTPUT cut all along.
+
+### There is a per-tenant, per-model TOKEN QUOTA
+```
+429 Forge LLM token usage limit exceeded. This tenant (ari:cloud:jira:…) has
+reached its limit of 50000 tokens for model anthropic.claude-sonnet-4-5-…
+```
+Undocumented as far as I can find, and it is **per model** — so a heavy test run
+can exhaust one tier while others still answer. Budget your live testing, and
+treat a 429 here as a quota problem rather than a rate-limit blip.
+
+### Tool calling is OpenAI-shaped
+`{type: "function", function: {name, description, parameters}}`, and results go
+back as `role: "tool"` messages carrying `tool_call_id`.
+
+**Tool results are untrusted input.** If you carefully fence issue text and
+uploaded documents in the system prompt but push tool results back as a bare
+`JSON.stringify`, you have fenced nothing — the model reaches the same content
+by calling a tool, and on a global-page surface that is the *only* path it
+takes. Envelope them and state the rule once in the system prompt.

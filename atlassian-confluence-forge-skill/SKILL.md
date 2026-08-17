@@ -28,6 +28,7 @@ Skip this skill for:
 - **Relational store** (`@forge/sql`, migrations, limits, upserts): `docs/17-forge-sql.md`.
 - **Reach unlicensed users / signed email links**: `docs/18-unlicensed-access-and-web-triggers.md`.
 - **Limits & quotas** (timeouts, KVS quotas, queue limits, ADF size, consumer budget): `docs/27-faas-limits-and-cost.md`.
+- **Points-based API rate limits** (65k/hr shared Tier-1 pool, 2 pts/identity object, tripwires/budget/quiet-window survival patterns): `docs/31-points-rate-limiting.md`.
 - **ADF vs storage format**: `docs/28-adf-and-storage-format.md`.
 
 ## Quick Reference
@@ -189,6 +190,7 @@ app:
 |---|---|
 | `20-performance-optimization.md` | Caching, batching, pagination |
 | `27-faas-limits-and-cost.md` | Timeouts, KVS quotas, queue limits |
+| `31-points-rate-limiting.md` | Points quota (2026): tiers, headers, survival architecture |
 | `24-production-patterns.md` | 19 production patterns from Sentinel Vault and License Leash |
 
 ### Testing
@@ -242,6 +244,8 @@ CI-safe shell scripts in `scripts/`:
 Recommended workflow: `preflight-check.sh` → make changes → `validate-manifest.sh` → `deploy-and-install.sh`.
 
 ## Changelog
+
+- **2026-08-12** — Added `31-points-rate-limiting.md`: the points quota model verified against live enforcement (1 pt/request + 2 pts/identity object; Tier 1 = 65k/hr shared across ALL installs; Tier 2 per-tenant post-review; `RateLimit-Reason`/`Beta-RateLimit-Policy` headers — observed live value `conf-global-based` differs from the doc's), plus the survival architecture proven on License Leash 4.75→4.86 (scheduling-layer containment, count tripwires with the raw-representation rule, quiet-window re-baselines with episode-stamp bounds, soft budget with admission clamp, capture-only telemetry incl. previously-invisible auth walks, org-pool relief valve) and the platform gotchas met on the way (forge logs -n cap, warm-container module scope, auth-before-migrations schema tolerance, cross-hop queue fields, build-stamp verification).
 
 - **2026-06-26** — Folded battle-tested learnings from **Sentinel Vault** (content protection / Forge LLM) and **License Leash / Axpo License Manager** (cross-product license manager). Added docs `14-macros-and-section-sealing.md`, `15-forge-llm-integration.md`, `16-unified-content-triggers.md`, `17-forge-sql.md`, `18-unlicensed-access-and-web-triggers.md`. Enhanced `24-production-patterns.md` (4 new patterns: in-isolate cache, debounced writes, dual `index.ts`, Custom UI assets/dialogs/theme), `27-faas-limits-and-cost.md` (consumer budget + cursor-resume, siloed cross-product storage, Forge SQL limits), `28-adf-and-storage-format.md` (canonical ADF hashing), `30-testing-and-tunneling.md` (multi-layer harness), and `gotchas.md` (`asUser()` in background jobs, event field parsing, group-API quirks, HTTPS egress ports). New templates: `bodied-macro-section-seal.yml`, `forge-sql-migration.js`, `unlicensed-access-page.yml`, `hmac-web-trigger.js`. Forge-LLM model ids per the `claude-api` skill; `@forge/sql` limits per the official docs. Cross-skill see-also: Forge LLM (`atlassian-jira-forge-skill` + `claude-api`), license-via-group-membership (`atlassian-organizations-api-skill` + `confluence-api-skill`).
 - Replaced the legacy "Authentication via OAuth 2.0 (3LO) or JWT from Forge" claim with the three actually-valid patterns; added an explicit "Auth note" preamble to every doc/template that still contained `AP.context.getToken()` (Atlassian Connect, not Forge).
