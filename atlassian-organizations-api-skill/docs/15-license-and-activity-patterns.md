@@ -9,7 +9,7 @@ using a product on a specific site and (b) grant/revoke that product's seat with
 touching anything else.
 
 > All endpoints are under `https://api.atlassian.com/admin`. Auth is the **Admin API
-> key** as a Bearer token (admin.atlassian.com → Settings → API keys; **Org Admin role
+> key** as a Bearer token (admin.atlassian.com → Organization settings → API keys; **Org Admin role
 > required**; the key is **shown once** at creation). The **org id** is the UUID after
 > `/o/` in the admin console URL (`admin.atlassian.com/o/<org-id>/…`) — not the site name.
 

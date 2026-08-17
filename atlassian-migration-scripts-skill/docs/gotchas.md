@@ -105,12 +105,12 @@ Specific things that bite migration engineers. Each entry is something that has 
 ## JQL / AQL gotchas (post-JCMA)
 
 - **`Customer Request Type` was renamed `Request Type`.** JCMA does this on every JSM project. Sanitize the JQL or the filter parser rejects it.
-- **`not in (Foo, Bar)` fails on Cloud.** Cloud's parser requires `NOT IN ("Foo", "Bar")` — uppercase operator AND quoted bare strings. The `jqlSanitizer` template handles both.
+- **~~`not in (Foo, Bar)` fails on Cloud.~~ STRUCK 2026-08-12 — MEASURED FALSE.** `POST /rest/api/3/jql/parse?validation=strict` on a live Cloud site ACCEPTS `labels not in (Test, TEST)`: lowercase operators and bare single-token values are both fine. What actually fails is a bare value **containing a space** (`status = In Progress` → "You must surround 'In' in quotation marks"). The `jqlSanitizer` uppercasing/quoting passes are cosmetic, not correctness fixes — keep them for canonical form, but do not budget rework for them.
 - **`standardIssueTypes` without parens fails.** DC accepted it as a function reference; Cloud requires `standardIssueTypes()`. Other paren-less names that need fixing: `subTaskIssueTypes`, `votedIssues`, `watchedIssues`, `issueHistory`.
 - **Year-quarter labels collide with placeholder syntax.** Values like `2019Q4`, `2020Q1` *will* break a naive `Q(\d+)` placeholder regex if you use control-char placeholders without proper delimiters. Use SOH/STX (`\x01` / `\x02`) — they cannot legally appear in user-authored JQL.
 - **AQL inside `aqlFunction("...")` is a different language.** Don't rewrite numeric IDs inside it with the JQL rewriter — handle AQL bodies separately with `rewriteAqlFunctionBodies`.
 - **Filter references to deleted entities** can't be auto-rewritten. Surface in the failed CSV; don't fail the whole run.
-- **`cf[N]` and `customfield_N` are interchangeable** in DC-authored JQL. Sanitize both in one pass; the destination accepts either.
+- **~~`cf[N]` and `customfield_N` are interchangeable.~~ STRUCK 2026-08-12 — MEASURED FALSE ON CLOUD.** Cloud's JQL parser accepts `cf[10015]` and the field NAME, and REJECTS `customfield_10015` ("Field 'customfield_10015' does not exist"). Proof from the tenant itself: `GET /rest/api/3/field` returns `clauseNames: ["cf[10015]", "Start date", "Start date[Date]"]` — checked all 188 custom fields on a live site and **not one** advertises a `customfield_N` clause name. Still sanitize both forms in DC-authored input, but the output must be `cf[N]` or the name, never `customfield_N`.
 
 ## Storage format & ADF gotchas
 
@@ -256,6 +256,45 @@ Specific things that bite migration engineers. Each entry is something that has 
 - **Filter by `account_type` first.** Only `atlassian` accounts are staff; skip `customer` (JSM portal users) and `app` (Connect/Forge service accounts) unless you explicitly mean to touch them.
 - **`GET /users` only returns *managed* accounts.** Invited-but-unclaimed users (a different email domain) never appear there. Use `POST /v1/orgs/{orgId}/users/search` to cover both. (Search endpoint deprecated after 2026-06-30 — acceptable for a one-off migration script; verify before reuse.)
 - **Privacy-restricted accounts have no email.** They're skipped silently — you can't safely match a domain without an email.
+
+## Custom-field audit gotchas (MEASURED 2026-08-12 on a live Cloud site)
+
+- **A dead field reference counts to ZERO, not to an error.** `cf[99999] is not EMPTY` and
+  `cf[99999] is EMPTY` both return **HTTP 200, count 0** from `approximate-count` AND from
+  `POST /search/jql`. A bogus clause is not dropped either — `project = X AND cf[99999] is EMPTY`
+  returns 0, not the project total. Every DELETE branch of the `(migrated)` field decision matrix
+  in `17-post-jcma-audit-endpoints.md` is triggered by a zero, so a stale ID recommends deleting a
+  populated field. Gate before you recommend.
+- **~~`is EMPTY` + `is not EMPTY` == scope count proves the reference is live.~~ TOO WEAK — do not
+  use it as the gate.** Swept all 197 custom fields on a live site: 167 partition cleanly, **20
+  return HTTP 400** (not JQL-searchable), **9 live fields sum to 0** (4× `SLA CustomField Type`,
+  Responders, Forms, Design, Vulnerability, Location) and **1 sums short** (`Team`, off by 4
+  subtasks in a team-managed project). On a real JSM tenant this reports populated SLA fields as
+  unused. Keep it as a WARNING; make the catalogue lookup + name assertion the gate.
+- **`GET /rest/api/3/field` lists a custom field only after it has been put on a SCREEN**, and the
+  inclusion is then permanent (verified: create → absent; add to screen → present in ~5s; remove
+  from screen → still present). It reported 188 custom fields where `GET /rest/api/3/field/search?type=custom`
+  reported 197. This supersedes the vaguer note under "Automation rule migration gotchas" — the
+  rule is screen association, not tenant flakiness. **Always use `field/search` for a catalogue.**
+- **`field/search` does NOT return `clauseNames`.** It carries `id`, `name`, `schema`,
+  `typeDisplayName`, `description`, `areOptionsSupported`, `isOptionsCountOverLimit` and the
+  translated variants. Use `typeDisplayName` for type assertions — **do not** derive a type from
+  `schema.custom.split(":").pop()`; several fields have no colon in that string at all.
+- **`GET /field` reports `searchable: true` for fields that 400 on every JQL clause.** Do not trust it.
+- **`approximate-count` rejects an unbounded query AND a trailing `ORDER BY`.** Plan scopes routinely
+  carry a sort; strip it before wrapping, or you get a 400 on `(project = X ORDER BY created) AND ...`.
+  Use `created >= "1970-01-01"` as the tautological "everything" bound.
+- **`jql/parse?validation=strict` is NOT a safe preflight.** It rejects `customfield_10015 is not EMPTY`
+  (which search resolves correctly, returning the same count as `cf[10015]`), and it rejects real
+  fields that have no screen/context yet. Two independent false-alarm modes.
+- **DC-era IDs are recoverable.** JCMA 1.11.4+ exposes a documented (beta) serverId→cloudId mapping
+  API — pull and persist it rather than rebuilding the map by name matching.
+- **Cloud→Cloud is NOT a JCMA job.** Atlassian scopes JCMA to Server/Data Center sources only. The
+  C2C route is Atlassian Administration → **Data management → Data transfer → Create copy plan**.
+  And because both tenants mint custom-field IDs sequentially from 10000 (97/100 slots occupied in
+  the first band on a 197-field site), a wrong ID on C2C returns a **plausible count for a different
+  field**, not a zero — only a name/type assertion catches it.
+
 
 ## See also
 
