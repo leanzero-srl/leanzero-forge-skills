@@ -624,3 +624,84 @@ export const rollbackTransaction = async ({ payload }, context) => {
 
 - [Bridge API Reference](./15-bridge-api-reference.md)
 - [UI Kit Components](./17-ui-kit-components.md)
+
+## Chunked upload: getting a big file past the 500 KB invoke limit
+
+A front-end `invoke` **request** is capped at 500 KB and base64 inflates by 4/3,
+so one call can never carry more than ~370 KB of real file. The symptom is "only
+small files work", which reads as a format problem and sends you to debug the
+extractor.
+
+### The protocol
+
+```
+beginChatFileUpload   → validate, sweep orphans, write a manifest
+putChatFileChunk × N  → idempotent, retry-safe
+finishChatFileUpload  → VERIFY every chunk, then push to a queue
+                        (extraction needs the consumer's 900 s, not 25 s)
+getChatFileStatus     → poll to a terminal state
+cancelChatFileUpload  → for a dismissed chip
+```
+
+### Derive the chunk size, don't pick it
+
+```js
+export const CHUNK_BYTES = 180_224;   // 176 KiB raw → ~234 KiB base64
+```
+
+That fits inside the **240 KiB KVS value** limit *and* well inside the 500 KB
+invoke. A 10 MB file is ~57 chunks; three in flight keeps a progress bar moving
+rather than jumping.
+
+### Verify the chunk ROWS, not the manifest's progress list
+
+Chunks arrive concurrently and each `putChunk` does read-modify-write on one
+manifest, so its `received` array **will** lose entries. That is harmless if
+nothing depends on it — but `finish` must read the rows themselves. A lost write
+would otherwise produce a **silently truncated file**, and a truncated document
+that extracts cleanly is far worse than a failed upload: the model answers
+confidently from half a contract. Check the reassembled byte count against the
+size the browser declared, too.
+
+### Keep the one-shot path
+Under ~300 KB, a single invoke is instant and skips the queue hop entirely.
+Two transports, **one processor** — a file's stored record must not depend on
+which one carried it.
+
+### Orphan cleanup needs THREE layers
+A 10 MB abandoned upload is a hundred times what a stranded job row costs, and
+any single layer can be skipped by a browser that simply goes away:
+
+1. **TTL on every chunk and manifest row** — the platform expires them unattended.
+2. **The consumer deletes chunks on every terminal path**, success or failure.
+3. **`cancel` on a dismissed chip**, plus a sweep of stale manifests at the
+   start of the next upload — the one moment you know someone is present.
+
+Give manifests and chunks **different key prefixes** or the sweep drags every
+chunk body through the resolver (see `gotchas.md`).
+
+### Claim the work, or an at-least-once redelivery does it twice
+"Processing" is not a terminal state, so a redelivery arriving while the first
+invocation is still running falls straight through. If the consumer creates
+anything (a session issue, an attachment), you get two. A timestamped lease is
+enough:
+
+```js
+if (manifest.status === "extracting") {
+  const since = new Date(manifest.extractingSince || 0).getTime();
+  if (Date.now() - since < LEASE_MS) return { success: true };   // someone else has it
+}
+```
+
+### The client wrapper that never throws
+If your resolver helper converts a thrown `invoke()` into
+`{success: false, error: {...}}` — an **object** — then a network blip is
+indistinguishable from a real refusal unless you check the shape. Two bugs came
+from that in one codebase: a poll that aborted on the first hiccup and painted a
+red error over a file that had been stored perfectly, and a list refresh that
+wiped every chip. Distinguish transport failure from an answer, and retry the
+former.
+
+Always give a poll a **deadline**. A consumer killed at its 900 s ceiling leaves
+the manifest non-terminal until its TTL — one chip counted to `reading… 21600s`
+and held the attach button disabled for six hours.

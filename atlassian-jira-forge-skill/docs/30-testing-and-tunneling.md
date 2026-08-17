@@ -243,3 +243,68 @@ forge tunnel                     # test live
 - `08-cli-commands.md` — full CLI reference
 - `gotchas.md` — environment-specific quirks
 - `scripts/preflight-check.sh`, `scripts/validate-manifest.sh`, `scripts/dev-setup.sh`
+
+
+## When a front-end access gate kills the static-server loop
+
+The usual local loop — `python3 -m http.server` over the resource directory,
+driven by Playwright — stops working the moment the app gains a gate that
+**fails closed**. A typical one appends a full-page cover *synchronously* before
+its first `await`, then denies when `invoke()` throws (which it always does with
+no Forge bridge). The page stays covered and nothing initialises, so every
+selector times out and the failure looks like a broken app rather than a missing
+bridge.
+
+### The stub harness that replaces it
+
+Bundle the real component with `@forge/bridge` aliased to a stub, and mount it
+into a copy of the surface's markup with that surface's own `<style>` block
+inlined:
+
+```js
+resolve: { alias: { "@forge/bridge": path.resolve(__dirname, "bridge-stub.js") } },
+output: { publicPath: "" },   // or the automatic-publicPath probe throws under file://
+```
+
+Two details decide whether it is worth anything:
+
+- **Slice the markup out of the real `index.html`, verbatim** — balance `<div>`
+  tags rather than regexing, and inline the real `<style>`. Element ids are the
+  contract your components are parameterised by; a paraphrased skeleton tests a
+  surface that does not ship.
+- **Run it once per surface** if the surfaces have separate stylesheets.
+  Verifying one proves nothing about the other, and duplicated CSS is exactly
+  where they drift.
+
+This tier verifies DOM, CSS, interaction and motion. It proves nothing about the
+bundler, the resolvers, the queue or the model — that is what the deployed tier
+is for.
+
+### Verifying motion instead of eyeballing it
+- Sample computed opacity of both layers through a crossfade and assert the sum
+  never drops below 1.0.
+- Record rAF deltas over ~2 s: average ≈16.7 ms, zero frames over 33 ms.
+- Assert hover/focus/chosen colours with `getComputedStyle`, not a screenshot.
+- Wait on `element.getAnimations()` rather than a fixed timeout — recording
+  video stretches wall-clock enough that a 220 ms entrance is still in flight
+  when a naive sample lands, and a mid-flight opacity reads as a stranded
+  element.
+- Re-run everything with reduced motion **emulated explicitly**
+  (`page.emulateMedia`), and **assert the emulation took**. A reduced-motion
+  suite that silently ran as the normal one reports green while testing nothing.
+
+### Two traps in the deployed tier
+- **A persistent browser profile caches your redeploy.** The giveaway is an
+  implausibly fast run against a stale bundle reporting the previous failure.
+  `Network.setCacheDisabled` via CDP.
+- **`forge logs` lags and is filtered.** Do not iterate on a live bug by
+  redeploying and re-reading logs; add the log line, yes, but favour a
+  deterministic unit-level reproduction. Chasing a live symptom through a
+  laggy log is how an afternoon disappears.
+
+### Structural checkers must strip comments first
+Any test that greps source for a pattern will eventually flag a *comment*
+describing the thing it guards — an egress scan matching a comment that
+mentions `fetch(`, a fence checker matching prose about `role:"tool"`. Strip
+comments before the scan. A checker that reads prose teaches people to write
+around it.
