@@ -68,7 +68,7 @@ There are three practical ways to obtain a token:
 
 ### 1. Admin API key (most common for backend automation)
 
-Create the key at **admin.atlassian.com → Settings → API keys**. The key inherits the creator's organization-admin permissions. Use it directly as a Bearer token:
+Create the key at **admin.atlassian.com → Organization settings → API keys**. The key inherits the creator's organization-admin permissions. Use it directly as a Bearer token:
 
 ```bash
 curl -H "Authorization: Bearer YOUR_ADMIN_API_KEY" \
