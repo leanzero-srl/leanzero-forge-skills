@@ -561,3 +561,48 @@ Before deploying to production:
 - [Rate Limit Handling](19-rate-limit-handling.md)
 - [Custom UI Troubleshooting](18-custom-ui-troubleshooting.md)
 - [Bridge API Reference](15-bridge-api-reference.md)
+
+## Tool schemas are re-sent on EVERY agent iteration — measure them
+
+The cost nobody notices, because it never appears in one place. An agent loop
+bounded at 8 iterations sends the full tool array **eight times per turn**.
+
+Measured on one app: 24 tools = 17,542 JSON chars ≈ **5,482 tokens per
+iteration** ≈ 44,000 per turn on schemas alone, before a single word of
+conversation. One tool (`searchIssues`) was spending ~375 tokens an iteration on
+a JQL tutorial living inside a parameter description.
+
+```js
+const j = JSON.stringify(TOOLS);
+console.log(TOOLS.length, "tools", j.length, "chars", Math.round(j.length / 3.2), "tokens");
+```
+
+Two levers keep it flat while the surface grows:
+
+**A description budget**, enforced by a test rather than intended: 320 chars per
+tool, ~110 per parameter. Anything longer belongs in the system prompt, where it
+is stated **once** instead of eight times.
+
+**Profiles.** Select by GROUP, not by an enumerated list of names, so adding a
+tool to a group puts it in every profile that group belongs to and there is no
+second list to forget.
+
+| Profile | Tools | Tokens/iteration |
+| --- | --- | --- |
+| read-only | 21 | 2,704 |
+| issue-panel | 32 | 5,322 |
+| standard | 35 | 5,727 |
+| standard + agile | 42 | 6,659 |
+
+Net result on that app: **50% more capability for 4% more tokens**. Assert the
+budget in CI — it is the only way it stays true.
+
+### Also worth auditing
+- A tool returning the **entire raw field blob** (`allFields`) on every call:
+  several KB per call, sent back into context, almost never read. Gate it behind
+  an opt-in parameter.
+- **Elide completed tool results** before conversation history when trimming a
+  long loop — a finished payload is the cheapest thing in the window to shed,
+  and dropping a conversation turn instead loses something the model needs.
+- **Two tools hitting the same endpoint** with the same payload cost tokens
+  every iteration and give the model a coin to flip.

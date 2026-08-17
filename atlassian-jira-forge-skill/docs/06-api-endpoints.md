@@ -1169,3 +1169,59 @@ Honor `Retry-After`, back off with jitter (`19-rate-limit-handling.md`). Chunked
 ---
 
 *This documentation is based on the Atlassian Jira Cloud REST API specification.*
+
+## Issue hierarchy, done right
+
+### Levels are NUMERIC; names are not
+`createmeta` returns `hierarchyLevel` per issue type:
+
+| Level | Meaning |
+| --- | --- |
+| `-1` | sub-task |
+| `0` | standard (Story, Task, Bug, …) |
+| `1` | epic |
+| `2+` | Initiative and above (Premium plans) |
+
+**Never assume a type is called "Epic", "Story" or "Sub-task".** Every one of
+those names is renameable per project, the set differs between projects, and it
+differs again between company-managed and team-managed schemes. One test project
+called its standard type *"Work package"* — code matching on `"Story"` created
+epics instead.
+
+```
+GET /rest/api/3/issue/createmeta/{projectIdOrKey}/issuetypes?maxResults=200
+```
+
+Resolve **per project, every time**. An issue-type id from one project is
+meaningless in another.
+
+### Parenthood is `fields.parent` — for BOTH relationships
+Since the Epic Link deprecation, one field covers Story→Epic *and*
+Sub-task→Story:
+
+```json
+{ "fields": { "parent": { "key": "PROJ-1" } } }
+```
+
+Setting it is also how you **move** an issue under a different parent — there is
+no separate endpoint. `PUT /rest/api/3/issue/{key}` with `fields.parent`.
+
+**Never express parenthood as an issue LINK.** A "Relates" link between an epic
+and its stories looks almost identical in a list and is wrong everywhere it
+matters: it does not roll up, does not appear on the backlog, and does not make
+the epic a parent.
+
+A child sits **exactly one level below** its parent. Check the pairing before
+Jira does — its 400 names a field, not the mistake.
+
+### Bulk create can express a tree, with one caveat
+`POST /rest/api/3/issue/bulk` (max 50) creates a **flat** batch, so a child that
+needs a parent created in the same call must go in a second pass once that
+parent has a key. Jira answers **201 for a full success and 400 for a PARTIAL
+one, with the successes still in `body.issues`** — so status alone must not
+decide; read `body.issues` and `body.errors` together.
+
+### There is no clone endpoint
+`cloneIssue` is a composite: read → create → optionally link with `Cloners`. It
+copies **fields only** — say so, because a user who assumes a full clone will be
+surprised by an empty attachments tab.
