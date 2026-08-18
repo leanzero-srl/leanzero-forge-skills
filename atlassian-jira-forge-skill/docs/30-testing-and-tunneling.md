@@ -308,3 +308,43 @@ describing the thing it guards — an egress scan matching a comment that
 mentions `fetch(`, a fence checker matching prose about `role:"tool"`. Strip
 comments before the scan. A checker that reads prose teaches people to write
 around it.
+
+
+## One shared browser window for a live-harness run
+
+A persistent Chrome profile (needed so Atlassian's device identity survives and
+2FA stays quiet) can only be open ONCE — so per-test contexts serialise the
+whole run behind the profile lock, and ~25 tests become the same window
+opening, loading the same page, booting the same app and closing. The profile
+already shares cookies/localStorage between tests, so per-test contexts buy no
+isolation at all — only churn.
+
+Worker-scope the context instead:
+
+- launch once per worker; per-test evidence via `tracing.startChunk()` /
+  `stopChunk({path})` (never `tracing.stop()` — on a shared context that ends
+  tracing for every later test);
+- disable HTTP cache once via CDP (a persistent profile happily serves the
+  bundle from BEFORE your redeploy — the giveaway is an implausibly fast run
+  reporting the previous failure);
+- sweep `page.on(...)` listeners between tests, or one spec's watchers feed the
+  next spec's noise assertions;
+- keep a `VIDEO=1` escape hatch that launches the legacy per-test context and
+  SKIPS the shared launch — video is context-scoped, and two launches of one
+  profile die with "profile is already in use".
+
+Isolation stays where it really was all along: each test navigates fresh (the
+iframe re-boots) and uses its own fixture ids.
+
+## Driving a UI Kit 2 page with Playwright
+
+- UI Kit 2 renders into the **host DOM**, not an iframe — and text selectors
+  collide with the product's own chrome ("Settings" matches Jira's settings
+  hub before your tab). Role-scoped selectors only.
+- Forge **prefixes element ids** — `inputId="pmodel"` becomes
+  `forge-app-<hash>-pmodel`. Match with `[id$="-pmodel"]`.
+- Assert dropdowns on real `role=option` elements after opening them. A
+  body-text match will match a PARENT element's combined text and pass while
+  the menu is wrong.
+- The page exposes no bridge handle, so verify state through resolvers from a
+  Custom UI surface in a second tab.
