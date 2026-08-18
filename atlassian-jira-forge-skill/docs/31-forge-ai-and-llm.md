@@ -220,8 +220,21 @@ showing input+output. It was an OUTPUT cut all along.
 reached its limit of 50000 tokens for model anthropic.claude-sonnet-4-5-…
 ```
 Undocumented as far as I can find, and it is **per model** — so a heavy test run
-can exhaust one tier while others still answer. Budget your live testing, and
-treat a 429 here as a quota problem rather than a rate-limit blip.
+exhausts whichever tier your active personas point at while the others still
+answer. Budget your live testing, and treat a 429 here as a quota problem rather
+than a rate-limit blip.
+
+**It is the usual cause of several UNRELATED specs failing in one long batch run
+while each passes on its own.** Check for it before diagnosing N separate bugs:
+
+```bash
+npx forge logs --environment development --since 60m | grep "token usage limit"
+```
+
+A practical consequence: if your app pins personas or presets to a specific
+model id, a superseded tier can quietly become the one without headroom while
+the picker shows something newer. Migrate the stored ids, not just the offered
+list.
 
 ### Tool calling is OpenAI-shaped
 `{type: "function", function: {name, description, parameters}}`, and results go
