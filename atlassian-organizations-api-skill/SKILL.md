@@ -351,6 +351,7 @@ When an error occurs during execution, follow these patterns:
 
 ## Changelog
 
+- **2026-08-26** — `problem-patterns.md` gains a section establishing that this API is a **separate rate-limit regime from the 2026 product points model**, assembled from three documented facts (its limits are counted in REQUESTS not points; the Admin API key is token traffic, which CHANGE-2958 explicitly exempts; and the points doc scopes itself to Jira/Confluence, while from Forge this is reached by external fetch). Carries the published per-endpoint numbers — **last-active-dates at 200/min per organization**, Events and Polling APIs down to 10/min since May 2025 — the ~68-minute floor 200/min imposes on a 13,500-user sweep, and the operational traps (the pace gate is per isolate, so two concurrent Org-heavy passes blow a pool a user-facing path may share; 429 WARNs with `retry 1/2` are normal on long cursor walks; `links.next` is a bare cursor token, not a URL). Upshot: a Jira/Confluence points exhaustion does not stop Org API work, making it a genuine relief valve for identity questions.
 - **2026-06-26** — Added `docs/15-license-and-activity-patterns.md` and
   `templates/last-active-and-membership.js`; expanded `gotchas.md` (suspend-is-global,
   Admin-API-key specifics, last-active "2s view" + multi-site scoping, membership ≠
