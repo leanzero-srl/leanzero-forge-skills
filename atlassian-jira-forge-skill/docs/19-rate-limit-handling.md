@@ -562,6 +562,124 @@ export const checkRateLimits = async () => {
 
 ---
 
+## Patterns proven under the Confluence points quota that transfer to Jira (2026-08-20)
+
+Battle-tested on a 13,500-user estate (License Leash); the mechanisms are
+platform-generic and apply to any Forge app under the points model:
+
+- **Credit your own writes.** An app that both WATCHES a population (member
+  counts, issue counts, entity totals as change-detection tripwires) and WRITES
+  to that same population will read its own writes as external change and pay a
+  full re-read to discover them. Ledger the app's own writes at the lowest HTTP
+  write function (the funnel every feature path drains through), credit only
+  GENUINE state changes (a 409 already-exists / 404 not-present moved nothing —
+  a credited no-op is the one inaccuracy that can MASK a real external change;
+  every other inaccuracy just costs one spurious re-read), and treat a count
+  that moved exactly as far as your ledgered writes as no-evidence.
+- **Failed-pass retries are schedule, not evidence.** Retrying a failed repair
+  pass every daytime hour spends quota on a read that keeps failing. Defer
+  non-load-bearing retries to a quiet window, with bounded degradation (past
+  48h → any hour; never-completed → immediately) and an operator run-now bypass.
+- **Grace windows are not ground truth.** Auth-path resilience built as a
+  "serve the last proven verdict for ≤N hours" TTL still locks out anyone
+  returning after a gap longer than N during an exhausted hour. Durable local
+  state (a small mirrored group in SQL, refreshed opportunistically) survives
+  storms; recent-success TTLs always have an edge, and the edge gets hit.
+- **Forge SQL has its own installation rate limits** ("Limits for the current
+  installation have been exceeded", code RATE_LIMIT_EXCEEDED) — hit in practice
+  by product-event handlers doing one SQL write per event during view storms.
+  Batch event-driven writes; treat the error as transient backpressure.
+
+Full write-up with the Confluence-side evidence: the sibling skill's
+`atlassian-confluence-forge-skill/docs/31-points-rate-limiting.md`.
+
+---
+
+---
+
+## What actually counts, and what nobody publishes (verified 2026-08-26)
+
+### Only app-initiated BACKEND traffic consumes points
+
+Atlassian Staff, on the record (community.developer.atlassian.com thread 97828, #133):
+
+> "only app-initiated backend traffic counts toward points-based rate limits. Direct,
+> user-initiated UI calls from Forge UI to Jira or Confluence using
+> `@forge/bridge.requestJira` (with no resolver or backend) is treated as standard UI
+> traffic and is **not** included in points."
+
+Counted (#135): "UI → resolver → backend (`@forge/api`); Forge Remote flows invoked
+from the UI; Forge Remote flows invoked from backend code."
+
+⇒ **A read that only paints a screen can move from a resolver to `@forge/bridge` and
+stops costing points.** Highest-leverage change available to a points-constrained
+Forge app, and it is not in the rate-limiting docs. Caveats: Atlassian may include
+this category later "with clear advance notice"; bridge calls run as the USER so they
+see only what that user sees; and it is not a route for background work. `asApp()` vs
+`asUser()` through `@forge/api` makes no difference — the line is backend-vs-frontend.
+
+### Jira's identity class is wider than Confluence's
+
+Confluence lists "Users, Groups, Permissions" at 2 points. **The Jira twin page adds
+Project Roles.** So role and permission reads are identity-priced, and a
+permission-scheme or role-membership walk is far more expensive than its object count
+suggests. The doc also warns that Permissions, Search and Admin operations carry
+additional burst protections beyond the pool.
+
+### The only published multi-object example is on the Jira page — use it
+
+> "Since each user object costs 2 points ... `GET /rest/api/3/group/member?groupname=my-group`
+> Cost calculation: **1 (base) + 8 users = 17 points (1 + 8 × 2)**"
+
+That is the entire documented basis for multiplying a paginated identity collection.
+Everything else is derived.
+
+### The rule is NOT applied consistently — derived costs are upper bounds
+
+A Marketplace partner measured Jira endpoints that ignore the documented rule and
+charge a flat 1 point regardless of object count: `project/{id}/version` (~500
+results → 1), `permissions/project` (~1000 → 1), `user/search?query=` (~10 → 1).
+Their conclusion: "we cannot trust the global rule documented so far." Atlassian never
+answered. Do not plan a budget against a derived number — measure it.
+
+### A POST that READS is ambiguous, and the fork is large
+
+The write row is keyed on HTTP verb, but its description says "operations that
+create, update, or remove data". `POST /rest/api/3/search/jql` does neither. Partner
+measurement: 50 calls consumed **571 points** (~11.4/call), i.e. charged per returned
+result, not 1 flat. **Assume the expensive reading on a hot path until measured.**
+
+### Measure against Atlassian's own counter, not your model
+
+The DELTA in `X-RateLimit-Remaining` between two consecutive responses is the true
+cost of what happened in between — the only way to calibrate a derived model without
+asking anybody. `FORGE_API_REQUEST_COUNT` from the Forge App metrics API counts
+REQUESTS and carries no object multiplier, so it cannot distinguish 1 point per page
+from 501. And Forge surfaces no Atlassian request/trace id to app code, so a refusal
+in your logs cannot be joined to a row in Atlassian's telemetry.
+
+### If you build a self-meter, it is not "capture-only" if anything reads it
+
+License Leash's meter was documented "never gates" — true of the function, false of
+the system, because a self-imposed hourly budgeter summed its estimate to decide when
+to stand work down. It under-counted by ~4x (self-reported 250-280k/day against
+Atlassian's measured 1.11M), so the budgeter effectively never fired. The three
+defects, all worth checking in yours: implementing only two of the model's three terms
+(dropping "+1 per other object"); ONE call site passing its count under the wrong
+argument name (a 250-row page booked as 1 point against 501); and batched tallies
+flushed from background handlers only, so everything spent serving the UI died with
+the isolate. Pin the expected points per response shape in a test and mutation-test
+it — a structural test passes on all three.
+
+### Pool scope is per APP in the docs; "per environment" is not documented
+
+Every doc line and staff answer says per app, shared across all tenants. The word
+*environment* appears in neither rate-limiting doc nor in any of the 31 staff posts in
+thread 97828. Atlassian ecosystem support told License Leash (2026-08-26) that
+enforcement keys on the **OAuth client id** and each Forge environment therefore gets
+its own 65k — undocumented, and a partner states the opposite in thread 98197
+uncorrected. Get it in writing before assuming your dev environment is free.
+
 ## Related Documentation
 
 - [Custom UI Troubleshooting](18-custom-ui-troubleshooting.md)
