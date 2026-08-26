@@ -273,3 +273,52 @@ async function retryWithJitter(fn, maxRetries = 3, baseDelay = 1000) {
 - **[01-core-concepts.md](01-core-concepts.md)** — Rate limits overview
 - **[11-permissions-scopes.md](11-permissions-scopes.md)** — Required scopes
 - **[gotchas.md](gotchas.md)** — Deprecated endpoints
+
+---
+
+## The Org API is a SEPARATE rate-limit regime from the products (verified 2026-08-26)
+
+This matters most when the same app also calls Jira/Confluence: the 2026 points model
+does **not** govern this API, and conflating the two produces both false alarms and
+false comfort.
+
+**Why it is separate**, assembled from three documented facts (Atlassian never state it
+in one sentence):
+1. This API publishes its own limits **counted in REQUESTS, not points** — the
+   `X-RateLimit-Limit` header here means "the number of allowed requests in the current
+   period", not a points quota.
+2. Auth is an **Admin API key** used as a Bearer token, and the points change notice
+   (CHANGE-2958) says "API token-based traffic is not affected by this change".
+3. The points doc scopes itself to Confluence/Jira Cloud. `api.atlassian.com/admin/*`
+   is neither, and from Forge it is reached through **external fetch (egress)**, not
+   `requestConfluence`/`requestJira`.
+
+**The published per-endpoint limits — these are the ones that actually bite:**
+
+| Endpoint family | Documented limit |
+|---|---|
+| `GET /v1/orgs/{orgId}/directory/users/{accountId}/last-active-dates` | **200 requests per minute per organization** |
+| Events API | 60/min per user, 50/min per API path — **lowered to 10/min and 10/min from end of May 2025** |
+| Polling API `GET /v1/orgs/{orgId}/events-stream` | 60/min per user, 50/min per API path |
+
+Everything else in this API has an **undocumented** limit — you find it by receiving a
+429.
+
+**The trap on the hot path.** 200/min on `last-active-dates` is the tightest documented
+constraint in the whole Atlassian surface, and it sits exactly where an identity or
+licence tool wants to iterate. At 13,500 users that is a floor of **~68 minutes of wall
+clock for one full sweep** even at a perfect 200/min, before any retry overhead — which
+is why a 325ms pace (~185/min) is the working setting, and why this work belongs in a
+queue consumer with a resume cursor, never in a resolver.
+
+**Practical consequences**
+- A points-pool exhaustion in Jira/Confluence does NOT stop Org API work, and vice
+  versa. Treat them as two independent budgets — the Org pool is a genuine relief valve
+  for identity questions when the product pool is spent, PROVIDED you can tolerate the
+  325ms pace.
+- The pace gate is usually **per isolate**, so two concurrent Org-heavy passes blow a
+  ~200/60s pool that a user-facing path may share. Serialize them under one concurrency
+  key.
+- 429 WARNs with `retry 1/2` during a long cursor walk are NORMAL at hundreds of pages.
+  Before calling it stuck, check the cursor's last value is advancing — and note
+  `links.next` is a **bare cursor token, not a URL**.

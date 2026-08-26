@@ -92,3 +92,30 @@ For very high-volume integrations:
 - `24-rest-integration-patterns.md` — backoff+jitter, idempotency, chunking implementations
 - https://developer.atlassian.com/cloud/confluence/rate-limiting/
 - https://confluence.atlassian.com/cloud/api-rate-limits-1235124797.html
+
+---
+
+## Points-based rate limiting does NOT apply to this integration (verified 2026-08-26)
+
+Atlassian's 2026 points model (1 pt/request + 2 per identity object + 1 per other
+object, 65,000/hr) governs **Forge apps and Connect apps** — app-initiated backend
+traffic under an OAuth client id. The change notice (CHANGE-2958) is explicit:
+
+> "**API token-based traffic is not affected by this change**, and will continue to be
+> governed by existing burst rate limits."
+
+So an integration authenticating with an **API token** stays on the classic burst /
+concurrency limits: honour `Retry-After`, back off exponentially WITH jitter, keep
+concurrency modest. Do not re-architect a token-based integration around points, and
+do not quote points arithmetic in a support ticket about it — it will read as a
+category error.
+
+**Where it DOES reach you:** OAuth 2.0 (3LO) apps are app-initiated backend traffic
+and are in scope. If this integration authenticates with 3LO rather than a token, read
+the Forge points guidance instead (`atlassian-confluence-forge-skill/docs/31-points-rate-limiting.md`),
+because the pool is shared across every tenant of your client id and one noisy tenant
+can starve the rest.
+
+**Either way, the ground truth is on the response.** The delta in
+`X-RateLimit-Remaining` across two consecutive responses is the real cost of what
+happened between them. Log it before you model anything.
