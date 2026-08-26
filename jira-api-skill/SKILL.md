@@ -171,6 +171,7 @@ Accept: application/json
 | 403 | Token's user/scope lacks the operation. Add scope or grant project permission. | `07-permissions-scopes.md` |
 | 404 | Issue/project/user doesn't exist *or* isn't visible to the auth context (e.g. private project). | — |
 | 409 | You sent a stale `version` or duplicated a unique value. | `24-rest-integration-patterns.md` |
+| Bulk create attributes keys to the wrong issues | `body.issues` holds only the SUCCESSES; read `body.errors[].failedElementNumber` FIRST, and treat a count mismatch as "record nothing" | `gotchas.md` |
 | 410 | Endpoint removed; check v2 → v3 deprecations. | `06-api-endpoints.md` |
 | 429 | Honor `Retry-After`; exponential backoff with jitter. | `27-rate-limits-and-quotas.md` |
 | 5xx | Atlassian-side. Retry with backoff; surface a friendly error. | `24-rest-integration-patterns.md` |
@@ -236,6 +237,15 @@ CI-safe helpers in `scripts/`:
 
 ## Changelog
 
+- **2026-08-26** — `gotchas.md` gains the `POST /issue/bulk` result-mapping trap,
+  found while building a document→backlog generator: the response carries only
+  the SUCCESSES in `body.issues` and reports failures separately by
+  `failedElementNumber`, so positional mapping mis-attributes every key after a
+  rejected element — cosmetic on a flat batch, and silently wrong parenthood on
+  a hierarchy. Includes the failures-first mapping and the rule that a count
+  mismatch must record nothing rather than guess.
+
+- **2026-08-26** — `27-rate-limits-and-quotas.md` now states plainly that the 2026 **points-based model does NOT govern API-token integrations** — CHANGE-2958: "API token-based traffic is not affected by this change" — so token auth stays on the classic burst limits and must not be re-architected around points. Flags the exception that DOES reach here (OAuth 2.0 3LO is app-initiated backend traffic and IS in scope, sharing one 65k/hr pool across every tenant of the client id) and points at the Forge points guide for that case. Plus: the delta in `X-RateLimit-Remaining` across two consecutive responses is the real cost of what happened between them — log it before modelling anything.
 - 2026-06-26: Distilled REST edge-cases from production Forge apps (se-ppm-forge `services/jira-client.js`, CogniRunner) into `06-api-endpoints.md` and `gotchas.md`: issue-link inward/outward direction (counter-intuitive — verify before bulk), cursor-paginated `POST /rest/api/3/search/jql` (`nextPageToken`), `POST /rest/api/3/issue/bulkfetch` (chunk 100), `GET /editmeta` pre-flight to avoid silent no-op field writes, verify-after-write (re-read + diff), and `notifyUsers=false` / `overrideScreenSecurity=true` write flags.
 - Replaced the legacy "JWT — Server-to-server authentication" claim with the three actually-valid Cloud REST options (API token Basic auth, OAuth 2.0 3LO, Forge `api.asUser/asApp`). Locally-signed JWTs are an Atlassian Connect pattern and are not validated by the v3 REST API.
 - Added four new REST-API-specific docs: `24-rest-integration-patterns.md`, `27-rate-limits-and-quotas.md`, `28-adf-construction.md`, `30-testing-rest-integrations.md`.
