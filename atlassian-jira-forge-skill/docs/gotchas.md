@@ -2,6 +2,66 @@
 
 Environment-specific facts and pitfalls that defy reasonable assumptions. Read once before you start; revisit when something's mysteriously broken.
 
+## Toolchain
+
+### A stubbed `node_modules/@forge/*` deploys silently, and looks exactly like a platform outage
+
+`forge deploy` bundles whatever is in `node_modules`. If anything has replaced
+`@forge/kvs`, `@forge/llm` or `@forge/api` with a local test double — an agent
+running app modules under plain node, a half-finished offline harness, a
+`npm link` — **that double is what ships**, and every check you have will pass:
+
+- `npm run lint` — fine, it is valid JavaScript.
+- `npm run build` — fine, webpack bundles it happily.
+- `npx forge lint` — fine, it reads the manifest, not the dependency tree.
+- The unit suite — fine, and this is the trap: unit tests **stub these packages
+  themselves** and never load the real ones, so a green suite is evidence about
+  the stubs, not about the app.
+
+**What it looks like in production** (all observed, 26 Aug 2026, on ChatWise):
+
+| Symptom | Cause in the stub |
+|---|---|
+| A resolver writes a key; the async consumer reads it back as `undefined`, for minutes, while the resolver keeps returning it | the stub kvs is an in-memory `Map` and **every Forge function gets its own copy** |
+| Every `kvs.query().where('key', beginsWith(...))` returns zero results for rows `kvs.set` definitely wrote | the stub's `query()` returns `{results: []}` unconditionally |
+| `_forge_kvs.zH.batchGet is not a function` | the stub implements only `get`/`set`/`delete` |
+| Every model call fails with a message you have never written | the stub's `chat()` throws |
+
+Two hours went into diagnosing that as an Atlassian incident. The tell was in
+`node_modules/@forge/kvs/package.json`: **`"version": "0.0.0"`**, where the lock
+file said `1.6.5`.
+
+**If the app behaves impossibly, check the dependency versions BEFORE you
+believe a platform story**, then `npm ci`.
+
+**The fix is a pre-deploy check**, because nothing else in the pipeline can see
+it. `templates/check-forge-deps.mjs` in this skill: every critical `@forge/*`
+package must match the version the lock file names and carry no stub marker in
+its entry point. Wire it as the first line of your deploy script.
+
+```bash
+echo "🔒 Checking dependency integrity..."
+node scripts/check-forge-deps.mjs   # exits 1 and deploys nothing if a package was replaced
+```
+
+### `no-use-before-define` is not a style rule in a Forge function
+
+A `const` read above its own declaration is a **`ReferenceError` at runtime and
+nowhere else** — the TDZ is invisible to lint defaults, to webpack, and to
+`forge lint`. In an async consumer it kills every invocation of that function
+with a message (`Cannot access 'x' before initialization`) that names a variable
+and not a cause.
+
+It shipped once because a tool list came to depend on a flag declared eighteen
+lines further down. Turn the rule on and it becomes a build failure:
+
+```js
+// .eslintrc.js — functions stay hoistable, which most codebases rely on
+"no-use-before-define": ["error", { functions: false, classes: false, variables: true }],
+```
+
+Enabling it found two more latent cases in the same repo the same minute.
+
 ## Development Environment
 
 ### `forge tunnel` doesn't pick up manifest changes
@@ -42,10 +102,28 @@ The legacy `storage` API stopped receiving feature updates after **2025-03-17**.
 
 ### KVS limits worth remembering
 - 500-char key, regex `/^(?!\s+$)[a-zA-Z0-9:._\s-#]+$/`.
-- 240 KiB per value, max object depth 31.
+- 240 KiB per value, max object depth 31. **BYTES, not characters** — see below.
 - 12 MB/s reads & 1 MB/s writes per key — shard hot keys.
 - 24 MB/s queries per index value.
 - See `27-faas-limits-and-cost.md` for what to do when you hit each.
+
+### The 240 KiB value limit is BYTES; chunking by characters is a bug waiting for a German document
+
+A payload split at `PART_CHARS` characters is only inside the limit for ASCII. A
+character is 1–4 bytes in UTF-8, so the same code that works all through
+development on English test data fails the first time a real customer uploads a
+specification with umlauts in it — and it fails at the *write*, after the
+expensive work that produced the payload is already done.
+
+Either split on bytes, or pick a character size that is safe at the worst case:
+
+```js
+// 60_000 chars is inside 240 KiB even at UTF-8's 4-bytes-per-character worst case.
+const PART_CHARS = 60_000;
+```
+
+The same applies to any per-item cap you derive from the value limit: count what
+the platform counts.
 
 ### Secrets need `setSecret` / `getSecret`
 Plain `kvs.set` is *not* encrypted at rest in the same way. Use `kvs.setSecret(key, value)` / `kvs.getSecret(key)` for credentials.
@@ -180,6 +258,41 @@ It answers **405 Method Not Allowed** — "Method 'GET' is not supported" —
 while `GET /rest/api/3/field` (the list form) succeeds on the same credentials.
 Probed live; it is not a permissions problem. Any tool built on it can only ever
 fail.
+
+### `POST /issue/bulk` returns ONLY the successes in `body.issues`
+
+The obvious mapping — `body.issues[n]` is the nth thing you sent — is wrong the
+instant one element fails. Jira omits the rejected element from `issues`
+entirely and reports it separately in `body.errors[]` by `failedElementNumber`,
+so **every later success shifts down by one** and is recorded against the wrong
+input.
+
+It also answers **201 for a full success and 400 for a PARTIAL one**, with the
+successes still present — so status alone must not decide either.
+
+On a flat batch this is a mislabel. On a **hierarchy** it is not: if the next
+pass resolves a child's parent through that same array, one rejected story
+silently re-parents everything after it, and the user gets a tree that looks
+plausible and is wrong.
+
+```js
+// Read the FAILURES first, then consume the successes against what is left.
+const errs = Array.isArray(body?.errors) ? body.errors : [];
+const failedPositions = new Set(errs.map((e) => Number(e?.failedElementNumber)).filter(Number.isInteger));
+const made = Array.isArray(body?.issues) ? body.issues : [];
+const survived = sent.map((s, pos) => ({ s, pos })).filter(({ pos }) => !failedPositions.has(pos));
+if (made.length === survived.length) {
+  made.forEach((m, n) => record(survived[n].s, m.key));
+} else {
+  // Counts disagree: Jira said something you do not understand. Record NOTHING
+  // and report every entry as an honest failure — guessing is how the
+  // mis-attribution comes back.
+}
+```
+
+Also return the caller's original index with each created issue. Summaries are
+neither unique nor echoed verbatim, so an index is the only reliable way back to
+the input when the result array has been compacted.
 
 ### Bulk endpoints need the *Global bulk change* permission
 `POST /rest/api/3/bulk/issues/fields`, `/transition` and `/move` all require it,

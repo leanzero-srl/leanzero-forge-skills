@@ -917,6 +917,70 @@ if (missing.length) warn(`These fields aren't on ${projectKey}'s edit screen and
 
 ---
 
+## 21. Materialising a generated hierarchy into Jira, resumably
+
+The shape of "turn a plan into N issues in a tree". Everything here was paid for
+in a live run that created 135 issues from a 24 KB document in ~80 s with zero
+failures.
+
+**Plan as a FLAT list with `parentRef`, not a nested tree.** It is exactly the
+shape `createIssues` already consumes, so materialising is a translation rather
+than a second implementation of Jira's parenthood rules.
+
+```js
+{ ref: "n1", parentRef: null, depth: 0, summary, description, covers: ["UR-001"] }
+{ ref: "n2", parentRef: "n1", depth: 1, ... }
+```
+
+**Compute depth from the parent CHAIN, never from a `level` the generator
+supplied.** That is what makes an illegal pairing (a sub-task under an epic)
+impossible to *express*, rather than something you validate for. Break cycles in
+their own pass first — a memoised depth walk that also promotes cycle members to
+root will overwrite its own memo from the frame above it.
+
+**Create level by level, parents first.** `createIssues` can forward-reference
+inside one call, but across a hundred-issue plan the batch boundaries will not
+line up with the tree, and a forward reference that spans batches refers to
+nothing.
+
+**Persist `ref → key` after EVERY batch.** That is the whole of resumability: a
+run that dies at issue 60 of 150 resumes at 61 instead of creating the first
+sixty a second time.
+
+```js
+onProgress: async (p) => { if (p.refs) await patchSession(convId, { createdRefs: p.refs }); }
+```
+
+**Resolve the project's real issue types BEFORE the user approves, and reshape
+the plan to what the project can hold.** Type names are per-project and often
+surprising — on one test project the only level `-1` type is called **Payment**,
+so a preview promising "Sub-tasks" describes issues that will never exist under
+that name. And a project with *no* type at some level must not be handed a plan
+for sixty issues, twenty of which Jira refuses one at a time *after* approval.
+Only demand a type for the levels the plan actually uses.
+
+**Never redraft once anything exists.** A new plan's refs match nothing that was
+created, so redrafting around real issues orphans them and re-creates them on
+the next approval. Once the first issue exists there are exactly two moves:
+finish, or discard.
+
+**Cap what a generated plan may ask for**, at the place the plan is *built*, not
+where it is executed — total nodes, depth, children per node, summary and
+description length. If the plan came from a document, those caps are its blast
+radius.
+
+**Sanitise labels where the plan is built, too.** Jira rejects a label with
+whitespace and takes the whole bulk create down with it, and a normaliser that
+filters empties *before* stripping illegal characters will happily emit `""` for
+a label like `"!!!"`.
+
+**Write provenance into the issue.** The requirement ids an item came from, in
+its description, are the only durable link from a Jira issue back to what
+justified it — and the only way anyone can audit a coverage claim a month later.
+Where the generator returns none (one item in 130, on a real run), name the
+parent instead: a weaker honest provenance beats a borrowed one, and both beat
+none.
+
 ## See also
 
 - `26-async-events-and-queues.md` — full `@forge/events` reference

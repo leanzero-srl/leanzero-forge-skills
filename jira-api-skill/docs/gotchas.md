@@ -56,3 +56,44 @@ By default every `PUT /rest/api/3/issue/{key}` e-mails watchers and the assignee
 ### Issue-link direction is counter-intuitive
 `POST /rest/api/3/issueLink` reads as `outwardIssue <type.outward> inwardIssue`. For **Blocks**, `outwardIssue` is the blocker/predecessor and `inwardIssue` is blocked-by/successor — the field names feel reversed vs the UI wording, and admins rename link descriptions per site.
 - **Fix**: Before any bulk link creation, GET `/rest/api/3/issueLinkType` to read the inward/outward labels, create one probe link, and re-read the issue (`?fields=issuelinks`) to confirm direction. Details + worked example in `06-api-endpoints.md`.
+
+## `POST /rest/api/3/issue/bulk` returns ONLY the successes
+
+The obvious mapping — `body.issues[n]` is the nth thing you sent — is wrong the
+instant one element fails. Jira omits the rejected element from `issues`
+entirely and reports it separately in `body.errors[]` by `failedElementNumber`,
+so **every later success shifts down by one** and is recorded against the wrong
+input.
+
+It also answers **201 for a full success and 400 for a PARTIAL one**, with the
+successes still present in `issues` — so the status code alone must not decide
+whether anything was created.
+
+On a flat batch that is a mislabel you might never notice. On a **hierarchy** it
+is not: if a later pass resolves a child's parent through that same array, one
+rejected element silently re-parents everything after it, and you get a tree
+that looks plausible and is wrong.
+
+```js
+// Read the FAILURES first, then consume the successes against what is left.
+const errs = Array.isArray(body?.errors) ? body.errors : [];
+const failed = new Set(errs.map((e) => Number(e?.failedElementNumber)).filter(Number.isInteger));
+const made = Array.isArray(body?.issues) ? body.issues : [];
+const survived = sent.map((s, pos) => ({ s, pos })).filter(({ pos }) => !failed.has(pos));
+
+if (made.length === survived.length) {
+  made.forEach((m, n) => record(survived[n].s, m.key));
+} else {
+  // The counts disagree: Jira told you something you do not understand. Record
+  // NOTHING and report every entry as an honest failure — guessing here is
+  // exactly how the mis-attribution comes back.
+}
+```
+
+Carry the caller's original index back with each created issue. Summaries are
+neither unique nor echoed verbatim, so once the result array has been compacted
+an index is the only reliable way home.
+
+Related: **JQL is eventually consistent**, so do not verify a bulk create by
+searching for it. `parent = KEY` can return zero seconds after the children
+exist while `GET /issue/{key}` shows the parent set correctly. Read back by key.

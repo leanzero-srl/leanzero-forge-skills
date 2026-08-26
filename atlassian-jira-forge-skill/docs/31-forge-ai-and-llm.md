@@ -236,6 +236,94 @@ model id, a superseded tier can quietly become the one without headroom while
 the picker shows something newer. Migrate the stored ids, not just the offered
 list.
 
+### OUTPUT LENGTH is the ceiling for structured generation, not context
+
+The instinct on a big job is to worry about the input window. With a 1M-token
+context and a 128k output ceiling that is almost never what bites. What bites is
+that **a single large JSON reply gets cut mid-array**, and a truncated object is
+not a smaller answer — it is an unparseable one, and the error surfaces as
+something about *content* for a failure that was purely about *length*.
+
+Measured: a persona configured with `max_tokens: 16384` asked for a
+hundred-issue plan in one object produced a fragment every time. The same work
+split into **one call per parent** — group the material first, then one call per
+group — produced 135 items with no truncation at all, because every individual
+reply is a handful of children.
+
+Splitting buys three things beyond not truncating:
+
+1. **Resumability.** A run that dies after four of eight groups has four groups
+   of real output, not nothing.
+2. **A deadline you can honour.** Check the clock between calls and return a
+   partial (see below) instead of dying at the invocation ceiling.
+3. **Cheaper prompts.** Each call carries only its own group's material, not the
+   whole corpus.
+
+Cost for a 24 KB source document: 1 extraction call + 1 per group ≈ 8–13 calls,
+about 6 minutes wall clock on Sonnet.
+
+### A multi-call turn needs a deadline INSIDE the 900 s ceiling
+
+The async consumer's `timeoutSeconds` maxes at 900, and the typical front-end
+poller gives up at the same 900 s — so a run that uses all of it produces
+**nothing the user can see**. Pass a `deadlineAt` into every stage and return
+what you have:
+
+```js
+const deadlineAt = Date.now() + 12 * 60 * 1000;   // 12 min, inside 15
+// ...between calls:
+if (deadlineAt && Date.now() > deadlineAt) {
+  return { ok: items.length > 0, items, partial: true, unread: remaining };
+}
+```
+
+And **report the shortfall in the units the user cares about**. A stage that
+stops early must say how much of the source it never opened; the first version
+of ours reported "0 characters not read" for a document it had barely started,
+because it counted only the truncation its own windowing had done and not the
+windows the deadline meant it would never open. That is the one number in a
+feature like this that must never flatter itself.
+
+### Write progress to the job row; the poller is already reading it
+
+A five-minute turn is an unexplained spinner otherwise. The status field a
+polling client already renders is free real estate:
+
+```js
+onProgress: async (p) => {
+  await writeJob(jobId, { progressNote: `${p.note} ${p.done}/${p.total}` });
+}
+// getJobStatus: prefer the note over the generic per-status line
+status: (job.status === "processing" && job.progressNote) || STATUS_TEXT[job.status],
+```
+
+Remember the job-row `result` object is usually an **explicit allow-list**: a
+field added upstream and not added there is silently dropped, and the symptom is
+a feature that simply never appears.
+
+### An approval that gates real writes must be STRICTER than a confirmation
+
+Two different situations, and one predicate does not serve both:
+
+- A **destructive-tool confirmation** follows a direct question the model just
+  asked, so "does this message contain a yes" is a fair test.
+- A **plan approval** arrives cold, with the plan on screen and the user free to
+  say anything. There, an unanchored `/\byes\b/` reads *"yes I know, but can you
+  show me epic 3 first?"* as permission to create sixty-three issues. Verified
+  by running it.
+
+Four conditions, each of which killed a real false positive: **no question
+mark** (a question is never an approval, however many yeses); **no negation**,
+except the ones that mean yes (`"approve, no changes"`); the affirmative in the
+**first clause**, not buried after a *but*; and the message **asks for nothing
+else** (`show`, `list`, `explain`, `first`, `wait`, `before`…).
+
+And when a sentence says both stop and continue — *"forget it, I'll finish the
+rest myself"* — **the one that stops wins**. Check the cancel pattern *before*
+the continuation pattern, and make any belt-and-braces second gate use a
+DIFFERENT predicate from the one that made the decision; a gate that re-asks the
+same question can only ever agree.
+
 ### Tool calling is OpenAI-shaped
 `{type: "function", function: {name, description, parameters}}`, and results go
 back as `role: "tool"` messages carrying `tool_call_id`.

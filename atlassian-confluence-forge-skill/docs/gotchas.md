@@ -2,6 +2,53 @@
 
 This document contains environment-specific facts and common pitfalls that defy reasonable assumptions. Use this to avoid common mistakes during development.
 
+## Toolchain
+
+### A stubbed `node_modules/@forge/*` deploys silently, and looks exactly like a platform outage
+
+`forge deploy` bundles whatever is in `node_modules`. If anything has replaced
+`@forge/kvs`, `@forge/llm`, `@forge/sql` or `@forge/api` with a local test
+double — an agent running app modules under plain node, a half-finished offline
+harness, an `npm link` — **that double is what ships**, and every check passes:
+lint (valid JS), webpack (bundles it happily), `forge lint` (reads the manifest,
+not the dependency tree), and the unit suite (which stubs those packages itself
+and never loads the real ones, so a green suite is evidence about the stubs).
+
+Observed 26 Aug 2026 on a Forge app: a stubbed `@forge/kvs` made storage an
+in-memory `Map` that **every Forge function had its own copy of** — a resolver
+wrote a key and the async consumer read `undefined` for minutes while the
+resolver kept returning it; every prefix query returned zero results;
+`batchGet` did not exist; `@forge/llm` threw on every call. Two hours went into
+diagnosing it as an Atlassian incident. The tell was
+`"version": "0.0.0"` in the package's own `package.json`, where the lock file
+said `1.6.5`.
+
+**If the app behaves impossibly, check the dependency versions BEFORE you
+believe a platform story**, then `npm ci`. Then wire a pre-deploy check — see
+`atlassian-jira-forge-skill/templates/check-forge-deps.mjs`, which applies
+unchanged here.
+
+### `no-use-before-define` is not a style rule in a Forge function
+
+A `const` read above its own declaration is a **`ReferenceError` at runtime and
+nowhere else** — invisible to lint defaults, to webpack and to `forge lint`. In
+an async consumer it kills every invocation with a message that names a variable
+and not a cause. Turn it on:
+
+```js
+"no-use-before-define": ["error", { functions: false, classes: false, variables: true }],
+```
+
+### The KVS 240 KiB value limit is BYTES, not characters
+
+A payload split at N *characters* is only inside the limit for ASCII — a
+character is 1–4 bytes in UTF-8, so code that works all through development on
+English test data fails the first time a real page or attachment carries
+umlauts, and it fails at the *write*, after the expensive work is done. Split on
+bytes, or size the character cap for the 4-bytes-per-character worst case
+(60,000 chars is safe).
+
+
 ## 🛠️ Development Environment
 
 ### Forge Tunnel & Manifest Changes
