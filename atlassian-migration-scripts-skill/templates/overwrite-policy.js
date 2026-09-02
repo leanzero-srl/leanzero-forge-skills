@@ -49,7 +49,8 @@
  *       case "skip-empty":
  *       case "skip-noop":
  *       case "skip-target-not-empty":
- *         planManager.updateEntryStatus(issue.key, "skipped", decision.reason);
+ *         planManager.updateEntryStatus(issue.key, "skipped");
+ *         planManager.patchEntry(issue.key, { skipReason: decision.reason });
  *         break;
  *     }
  *   }
