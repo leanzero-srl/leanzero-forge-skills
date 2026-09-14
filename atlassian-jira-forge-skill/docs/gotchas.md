@@ -167,8 +167,8 @@ The `viewportSize` (`small`, `medium`, `large`) is a hint, not a strict cap. Tes
 | Surface | Default Timeout | Hard Ceiling |
 |---|---|---|
 | Resolver / trigger / validator / post-function | 25 s | 25 s |
-| `consumer` (async event handler) | 25 s default, set `timeoutSeconds:` to extend | 900 s |
-| `preUninstall` | 55 s | 55 s |
+| `consumer` / scheduled trigger function | 55 s default, set `timeoutSeconds:` to extend (limits-invocation page, verified 2026-09-14: "Default timeout is 55 seconds. Use timeoutSeconds to extend it.") | 900 s |
+| `preUninstall` | 55 s (unverified — not stated on the limits-invocation page as of 2026-09-14) | 55 s (unverified) |
 | `queue.push` payload | — | 50 events / 200 KB combined |
 | `InvocationError.retryData` | — | 4 KB |
 | Async retries | — | 4 retries |
