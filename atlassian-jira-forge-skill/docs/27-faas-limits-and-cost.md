@@ -10,7 +10,7 @@ The hard numbers you need to design around. All values are from `developer.atlas
 | Trigger | 25 s | 25 s |
 | Workflow validator / condition / post-function | 25 s | 25 s |
 | Scheduled trigger | 25 s | 25 s |
-| Web trigger | 25 s | 25 s |
+| Web trigger | 55 s | 55 s (verified 2026-09-14 against developer.atlassian.com/platform/forge/limits-invocation/: "Runtime seconds (web trigger, action and rovo:agentConnector modules): 55") |
 | **Consumer (async event handler)** | 25 s | **`timeoutSeconds:` up to 900 s** |
 | `preUninstall` | 55 s | 55 s |
 
