@@ -9,10 +9,10 @@ The hard numbers you need to design around. All values are from `developer.atlas
 | Resolver | 25 s | 25 s (hard ceiling) |
 | Trigger | 25 s | 25 s |
 | Workflow validator / condition / post-function | 25 s | 25 s |
-| Scheduled trigger | 25 s | 25 s |
-| Web trigger | 55 s | 55 s (verified 2026-09-14 against developer.atlassian.com/platform/forge/limits-invocation/: "Runtime seconds (web trigger, action and rovo:agentConnector modules): 55") |
-| **Consumer (async event handler)** | 25 s | **`timeoutSeconds:` up to 900 s** |
-| `preUninstall` | 55 s | 55 s |
+| Scheduled trigger | 55 s | `timeoutSeconds:` up to 900 s |
+| Web trigger | 55 s | 55 s (verified 2026-09-14, limits-invocation page) |
+| **Consumer (async event handler)** | 55 s | **`timeoutSeconds:` up to 900 s** (default 55 s verified 2026-09-14, limits-invocation page) |
+| `preUninstall` | 55 s (unverified) | 55 s (unverified — not stated on the limits-invocation page) |
 
 Need >25 s? Push to a queue. See `26-async-events-and-queues.md`.
 

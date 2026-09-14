@@ -34,7 +34,7 @@ modules:
       handler: index.enqueue
     - key: consume
       handler: index.consume
-      timeoutSeconds: 900       # max for consumers (default 25)
+      timeoutSeconds: 900       # max for consumers (default 55)
 ```
 
 ## Producer
