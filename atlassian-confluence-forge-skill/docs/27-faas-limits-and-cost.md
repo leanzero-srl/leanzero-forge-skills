@@ -9,7 +9,7 @@ The hard numbers you need to design around. Same FaaS platform as the Jira Forge
 | Resolver | 25 s | 25 s (hard) |
 | Trigger | 25 s | 25 s |
 | Scheduled trigger | 25 s | 25 s |
-| Web trigger | 25 s | 25 s |
+| Web trigger | 55 s | 55 s (verified 2026-09-14 against developer.atlassian.com/platform/forge/limits-invocation/: "Runtime seconds (web trigger, action and rovo:agentConnector modules): 55") |
 | **Consumer (async event handler)** | 25 s | **`timeoutSeconds:` up to 900 s** |
 | `preUninstall` | 55 s | 55 s |
 
