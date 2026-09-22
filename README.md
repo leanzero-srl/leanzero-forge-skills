@@ -8,7 +8,7 @@ A skill is a directory containing a `SKILL.md` file with YAML frontmatter (name 
 
 ## Available skills
 
-This repo ships **seven skills**. Pick the one that matches your task — they don't overlap when used correctly.
+This repo ships **eight skills**. Pick the one that matches your task — they don't overlap when used correctly.
 
 | Skill | Use when… | Don't use when… |
 |---|---|---|
@@ -19,6 +19,7 @@ This repo ships **seven skills**. Pick the one that matches your task — they d
 | **[confluence-api-skill](confluence-api-skill/)** | Calling the **Confluence Cloud REST API v2** from an **external app**. Pages, blogposts, attachments, content properties, ADF/storage formats. | Building a Forge app → `atlassian-confluence-forge-skill`. |
 | **[atlassian-migration-scripts-skill](atlassian-migration-scripts-skill/)** | Writing Node.js **migration scripts** — Data Center → Cloud or Cloud ↔ Cloud — using a Plan/Sync/Audit triad, native-https clients, CSV outputs, and Forge KVS remote app-data mending. | One-off curls or building a long-running service — those don't need the resumable/auditable scaffolding. |
 | **[forge-security-review](forge-security-review/)** | Producing a **security review pack** for a Forge app — technical profile, SAST, SCA — for an AAP/security approval, or before shipping a dependency fix. Includes the traps that make a clean-looking report wrong (the OSV-vs-npm-audit split, unvalidated scanner zeros) and the risk classes scanners can't see. | Building app features → the Forge skills. |
+| **[automation-engineer](automation-engineer/)** | Reading, creating, updating or migrating **Jira/Confluence Automation rules** over REST — the real API at `api.atlassian.com/automation/public/...`, not the site's own `/rest/api/3/...` surface most people give up on. Includes the three undocumented rules that make `POST /rule` (create) actually work. | Native workflow validators/conditions/post-functions (a different subsystem) → the Forge skills or `jira-api-skill`. |
 
 ## Quick decision flow
 
@@ -33,6 +34,8 @@ Are you writing code that runs *inside* Atlassian (as a Forge function)?
 └── No (external HTTP client):
     ├── Need a security review / SAST / SCA / AAP evidence for a Forge app?
     │                              → forge-security-review
+    ├── Reading/creating/migrating Automation rules?
+    │                              → automation-engineer
     ├── Talking to Jira?           → jira-api-skill
     ├── Talking to Confluence?     → confluence-api-skill
     └── Talking to org admin APIs? → atlassian-organizations-api-skill
@@ -47,7 +50,7 @@ Skills are discovered automatically by Cline / Claude Code from these paths:
 - **Project-scoped** (recommended for teams): `.cline/skills/`, `.clinerules/skills/`, or `.claude/skills/`
 - **Globally-available** (your personal collection): `~/.cline/skills/` or `~/.claude/skills/`
 
-To install all six skills globally, run:
+To install all eight skills globally, run:
 
 ```bash
 ./scripts/install-skills.sh
@@ -61,7 +64,7 @@ To install manually:
 mkdir -p ~/.claude/skills ~/.cline/skills
 for s in atlassian-jira-forge-skill atlassian-confluence-forge-skill \
          atlassian-organizations-api-skill jira-api-skill confluence-api-skill \
-         atlassian-migration-scripts-skill; do
+         atlassian-migration-scripts-skill forge-security-review automation-engineer; do
   ln -sf "$(pwd)/$s" "$HOME/.claude/skills/$s"
   ln -sf "$(pwd)/$s" "$HOME/.cline/skills/$s"
 done
@@ -78,10 +81,12 @@ skill-jira-forge/                          # repo root
 │   └── install-skills.sh                  # symlinks skills into ~/.{claude,cline}/skills
 ├── atlassian-jira-forge-skill/            # ──┐
 ├── atlassian-confluence-forge-skill/      #   │
-├── atlassian-organizations-api-skill/     #   │  the six skills
-├── jira-api-skill/                        #   │
+├── atlassian-organizations-api-skill/     #   │
+├── jira-api-skill/                        #   │  the eight skills
 ├── confluence-api-skill/                  #   │
-├── atlassian-migration-scripts-skill/     # ──┘
+├── atlassian-migration-scripts-skill/     #   │
+├── forge-security-review/                 #   │
+├── automation-engineer/                   # ──┘
 └── docs/                                  # repo-level documentation (not skill content)
 ```
 
