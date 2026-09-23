@@ -136,3 +136,72 @@ PUT /rest/api/3/issue/PROJ-123?notifyUsers=false&overrideScreenSecurity=true
 - **`overrideScreenSecurity=true`** — lets you write fields that aren't on the edit screen. Use **deliberately**: it bypasses the very protection `editmeta` reports on, so it's the escape hatch *after* you've decided a field-not-on-screen should still be written, not a substitute for checking. Requires admin-level permission; a non-admin token gets 403.
 
 se-ppm-forge sets both on its app-identity writes (`?notifyUsers=false&overrideScreenSecurity=true`).
+### Archived issues: there is NO read API, and the refusal LIES (measured 3 Sep 2026)
+
+Measured first-hand on a Cloud site by archiving a throwaway issue, running every
+probe, then unarchiving and deleting it. Do not re-derive this — it costs a live
+archive cycle.
+
+| Probe on an ARCHIVED issue | Result |
+|---|---|
+| `GET /rest/api/3/issue/{key}` | **200**, full normal payload, **nothing anywhere says archived** |
+| `GET …/issue/{key}?fields=summary,archiveddate,archivedby` | **200**, the unknown names silently dropped |
+| `GET /rest/api/3/field` | **no field matches `archiv*`** on Cloud at all |
+| `POST /rest/api/3/search/jql` `key = "X"` | **200 with `{"issues":[]}`** — silently excluded, no error |
+| `PUT /rest/api/3/issue/{key}` | **400** `{"errors":{"summary":"Field 'summary' cannot be set. It is not on the appropriate screen, or unknown."}}` |
+| `GET …/issue/{key}/editmeta` | **200** `{"fields":{}}` — why every field reads as "not on the screen" |
+| `GET …/issue/{key}/transitions` | **200** `{"transitions":[]}` |
+| `POST …/issue/{key}/comment` | **400** "you do not have the permission to comment on this issue" |
+
+Consequences worth internalising:
+
+- **`archiveddate` / `archivedby` are DATA CENTER fields.** On Cloud they exist
+  only inside the archived-issues CSV export. Atlassian have the API gap open as
+  **JRACLOUD-93268** (Gathering Interest).
+- **Naming an unknown field in `fields=` is NOT an error** — Jira answers 200 and
+  drops it. So "ask for `archiveddate`, treat its absence as not-archived"
+  returns a confident **false** on every Cloud issue forever. Verified with a
+  control (`fields=summary,totallyBogusFieldXyz123` → 200, only `summary`).
+- **The 400 on an archived edit is indistinguishable from a real screen-config
+  problem**, and never mentions archiving. Any integration that reports Jira's
+  message as the cause will tell the user their screens are wrong. If you need
+  the true cause, correlate: readable by GET **and** absent from JQL search ⇒
+  archived. Both halves are required — a nonexistent issue is also absent from
+  search. Watch for the index lag: an issue created seconds ago is unfindable
+  and not archived.
+- `GET /rest/api/3/issue/{key}` defaults to **`*all`** fields — unlike JQL
+  search, whose default is `*navigable`. Naming a `fields` subset on a GET
+  therefore *narrows* what you would otherwise have received.
+- Archive/unarchive are `PUT /rest/api/3/issue/archive` and `…/unarchive`
+  (`{"issueIdsOrKeys":[…]}` → `{"numberOfIssuesUpdated":n,"errors":{}}`),
+  Premium/Enterprise and Jira-admin only. There is no read endpoint.
+  **Two plausible-looking shapes are wrong, and each fails differently — which
+  matters, because a test that treats the failure as "this site cannot archive"
+  SILENTLY SKIPS instead of failing (this cost a real live run on 3 Sep):**
+  `PUT /rest/api/3/issue/{key}/archive` **does not exist** and 404s with
+  `"No endpoint PUT …"`; `POST /rest/api/3/issue/archive` with `issueIdsOrKeys`
+  400s with `"Invalid request payload"` because POST is the **JQL** form
+  (`{"jql":"…"}`). A 400 rather than a 404 is the tell that the endpoint is real
+  and only the body is wrong.
+
+### `GET /rest/api/3/project/{key}/securitylevel` returns only what YOU may set
+
+It answers `{"levels":[{id,name,description,self}]}`, is **not paged**, 404s on an
+unknown project and 403s without browse permission. The trap: it returns
+**200 `{"levels":[]}`** both when the project has no issue security scheme *and*
+when the caller lacks the **Set Issue Security** permission. Proven live — a
+project whose scheme (id 10106) definitely contains a level (10118) returned an
+empty array to a caller whose `mypermissions` showed `SET_ISSUE_SECURITY: false`.
+Never report an empty array as "this project has no security levels".
+
+For the scheme's REAL levels regardless of the caller's permission, use
+`GET /rest/api/3/issuesecurityschemes/{id}` or
+`…/issuesecurityschemes/level?schemeId={id}` (admin).
+
+Set the level in the create/update payload as **`"security": {"id": "10000"}`**
+(id as a STRING — the only form the v3 spec's example shows; the `name` form is
+community folklore on Cloud). The field only appears in `createmeta`/`editmeta`
+when the caller has Set Issue Security, which makes those a reliable pre-flight.
+`GET /rest/api/3/field` lists it as `{"id":"security","name":"Security Level",
+"clauseNames":["level"],"schema":{"type":"securitylevel","system":"security"}}` —
+note the JQL clause is **`level`**, not `security`.
