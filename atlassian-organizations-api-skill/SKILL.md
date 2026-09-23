@@ -85,7 +85,7 @@ Every endpoint takes a **Bearer token** in the `Authorization` header. Per the o
 
 ### 1. Admin API key (simplest, most common for backend automation)
 
-Create the key in **admin.atlassian.com → Settings → API keys**. Then use it directly as a Bearer token:
+Create the key in **admin.atlassian.com → Organization settings → API keys**. Then use it directly as a Bearer token:
 
 ```bash
 curl -H "Authorization: Bearer YOUR_ADMIN_API_KEY" \

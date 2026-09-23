@@ -255,7 +255,7 @@ See `docs/15-license-and-activity-patterns.md`.
 
 ## Admin API Key Specifics (Org Admin only, shown once)
 
-- Created at **admin.atlassian.com → Settings → API keys**; creating one requires the
+- Created at **admin.atlassian.com → Organization settings → API keys**; creating one requires the
   **Organization Admin** role.
 - The key value is **displayed only once** at creation — store it immediately; you can't
   re-read it later, only rotate (replace) it. Never log it; redact it in audit trails.

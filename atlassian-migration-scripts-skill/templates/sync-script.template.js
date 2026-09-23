@@ -145,7 +145,11 @@ class MigrationSync {
     await runPool(entries, async ([entryId, data]) => {
       this.stats.processed++;
       if (this.opts.dryRun) {
-        this.planManager.updateEntryStatus(entryId, "skipped", "dry-run");
+        // The 3rd arg is the ERROR field — never put a skip reason there, or a
+        // dry run leaves every entry looking like a failure to anything auditing
+        // the plan. Status + a separate reason field keeps the two apart.
+        this.planManager.updateEntryStatus(entryId, "skipped");
+        this.planManager.patchEntry(entryId, { skipReason: "dry-run" });
         this.stats.skipped++;
         return;
       }

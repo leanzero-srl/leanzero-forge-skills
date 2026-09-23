@@ -214,11 +214,22 @@ function canonicalize(node) {
   }
   const out = {};
   const keys = Object.keys(node).sort();
+  // An empty `text` drops the node — but ONLY when the node IS a text node.
+  // Until 2026-09-02 this fired on ANY object carrying a `text` key, and a
+  // mention's `attrs` carries one: `attrs.text` is optional in Atlassian's ADF
+  // spec, and this file's own `mention(accountId)` emits `text: ""` when no
+  // displayName is given. The whole `attrs` object was therefore nulled — taking
+  // `attrs.id` with it — so two mentions of DIFFERENT users canonicalised to
+  // {"attrs":null,"type":"mention"} and hashed the same. Used for no-op
+  // detection that means a re-run correcting a wrong user mapping would be
+  // SKIPPED as "destination already matches". Same annihilation hit emoji and
+  // status nodes. Guard on the node type, not on the key name.
+  const isTextNode = node.type === "text";
   for (const k of keys) {
     let v = node[k];
     if (k === "text" && typeof v === "string") {
       v = v.replace(/\s+/g, " ").trim();
-      if (!v) return null;
+      if (!v && isTextNode) return null;   // an empty TEXT NODE is nothing
     }
     if (k === "marks" && Array.isArray(v) && v.length === 0) continue;
     if (k === "attrs" && v && typeof v === "object" && Object.keys(v).length === 0) continue;
