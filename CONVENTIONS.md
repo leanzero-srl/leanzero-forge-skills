@@ -122,7 +122,7 @@ import re, os, sys
 broken = []
 for skill in ['atlassian-jira-forge-skill', 'atlassian-confluence-forge-skill',
               'atlassian-organizations-api-skill', 'jira-api-skill', 'confluence-api-skill',
-              'atlassian-migration-scripts-skill']:
+              'atlassian-migration-scripts-skill', 'forge-security-review', 'automation-engineer']:
     roots = [f'{skill}/SKILL.md']
     for d in ['docs', 'templates', 'scripts']:
         p = f'{skill}/{d}'
@@ -142,7 +142,7 @@ print(f'OK')
 "
 
 # 2) No duplicate file-number prefixes within each skill
-for skill in atlassian-*-skill *-api-skill; do
+for skill in atlassian-*-skill *-api-skill forge-security-review automation-engineer; do
   dupes=$(ls "$skill"/docs/*.md 2>/dev/null | xargs -n1 basename | awk -F'-' '{print $1}' | sort | uniq -d)
   [[ -n "$dupes" ]] && echo "$skill: dupe prefix $dupes" && exit 1
 done

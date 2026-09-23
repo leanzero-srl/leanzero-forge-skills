@@ -1,6 +1,12 @@
 # JQL & AQL Rewriting
 
-JCMA migrates filter definitions but does NOT rewrite the JQL inside them. After a DC→Cloud migration, hundreds of filters typically end up broken because:
+> **CORRECTED 2026-08-12.** The old opening claimed "JCMA migrates filter definitions but does not rewrite the JQL inside them." That understates the problem. Per Atlassian's
+> [what gets migrated](https://support.atlassian.com/migration/docs/what-gets-migrated-with-the-jira-cloud-migration-assistant/) page, JCMA migrates only *"filters associated with boards being migrated"*. **Cross-project filters, filters on boards that are not migrated, filters that share permissions with projects, dashboards and filter subscriptions are NOT migrated at all.** So on DC→Cloud you are usually MOVING the filters yourself over the API, and you own the rewriting end to end. Cloud→Cloud is the opposite: the org-level
+> [data transfer](https://support.atlassian.com/organization-administration/docs/what-product-data-is-copied/) DOES copy filters not linked to boards and filters linked to more than one project — which is why C2C fails silently where DC→Cloud fails loudly. Measured write-up: [leanzero.net](https://leanzero.net/blog/jira-filters-survived-the-migration).
+>
+> Also measured: `POST /rest/api/3/filter` enforces the same validation as strict parse (it REFUSES dead field ids and dead filter ids), **except for users** — `assignee = jsmith` saves clean on Cloud and matches nobody. Rewrite user clauses deliberately; the import will not complain.
+
+Filters that do move, or that you move yourself, break because:
 
 - The numeric filter IDs in `filter = 12345` references point at DC-only filters.
 - The custom-field IDs in `cf[10042]` and `customfield_10042` references no longer exist.
