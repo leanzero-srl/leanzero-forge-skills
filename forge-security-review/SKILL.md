@@ -33,6 +33,18 @@ It builds the technical profile from `manifest.yml`, runs Semgrep (**canary-vali
 splits findings ours-vs-SDK, flags phantom deps and mutable version tags, and emits the pack. **Read what it
 emits — it is a draft, not a verdict.** The judgment calls below are yours.
 
+
+Then the checks a scanner cannot make, which is where the real findings were on the review
+this method was built from:
+
+```
+python3 scripts/forge_authz_scan.py /path/to/forge-app
+# -> candidate sites for: app-scoped storage with no ownership check, zero-entropy ids,
+#    every system-prompt builder, write tools in an agent loop, the zero-egress fallacy
+```
+
+It reports QUESTIONS with evidence, never verdicts — a missing check has no signature, so
+every hit has to be confirmed by reading the code. An empty result is not a pass.
 ## Reference files (read on demand)
 
 - **`docs/gotchas.md`** — ⚠️ **READ THIS BEFORE REPORTING ANYTHING.** The OSV-vs-npm-audit advisory
@@ -44,6 +56,9 @@ emits — it is a draft, not a verdict.** The judgment calls below are yours.
 - **`docs/04-reporting.md`** — the pack structure, and the sentences that get a report rejected.
 - **`templates/security-review-report.md`** — the fill-in report template, with the reject-traps marked
   inline at the point you'd walk into them, and a pre-send checklist.
+- `docs/05-authorization-and-llm-agents.md` — the defect classes SAST cannot see: app-scoped
+  KVS, guessable ids, prompt builders you did not find, unguarded write tools, and why
+  "no egress" is not an exfiltration control. Read this BEFORE writing the report.
 
 ## The method
 
@@ -60,6 +75,25 @@ emits — it is a draft, not a verdict.** The judgment calls below are yours.
    scan disagree with yours.
 
 ## Golden rules
+
+**Grade every finding independently, in both directions.** On the review this skill was rebuilt from
+(ChatWise, ITSM-80215, 29 Jul 2026) the reviewer's list needed two findings conceded, two severities
+RAISED, one refuted, and three added that he never saw — including the worst defect in the app. A
+review that only confirms what was reported is not a review.
+
+**Never dispute a finding you have already fixed.** Before refuting anything, `git log -S` the file.
+On that review the draft reply argued a validator "does more than a string check" while the same
+branch held a commit rewriting it, with a comment naming the exact bypasses. One `git blame` from
+losing the room.
+
+**Never claim coverage you have not shipped.** If you say a property is tested, it must be in the
+repo and in `npm test`. Running it from a scratchpad and describing it as shipped is the same class
+of error as reporting a scan that never ran — and a reviewer disproves both in seconds.
+
+**Configured is not running.** A GitHub Actions workflow in a Bitbucket-hosted repo never fires.
+Check where the repo actually lives before claiming a cadence.
+
+
 
 1. **Never argue a control doesn't apply because it's inconvenient.** SAST/SCA run fine on Forge apps. The
    founding case: "SCA doesn't apply to a sandboxed app" would have collapsed the instant the reviewer ran
@@ -88,6 +122,16 @@ scanner behaviour, add it to the right reference and a dated line below. The tra
 it is what stops a confident-but-wrong report going out under someone's name.
 
 ## Changelog
+
+**2026-07-29 — rebuilt around what a real review actually missed.** ChatWise (ITSM-80215): a
+competent engineer with SonarQube + BlackDuck filed 7 findings; verification conceded 2, RAISED 2
+severities, refuted 1, and added 3 he never saw, including the worst defect in the app. Added
+`scripts/forge_authz_scan.py` and `docs/05-authorization-and-llm-agents.md` for the classes SAST
+cannot see (app-scoped KVS, zero-entropy ids, every prompt builder, unguarded write tools, the
+zero-egress fallacy). Two bugs found while testing the new scanner and fixed before shipping it: it
+walked nested git worktrees (doubling every count) and its ownership regex was case-sensitive, so
+`userAccountId !==` — idiomatic Forge casing — read as UNGUARDED on correctly-guarded code. Verified
+red on the pre-fix tree (it finds the Blocker at `IssuePanelApp.js:297`) and green on the fixed one.
 
 - **2026-07-17** — Skill created from ChatWise / ITSM-80215. Seeded: the runnable scanner, the canary
   validation requirement, the **OSV-vs-npm-audit advisory-data-model split** (the single most important
