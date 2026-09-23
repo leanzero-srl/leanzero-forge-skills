@@ -42,6 +42,10 @@ emits — it is a draft, not a verdict.** The judgment calls below are yours.
 - **`docs/03-beyond-scanners.md`** — the risk classes SAST/SCA structurally cannot see in a Forge app.
   On a real app these were **worse than the CVE**. You must find these by hand.
 - **`docs/04-reporting.md`** — the pack structure, and the sentences that get a report rejected.
+- **`docs/05-ecoscanner-fsrt.md`** — Atlassian's EcoScanner/FSRT tickets (`Custom-Check-Authorization-*` /
+  `-Authentication-*`): how to run the scanner locally so it reproduces the tickets, the EXACT two things it
+  accepts as an authorization check, why a default `@forge/kvs` import makes a real webhook auth invisible,
+  and the one-helper fix that cleared 17 of 22 findings on CogniRunner.
 - **`templates/security-review-report.md`** — the fill-in report template, with the reject-traps marked
   inline at the point you'd walk into them, and a pre-send checklist.
 
@@ -95,3 +99,9 @@ it is what stops a confident-but-wrong report going out under someone's name.
   the ours-vs-SDK split discipline, phantom-dep and mutable-tag detection, and the beyond-scanners risk
   classes (prompt-injection → privileged tool-calls, decompression bombs) which on the real app were more
   severe than the CVE that triggered the review.
+- **2026-09-12** — CogniRunner EcoScanner batch (AMS-65094..65118, 25 tickets) cleared in one commit, local
+  FSRT 25 → 0, dev-verified (offline 62/62, smoke 46/50 with misses all Forge LLM 429 quota, gate-verify,
+  rules-API + attachment webtriggers, real-UI wizard 383 fields) and shipped to production 3.4.0. Added
+  `docs/05-ecoscanner-fsrt.md`: FSRT lives at atlassian-labs/FSRT; authorization = `authorize()` from
+  @forge/api OR a route containing `permission`; webtrigger authentication = a recognised storage/env/fetch
+  read first, and ONLY the named `kvs` export of @forge/kvs is recognised (default import is invisible).
