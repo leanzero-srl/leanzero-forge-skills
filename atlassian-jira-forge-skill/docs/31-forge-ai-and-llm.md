@@ -34,8 +34,11 @@ const res = await chat({
     ...(sys ? [{ role: 'system', content: sys }] : []),
     { role: 'user', content: userMessage },
   ],
-  max_completion_tokens: 4096,
+  max_completion_tokens: MAX_OUTPUT,     // size per model AND per gateway time (~8k on Forge LLM:
+                                         // longer replies can hit a ~180 s gateway 504); never a bare 4096
 });
+// A reply cut for length (finish_reason "length") is NOT complete: never parse, save or execute it.
+if (res?.choices?.[0]?.finish_reason === 'length') throw new Error('reply cut off - ask for less or write in parts');
 let content = res?.choices?.[0]?.message?.content;
 if (Array.isArray(content))              // some responses come back as content parts
   content = content.filter((p) => p?.type === 'text').map((p) => p.text || '').join('');
@@ -130,7 +133,7 @@ All providers normalise to `{ ok, content, tokens }`. The differences that matte
 | **OpenRouter** | `POST {base}/chat/completions` | `Authorization: Bearer` | add `HTTP-Referer` + `X-Title`; skip `response_format` (many upstream models reject it) |
 | **Anthropic** | `POST {base}/v1/messages` | `x-api-key` + `anthropic-version: 2023-06-01` | top-level `system`; **`max_tokens` REQUIRED**; reply in `content[].text` |
 | **AWS Bedrock** | `POST {base}/model/{model}/converse` | `Authorization: Bearer` | Converse API; `inferenceConfig.maxTokens`; region-derived URL; **don't `encodeURIComponent` the model id** (ids contain `:`, e.g. `…-v1:0`); cross-region inference-profile ids (e.g. `eu.anthropic.claude-sonnet-4-6`) |
-| **LM Studio** | `POST {base}/api/v1/chat` (native) | optional `Bearer` | self-hosted tunnel; `reasoning:"off"` (learn + persist models that 400 on it); fall back to `reasoning_content` when `content` is empty |
+| **LM Studio** | `POST {base}/api/v1/chat` (native) | optional `Bearer` | self-hosted tunnel; `reasoning:"off"` (learn + persist models that 400 on it); never use `reasoning_content` as the answer (it is draft thinking; when `content` is empty treat the reply as failed) |
 
 Anthropic, condensed:
 
@@ -138,7 +141,7 @@ Anthropic, condensed:
 const r = await fetch(`${baseUrl}/v1/messages`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-  body: JSON.stringify({ model, max_tokens: 4096, system: systemPrompt,    // max_tokens REQUIRED
+  body: JSON.stringify({ model, max_tokens: MAX_OUTPUT, system: systemPrompt, // REQUIRED: the model's own cap, not 4096
                          messages: [{ role: 'user', content: userMessage }] }),
 });
 const data = await r.json();
