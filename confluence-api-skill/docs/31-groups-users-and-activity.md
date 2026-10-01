@@ -6,7 +6,7 @@ Cloud **only** exposes on the v1 REST API (`/wiki/rest/api`). The v2 API
 CQL search — if you manage seats, audit memberships, or infer user activity, you
 live on v1 for these calls (use v2 for everything else).
 
-Source: **License Leash** (axpo-license-manager), a Confluence seat-reclaim app
+Source: **License Leash**, a Confluence seat-reclaim app
 that revokes/re-grants licenses by adding/removing users from the
 `confluence-users-{site}` group and backfills "last active" from content history.
 The app runs as Forge (`api.asApp().requestConfluence(route\`…\`)`), but every

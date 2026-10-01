@@ -22,8 +22,9 @@ import uuid as uuid_module
 
 
 def uuid7():
-    """Automation rule uuids must be v7 (undocumented outside the Postman collection's endpoint
-    description: 'If providing a UUID for your new rule, it must be unique and V7'). This
+    """Automation rule uuids must be v7 ('If providing a UUID for your new rule, it must be unique
+    and V7' — in Atlassian's rule-management docs and OpenAPI spec as of 2026-10-01; on 2026-09-22
+    it was only in the Postman collection). This
     environment's Python predates uuid.uuid7, so build it by hand: 48-bit ms timestamp + version
     (0111) + 12 bits random + variant (10) + 62 bits random."""
     ts_ms = int(time.time() * 1000)
