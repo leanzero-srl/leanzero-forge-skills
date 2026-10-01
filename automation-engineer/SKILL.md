@@ -82,9 +82,11 @@ until all three real requirements (see `docs/gotchas.md`) were met at once. Bise
 known-working example rather than guessing variations on a broken one.
 
 **A platform's own Postman collection can carry a requirement its OpenAPI schema and prose docs
-both omit.** The "rule uuid must be v7" rule was findable in exactly one place: the endpoint
-description string inside the public Postman collection JSON. Read every source the vendor
-publishes, not just the rendered docs page.
+both omit.** When this skill was written (2026-09-22) the "rule uuid must be v7" rule was found in exactly
+one place: the endpoint description string inside the public Postman collection JSON. As of
+2026-10-01 Atlassian's rule-management docs and OpenAPI spec carry the same sentence ("If providing
+a UUID for your new rule, it must be unique and V7."). Read every source the vendor publishes, not
+just the rendered docs page — and re-check, because docs catch up.
 
 **"Optional-looking" is not the same as optional.** `authorAccountId` is clearly populated by the
 server on every `GET` response, which makes omitting it on `POST` a completely reasonable
