@@ -65,12 +65,12 @@ POST /rest/api/3/issueLink
 }
 ```
 
-Read it as `outwardIssue <type.outward> inwardIssue`. For the built-in **Blocks** type (`outward = "blocks"`, `inward = "is blocked by"`) this means:
+Read it as `inwardIssue <type.outward> outwardIssue` (verified live on two Cloud sites: the issue you pass as `inwardIssue` is the one that shows the **outward** phrase). For the built-in **Blocks** type (`outward = "blocks"`, `inward = "is blocked by"`) this means:
 
-- `outwardIssue` (PROJ-1) is the **blocker / predecessor** — the thing that must finish first.
-- `inwardIssue` (PROJ-2) is the **blocked / successor** — `PROJ-2` "is blocked by" `PROJ-1`.
+- `inwardIssue` (PROJ-2) is the **blocker / predecessor** — `PROJ-2` "blocks" `PROJ-1`.
+- `outwardIssue` (PROJ-1) is the **blocked / successor** — `PROJ-1` "is blocked by" `PROJ-2`.
 
-This trips people up because the *field names* (inward/outward) feel reversed relative to the *semantics* you read in the UI. se-ppm-forge's `jira-client` uses this interpretation (`createIssueLink(outwardKey, inwardKey)` with `outwardKey` documented as "the issue that BLOCKS (predecessor)") — but note even that app contradicts itself in a second module, which is exactly why you should **probe a known link on the target site and read it back** rather than trust intuition.
+This trips people up because the *field names* (inward/outward) feel reversed relative to the *semantics* you read in the UI. se-ppm-forge's `jira-client` once documented the opposite reading (`outwardKey` as "the issue that BLOCKS (predecessor)") and contradicted itself in a second module — which is exactly why you should **probe a known link on the target site and read it back** rather than trust intuition.
 
 The outward/inward descriptions differ per link type and per site (admins rename them). **Before any bulk link creation, GET the link type and create one probe link, then re-read it** to confirm the direction:
 
