@@ -1,6 +1,6 @@
 # Core concepts — host, auth, endpoints, data model
 
-## The host — this is the whole reason the API "doesn't exist" for most people
+## The path — this is the whole reason the API "doesn't exist" for most people
 
 ```
 Primary:        https://api.atlassian.com/automation/public/{product}/{cloudid}/rest/v1/...
@@ -9,9 +9,10 @@ Site-specific:  https://{sitename}.atlassian.net/gateway/api/automation/public/{
 
 `{product}` is `jira` or `confluence`. `{cloudid}` is the site's cloud id (any `myself`/tenant-info
 call on the site echoes it). Both hosts accept the same API-token auth; the site-specific one also
-accepts a live browser session cookie. **Every path that lives on the site's own domain —
+accepts a live browser session cookie. **The commonly guessed paths —
 `/rest/api/3/automation/...`, `/rest/cb-automation/...`, `/gateway/api/automation/internal-api/...`
-— 404s.** That's not evidence the capability is missing; it's evidence of the wrong host.
+— 404s.** That's not evidence the capability is missing; it's evidence of the wrong path. The same
+site answers 200 under `/gateway/api/automation/public/...` (verified 2026-10-01).
 
 ## Auth
 

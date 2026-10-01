@@ -10,8 +10,8 @@ Two independent attempts, weeks apart, on the same engagement, both concluded "J
 no API-token-accessible REST surface" after trying `/rest/api/3/automation/rule`,
 `/rest/cb-automation/...`, and `/gateway/api/automation/internal-api/...` — every one 404s.
 
-**Both conclusions were wrong.** Every path tried was on the site's own domain. The real API lives
-on a completely different host:
+**Both conclusions were wrong.** Every path tried was a path that does not exist. The real API is
+under `/automation/public/` — on `api.atlassian.com`, or on the site's own `/gateway`:
 
 ```
 https://api.atlassian.com/automation/public/{product}/{cloudid}/rest/v1/...

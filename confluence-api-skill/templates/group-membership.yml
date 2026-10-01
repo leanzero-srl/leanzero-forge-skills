@@ -13,7 +13,7 @@
 # For background jobs prefer an app/service identity (or the Org API) over a
 # 3LO user token — see docs/24-rest-integration-patterns.md pattern 12.
 #
-# Source: License Leash (axpo-license-manager). Detail: docs/31-groups-users-and-activity.md
+# Source: License Leash. Detail: docs/31-groups-users-and-activity.md
 
 ## Resolve a group id by name (you need the id for *ByGroupId calls)
 

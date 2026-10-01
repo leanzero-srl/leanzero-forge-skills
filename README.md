@@ -106,7 +106,7 @@ The skills are not theoretical. The "production patterns" docs in each skill (`d
 - **PPM Pro** — sharded plan storage, drafts/locks for multi-user concurrency, exponential backoff with jitter, chunked write-back.
 - **CogniRunner** — capability-token web triggers, multi-provider AI key storage, fail-open workflow validators, async-queue offload for >25s work.
 - **Sentinel Vault** — capsule-style resolver registration, KVS prefix indexing, ADF tree surgery, three-level Confluence authorization, native @mention notifications.
-- **License Leash** (Axpo License Manager) — HMAC-signed self-service web triggers, dual-strategy `asUser` → `asApp` REST fallback, Forge SQL config, Atlassian Admin API integration.
+- **License Leash** — HMAC-signed self-service web triggers, dual-strategy `asUser` → `asApp` REST fallback, Forge SQL config, Atlassian Admin API integration.
 
 ## Contributing
 
