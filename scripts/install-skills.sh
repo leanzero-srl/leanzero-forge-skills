@@ -21,6 +21,9 @@ SKILLS=(
   jira-api-skill
   confluence-api-skill
   atlassian-migration-scripts-skill
+  atlassian-cloud-to-cloud-migration-skill
+  forge-security-review
+  automation-engineer
 )
 
 # Resolve the repo root (the directory containing this script's parent)
