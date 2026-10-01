@@ -42,8 +42,9 @@ python3 scripts/automation_client.py create --email you@x.com --token $TOKEN --c
   API just created and handed back, a fully faithful cross-tenant remap — all fail with the
   identical, unhelpful `"could not be parsed"` error until all three are satisfied at once:
   1. Keep the entire structure exactly as `GET` returned it — never hand-build or strip a payload.
-  2. `uuid` must be a fresh, valid **v7** UUID (documented only in the vendor's Postman collection,
-     nowhere in the OpenAPI schema or the prose docs).
+  2. `uuid` must be a fresh, valid **v7** UUID (when this was written, 2026-09-22, it was documented
+     only in the vendor's Postman collection; as of 2026-10-01 the rule-management docs and the
+     OpenAPI spec state it too).
   3. `authorAccountId` must be present and valid on the **target** tenant. Omitting it — a
      completely reasonable assumption, since the server clearly populates it on every `GET` —
      silently produces the identical generic error as every structural mistake above.
