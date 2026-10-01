@@ -1,6 +1,16 @@
 ---
 name: atlassian-cloud-to-cloud-migration-skill
-description: Field-proven runbook for copying Jira projects (incl. JSM desks) and Confluence spaces between two Atlassian CLOUD sites over REST when native Cloud-to-Cloud migration cannot be used: busy production target, issue keys AND numbers must survive, only a subset moves, people who are not moving must be anonymised, existing target config must not change. Covers silent loading (notification schemes, autowatch, JSM customer notifications), ordered copy with fillers, parents, link direction, sprints, JSM desks on own config, issue-type avatars, KEEP-list anonymisation and attachment privacy scanning, user invites and seats, search-hidden items, test-management data, a guard dog, verification, source snapshot and a decision log with reverts. Use for "migrate projects/spaces to another Atlassian cloud site", "copy Jira between cloud instances keeping keys", "cloud to cloud without the migration tool", "anonymise users during migration", "load without spamming users".
+description: >-
+  Field-proven runbook for copying Jira projects (incl. JSM desks) and Confluence spaces between two
+  Atlassian CLOUD sites over REST when native Cloud-to-Cloud migration cannot be used: busy production
+  target, issue keys AND numbers must survive, only a subset moves, people who are not moving must be
+  anonymised, existing target config must not change. Covers silent loading (notification schemes,
+  autowatch, JSM customer notifications), ordered copy with fillers, parents, link direction, sprints,
+  JSM desks on own config, issue-type avatars, KEEP-list anonymisation and attachment privacy
+  scanning, user invites and seats, search-hidden items, test-management data, a guard dog,
+  verification, source snapshot and a decision log with reverts. Use for "migrate projects/spaces to
+  another Atlassian cloud site", "copy Jira between cloud instances keeping keys", "cloud to cloud
+  without the migration tool", "anonymise users during migration", "load without spamming users".
 ---
 
 # Atlassian Cloud-to-Cloud Migration (copy over REST)
