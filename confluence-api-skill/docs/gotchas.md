@@ -45,7 +45,7 @@ Fetching large pages via `requestConfluence` can impact performance and memory i
 
 ## Groups, users & activity (v1-only surfaces)
 
-Source: License Leash (axpo-license-manager). Full detail in `31-groups-users-and-activity.md`.
+Source: License Leash. Full detail in `31-groups-users-and-activity.md`.
 
 ### Group + CQL endpoints live only on v1
 The v2 API (`/wiki/api/v2`) has **no group-member endpoints, no `user/memberof`, and no CQL search.** For seat management, membership audits, and content-activity lookups you must use v1 (`/wiki/rest/api/group/...`, `/wiki/rest/api/user/memberof`, `/wiki/rest/api/search?cql=...`). Membership reads use `start`/`limit` **offset** pagination (max `limit=200`), not v2 cursor pagination — stop when `results.length < limit`. Count members cheaply with `membersByGroupId?limit=1&shouldReturnTotalSize=true` and read `totalSize`.

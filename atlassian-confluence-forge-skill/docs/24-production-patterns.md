@@ -3,7 +3,7 @@
 Production-tested patterns lifted from two shipping Confluence Forge apps:
 
 - **Sentinel Vault** — content protection / attachment-locking app, real-time event triggers, scheduled trigger fan-out, ADF surgery on every page open, three-level steward authorization, native @mention notifications.
-- **License Leash (Axpo License Manager)** — cross-product Confluence + Atlassian Admin (Organizations) API license manager, HMAC-token web triggers, dual-strategy `asUser` → `asApp` REST fallback, Forge SQL config, scheduled deactivation pipeline.
+- **License Leash** — cross-product Confluence + Atlassian Admin (Organizations) API license manager, HMAC-token web triggers, dual-strategy `asUser` → `asApp` REST fallback, Forge SQL config, scheduled deactivation pipeline.
 
 Each pattern lists the problem it solves, a copy-pasteable code excerpt, and a source pointer.
 

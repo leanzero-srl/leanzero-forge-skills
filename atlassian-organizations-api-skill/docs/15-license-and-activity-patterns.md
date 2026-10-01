@@ -1,8 +1,7 @@
 # License & Activity Patterns (per-product, per-site)
 
 Battle-tested patterns for using the Org API to **manage product licenses by group
-membership** and to **read per-site activity** — distilled from the License Leash
-("axpo-license-manager") Forge app, which runs these endpoints in production against a
+membership** and to **read per-site activity** — distilled from the License Leash Forge app, which runs these endpoints in production against a
 multi-site org. The other docs in this skill cover the resource endpoints in isolation;
 this one documents the *operational cluster* you actually compose to (a) know who's
 using a product on a specific site and (b) grant/revoke that product's seat without

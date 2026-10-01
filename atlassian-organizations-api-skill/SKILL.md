@@ -355,7 +355,7 @@ When an error occurs during execution, follow these patterns:
 - **2026-06-26** — Added `docs/15-license-and-activity-patterns.md` and
   `templates/last-active-and-membership.js`; expanded `gotchas.md` (suspend-is-global,
   Admin-API-key specifics, last-active "2s view" + multi-site scoping, membership ≠
-  product access). Source: **License Leash** (axpo-license-manager) Forge app — production
+  product access). Source: **License Leash** Forge app — production
   use of the per-product/per-site license-management + activity endpoint cluster
   (`last-active-dates`, workspace resolution, forward-filtered license groups, group
   role-assignments, idempotent membership writes, App Access Funnel role-assign).
