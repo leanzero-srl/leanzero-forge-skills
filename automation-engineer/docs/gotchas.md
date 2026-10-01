@@ -22,9 +22,10 @@ three things and nothing else.
    even with a correct uuid and author** (see rule 3) — always start from a real `GET` response
    (yours, or a `/template/create`-made one) and mutate only what needs to change; never assemble
    one from "the fields that sound required."
-2. **Set `rule.uuid` to a freshly generated, valid UUID v7** (not v4, not omitted). This is stated
-   only in the Postman collection's endpoint description, not the OpenAPI schema or the prose
-   docs: *"If providing a UUID for your new rule, it must be unique and V7."* Omitting `uuid`
+2. **Set `rule.uuid` to a freshly generated, valid UUID v7** (not v4, not omitted). On 2026-09-22 this
+   was stated only in the Postman collection's endpoint description; as of 2026-10-01 the
+   rule-management docs and OpenAPI spec say it too: *"If providing a UUID for your new rule, it
+   must be unique and V7."* Omitting `uuid`
    entirely produces the same generic parse failure as everything else; reusing the source rule's
    own uuid is the ONE mistake that breaks through with a specific, honest error —
    `"Can't create a rule with a UUID that already exists"` — which is how this was finally cracked:
