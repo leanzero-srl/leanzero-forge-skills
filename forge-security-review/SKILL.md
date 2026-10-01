@@ -123,6 +123,8 @@ it is what stops a confident-but-wrong report going out under someone's name.
 
 ## Changelog
 
+**2026-09-26 — became CI gates.** lz-ppm-forge `security/` turns this method into `npm run test:security` (SAST+canary, SCA npm+OSV tiered by bundle source maps, trufflehog history scan, FSRT with coverage canary, manifest allow-list, authz suites, AI-prompt inventory) with SLA-dated baselines; the standard is leanzero-forge-app-baseline `references/security-gates.md`. New traps in `docs/gotchas.md` §9 (FSRT blind to register*(resolver); Semgrep silent timeouts; CRA audit ≠ shipped set; gitleaks noise).
+
 **2026-07-29 — rebuilt around what a real review actually missed.** ChatWise (ITSM-80215): a
 competent engineer with SonarQube + BlackDuck filed 7 findings; verification conceded 2, RAISED 2
 severities, refuted 1, and added 3 he never saw, including the worst defect in the app. Added
