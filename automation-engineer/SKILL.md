@@ -7,7 +7,8 @@ description: >-
   project, inspect a rule's trigger/condition/action configuration, create or update a rule
   programmatically, or migrate/replicate rules from one Jira/Confluence site to another (e.g.
   production → sandbox). Also use to correct the common belief that "Jira Automation has no REST
-  surface" — every endpoint that belief is usually based on is on the wrong host.
+  surface" — every endpoint that belief is usually based on is the wrong PATH (the real API is under
+  /automation/public/, on api.atlassian.com or the site's own /gateway).
 ---
 
 # Automation Engineer — the real Jira/Confluence Automation REST API
@@ -16,8 +17,9 @@ Built 2026-09-22 migrating a client's production Jira Automation rules onto a sa
 the desk's own notes had recorded — twice, on two separate occasions weeks apart — that "Jira
 Automation has no API-token-accessible REST surface." Both times, every endpoint tried
 (`/rest/cb-automation/...`, `/gateway/api/automation/internal-api/...`, `/rest/api/3/automation/rule`)
-was on the site's own domain. **The real API lives on a completely different host and works fine
-with a plain API token.**
+was a path that does not exist. **The real API is under `/automation/public/` — at
+`api.atlassian.com/automation/public/...`, or on the site itself at
+`<site>.atlassian.net/gateway/api/automation/public/...` — and works fine with a plain API token.**
 
 > **The founding lesson: read reachability is not the same as write reachability, and "generic
 > parse error" is not the same as "impossible."** `GET` worked on the first real try. `POST /rule`
