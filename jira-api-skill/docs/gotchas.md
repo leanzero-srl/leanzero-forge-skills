@@ -54,7 +54,7 @@ By default every `PUT /rest/api/3/issue/{key}` e-mails watchers and the assignee
 - **Fix**: Append `?notifyUsers=false` to bulk/automation writes. Keep notifications on only for genuinely user-initiated single edits.
 
 ### Issue-link direction is counter-intuitive
-`POST /rest/api/3/issueLink` reads as `outwardIssue <type.outward> inwardIssue`. For **Blocks**, `outwardIssue` is the blocker/predecessor and `inwardIssue` is blocked-by/successor — the field names feel reversed vs the UI wording, and admins rename link descriptions per site.
+`POST /rest/api/3/issueLink` reads as `inwardIssue <type.outward> outwardIssue` (verified live; matches `25-production-patterns-ppm.md`). For **Blocks**, `inwardIssue` is the blocker/predecessor and `outwardIssue` the blocked/successor — the field names feel reversed vs the UI wording, and admins rename link descriptions per site.
 - **Fix**: Before any bulk link creation, GET `/rest/api/3/issueLinkType` to read the inward/outward labels, create one probe link, and re-read the issue (`?fields=issuelinks`) to confirm direction. Details + worked example in `06-api-endpoints.md`.
 
 ## `POST /rest/api/3/issue/bulk` returns ONLY the successes
