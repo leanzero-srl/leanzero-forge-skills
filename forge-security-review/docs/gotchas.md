@@ -139,3 +139,23 @@ Reasonable (the vendor is the authority on their own CVE) — but say so.
 And beware the invalid PoC: an exploit attempt that **fails to fire on the known-vulnerable version** has
 **zero diagnostic power**. It is a negative-control failure, not a pass. Discard it; never report it as
 verification.
+
+## 9. Four more zeros that meant nothing (lz-ppm security gates, 2026-09-26)
+
+- **FSRT is blind to the usual Forge layout.** It does not follow `registerX(resolver)` defined in
+  another module, nor web-trigger handlers re-exported with `export { h } from './h'`. On lz-ppm it
+  analysed 0 of ~146 resolvers and reported a clean 0. Canary it with BOTH shapes and count the
+  "found possible resolver" lines under `FORGE_LOG=info --verbose` before trusting it
+  (lz-ppm `security/gates/fsrt.mjs`, `security/canary/fsrt-{direct,register}`). Build from a
+  pinned commit; the README flags are stale — trust `--help`.
+- **Semgrep timeouts are silent partial scans.** Default per-rule timeouts skipped 65 rule×file pairs
+  on the biggest files, listed only under `errors` with 0 results. Use `--timeout=120
+  --timeout-threshold=0` and fail on any remaining Timeout.
+- **`npm audit --omit=dev` is not the shipped set for a CRA Custom UI.** react-scripts sits in
+  `dependencies`, so it reported 51 vulnerable packages and 34 high/critical advisories, and none
+  of them were in the bundle. The built bundle's source maps list the packages it really contains
+  (10 on lz-ppm). Tier each advisory by its vulnerable INSTANCE (`nodes` in the audit JSON), not by
+  package name: nth-check 2.1.1 is safe and 1.0.2 is not.
+- **gitleaks' generic-api-key rule is noise at history scale.** It gave 86,775 hits on 2,292
+  commits. trufflehog gave 5 hits, one of them a real (expired) Forge context token committed in
+  test evidence. Harness evidence files are a place credentials leak into.
