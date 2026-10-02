@@ -44,7 +44,8 @@ Skip this skill for:
 - **Must not spam anyone** → `docs/03-silent-loading.md` + `templates/silent_window.py` (do this BEFORE the first item).
 - **Keys and numbers must match** → `docs/04-jira-ordered-copy.md` + `templates/ordered_create.py`.
 - **Privacy / anonymisation** → `docs/08-identity-and-text-privacy.md` + `docs/09-attachment-privacy.md` +
-  `templates/attachment_verdicts.py` + `scripts/leak-scan.sh`.
+  `templates/attachment_verdicts.py` + `templates/att_gate.py` (every upload goes through it) +
+  `templates/check_upload_paths.py` + `scripts/leak-scan.sh`.
 - **Out of seats, inviting people** → `docs/10-users-licences-accounts.md` + `templates/inactive_users_report.py`.
 - **Is it actually done?** → `docs/13-verification-and-guard-dog.md` ("a green number is not a passing test").
 
@@ -174,6 +175,8 @@ Skip this skill for:
 | [`issuetype_avatar.py`](templates/issuetype_avatar.py) | Upload a PNG as an issue-type avatar and assign it, before/after record |
 | [`inactive_users_report.py`](templates/inactive_users_report.py) | Rank suspension candidates from admin-hub JSON with exclusions — never suspends |
 | [`attachment_verdicts.py`](templates/attachment_verdicts.py) | Merge scan files: held wins (incl. holds after a release), exact eye-clear, exact-pair release, disagreements |
+| [`att_gate.py`](templates/att_gate.py) | ONE verdict on the BYTES before every upload: recursive archives, office images + embeddings, every PDF page, EMF/WMF bitmaps, `data:` images, e-mail parts, binary strings, profile paths, secrets, video held; your list lens + a built-in shape lens; allowlists as data; fail closed |
+| [`check_upload_paths.py`](templates/check_upload_paths.py) | Exit 1 while any script writes attachments without calling the gate; use as a preflight check and a ratchet test |
 | [`jsm_customer_notifications.mjs`](templates/jsm_customer_notifications.mjs) | Playwright: record/disable/restore JSM customer notification rules |
 | [`decision-log.md`](templates/decision-log.md) | Decision entry format with owner, why, scope, records, revert |
 
@@ -187,6 +190,8 @@ Skip this skill for:
 Offline regression tests: `python3 tests/test_templates_offline.py` and `bash tests/test_leak_scan.sh`.
 
 ## Changelog
+
+- **2026-10-02** After-care lessons: one attachment gate for every upload path (`templates/att_gate.py`, `templates/check_upload_paths.py`, docs/09), Confluence draft-media breakage + fix (docs/11), test steps hidden by missing Forge panel properties (docs/12), contractor-to-full account switch and freeing licence seats (docs/10).
 
 - **2026-10-01 (initial release)** Distilled from a production Cloud-to-Cloud copy (Jira incl. JSM desks and
   test-management data, Confluence spaces) into a live production target under a KEEP-list privacy requirement:

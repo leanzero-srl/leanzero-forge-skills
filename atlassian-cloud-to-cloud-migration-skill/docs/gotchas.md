@@ -108,6 +108,14 @@ Each line was paid for in a real run. The doc number points at the detail.
 - Extension-less videos read as text; extension-less PNG/Office passed unchecked — sniff file heads (09).
 - Screenshots EMBEDDED in docx/pptx/xlsx/PDF are invisible to a text extractor: OCR `*/media/*` and every rendered PDF page; re-scan what was released (09).
 - Your own records, logs and commit messages can carry names — scan before committing (08).
+- One gate for every upload path: copy, release, restore, replace and report scripts each carried their own "clean"; restores re-published a key the transform had removed (09, `templates/att_gate.py`, `templates/check_upload_paths.py`).
+- OCR variants read different text (native vs upscaled); run them as a union and judge each hit on a crop of the pixels, not the OCR line (09).
+- A blurred file verified with the lens that missed the name can still show it; verify with every lens + look (09).
+- Fail-closed stripping of binaries makes tools useless; read their strings instead, allowlist OSS credit PHRASES (09).
+- A PEM BEGIN marker inside key-parsing code is not a key; require the base64 body (09).
+- Pages created before their images were uploaded break images on the first edit (shared draft = `UNKNOWN_MEDIA_ID`); upload first or rebuild the draft (11).
+- "Corrupted file" has at least four causes (editor 0-byte, held never uploaded, stripped archive, unlisted files); diagnose per page first (11).
+- Video/audio recordings show their participants: hold them (09).
 
 ## Users and licences
 - User API tokens get 401 on admin hub APIs; use the browser session or an org API key (10).
@@ -131,3 +139,9 @@ Each line was paid for in a real run. The doc number points at the detail.
 - A new file in a globbed directory can break every parser of that glob (27).
 - A guard in `--no-halt` mode never stops anything; a leak found after the fact is reported, not HALTed (13).
 - Confirm the source shutdown time at kick-off; gitignore the snapshot before writing it (14).
+
+- **Test steps "missing" after the load** — usually not missing: REST-created issues never get the Forge panel properties
+  the issue view needs (panel property + `issue.content.panel.customised.flag`). See docs/12.
+- **Restores and transforms are uploads too** — an original restored to fix a "corrupted" archive can carry a file the
+  cleanup had removed for a reason (a private key). Run the full gate, secrets included, on every restore.
+- **Two accounts per person** (contractor-suffixed + full) — switch, then deactivate; claim unmanaged accounts first. See docs/10.
