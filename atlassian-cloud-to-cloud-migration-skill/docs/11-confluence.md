@@ -82,8 +82,8 @@ Field note: a page lost all its images a day after the load. Every body-referenc
 with media id `UNKNOWN_MEDIA_ID` (download 400), created by a tester's brand-new account in one half-second window
 when he OPENED THE EDITOR (an unpublished draft existed; no content change). Version 1 (ours) was intact. Blast radius
 measured: ~7,000 Confluence attachments scanned → about twenty broken, all on that page; Jira 0. Viewing did not cause it (thousands
-of untouched attachments after a day of viewing), and other editor sessions broke nothing — so mechanism confidence
-is medium (a brand-new account without media access yet, or a referenced image that was held and missing on the page).
+of untouched attachments after a day of viewing), and two other editor sessions that day broke nothing — so mechanism
+confidence was medium at the time; the root cause below (found later) explains why it depends on the page.
 
 Detection: list every attachment with `fileSize == 0` or `fileId == "UNKNOWN_MEDIA_ID"` and per-version byte counts
 (`GET /wiki/api/v2/pages/{id}/attachments`, `GET /wiki/api/v2/attachments/{attId}/versions`, download with
@@ -91,7 +91,45 @@ Detection: list every attachment with `fileSize == 0` or `fileId == "UNKNOWN_MED
 attachment-version events).
 Repair: upload the newest earlier good version (or the source bytes, if the verdict is clean and sha256 matches) as a
 new version, `minorEdit=true`, same name; verify version+1, size, real fileId, download sha256. Idempotent; re-runnable.
-Tell testers: viewing is safe; if pictures vanish after opening Edit, close without publishing and report the page.
+Tell testers: viewing is safe; do not edit migrated pages until the draft detector below is clean for them (with a
+stale draft, typing and closing the editor is already enough to break the images).
+
+**Root cause (reproduced on a test site two days later, after broken images were reported again following user edits).**
+When a page is created over REST, Confluence creates the page's shared DRAFT (the document the editor loads; its
+creation time is the page create + ~0.1 s) and converts the body to ADF at that instant. The copy created each page
+BEFORE uploading its images, so every image in the draft became media id `UNKNOWN_MEDIA_ID` with an empty collection.
+REST views re-convert on the fly and look fine — nothing REST-visible shows it. When anyone (any account, the creator
+too) edits and the draft syncs (typing and closing is enough, no publish needed) or publishes, the server turns each
+such node back into an attachment: with `ac:alt=<filename>` it writes a new 0-byte version (fileId `UNKNOWN_MEDIA_ID`);
+a referenced file that is not on the page is CREATED 0-byte; without `ac:alt` the body gets
+`ri:filename="UNKNOWN_ATTACHMENT"`. The page's `editor` property, `ri:version-at-save` and the uploader's identity are
+irrelevant. Creating the page empty, uploading, then saving the body does not trigger it.
+
+- Detector (read-only, API token works): `POST /gateway/api/graphql`, operationName `CollabDraftQuery`, query
+  `collabDraft(id:$id, draftShareId:"", hydrateAdf:true){document version}`; the page is affected when the document
+  contains `UNKNOWN_MEDIA_ID`. Repeated calls change nothing.
+- Fix without a page version: upload a new version of ONE referenced image with its own current bytes
+  (`POST .../child/attachment/{attId}/data`, `minorEdit=true`) — the shared draft is rebuilt with real media ids;
+  readers see the same bytes. Re-saving the same storage body also works but creates a page version. Labels,
+  attachment comments or unrelated uploads do not fix it. Over all migrated pages of one run (~3,600): ~75% already
+  fine, ~525 fixed, ~100 fixed except references to HELD images, ~120 stale only for held images (never on the page:
+  an edit creates empty placeholders of those names - no leak, the image was missing anyway), and ~120 deliberately
+  NOT touched because another account watches the page (the re-upload could notify watchers; whether it does was not
+  verified). Those watched pages stay at risk: fix them after checking notifications, or tell their watchers.
+- ORDER RULE: upload a page's attachments BEFORE its body references them (create empty/stub, upload, write the body),
+  or run the one-image re-upload right after each batch of page creations and verify with the detector. Keep an
+  hourly 0-byte scan + repair running for a few days after go-live anyway.
+
+### "Corrupted file" reports: four different causes
+
+Users report every missing or broken attachment the same way. In one run the same words covered: (1) editor 0-byte
+versions (above), (2) a file HELD by the privacy scan and never uploaded — the page shows a broken image where the
+body references it (one was a camera photo whose texture OCR'd as a name fragment), (3) an archive whose members were
+stripped by a fail-closed transform (tools arrived as empty shells), (4) a page that never LISTED its attachments
+(the files were there). Answer with a per-page diagnostic before guessing: for the page and its comments, every
+referenced file → on the target (version, size, fileId, 0-byte?) or not on the page + the privacy verdict and its
+reason, plus comments the anonymiser changed. Then fix by class: repair, eye review/blur + gated upload, gated restore
+of the original, or a list of download links on the page.
 
 ## draw.io diagrams (custom content)
 
