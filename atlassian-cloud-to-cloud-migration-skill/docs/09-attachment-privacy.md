@@ -75,6 +75,15 @@ Performance that mattered:
 For DIAGRAM images (whiteboard exports, architecture drawings): Tesseract's default page segmentation read ~0 words;
 only binarised tiles at native size with psm 11 read every box (178 words vs 4).
 
+**OCR variants read DIFFERENT text — run them as a UNION, then judge hits on the pixels.** Tiny UI text in screenshots
+(a name in a taskbar) was only read after a 2-3× upscale, so a scanner was switched to upscale-only. Measured afterwards
+on the real files: the native-resolution page render still produced tokens the upscale did not. In the measured cases
+those tokens were OCR artefacts — a context-menu item read as a first name, an Explorer breadcrumb read as a
+profile-folder name — and an earlier eye review, reading the OCR LINE instead of the image, had accepted both as real
+and held two manuals on that basis (one stayed out, the other went up blurred with menu items blurred for nothing). Two rules follow: run native + upscaled + inverted (+ dark crops + bands for images)
+as a union, with a test per real case so dropping a variant fails loudly; and give every eye verdict on a crop of the
+pixels at the place the scanner reports, never on the OCR text.
+
 Precision you should expect: roughly a quarter of hits carry a full name or e-mail; the rest are lone first names or
 surnames, some false (a word in another script in a bookmark bar read as a first name). Over-held images are fidelity loss only;
 they can be released after a look.
@@ -102,8 +111,14 @@ hits had been reviewed by hand and released turned out to show non-movers' names
   (plain + light-on-dark passes, doc above).
 - PDFs: render EVERY page (`pdftoppm -r 150 -png`) and OCR each page normal AND inverted — whether or not the PDF has a
   text layer; the text layer never contains the pixels of an embedded screenshot.
-- EMF/WMF images (common in older Office files) are not readable by Tesseract: render them (e.g. LibreOffice / a
-  vector converter) or at least run a strings check that includes UTF-16 runs (`strings -el`), where their text lives.
+- EMF/WMF images (common in older Office files) are not readable by Tesseract. Treating them as "unreadable" held
+  whole manuals whose EMF carried nothing but a font name. Parse the records instead: the drawn text sits in UTF-16
+  text records (a strings pass with UTF-16 runs reads it; strip font-face names and their truncations first), and
+  every bitmap record (EMF `STRETCHDIBITS`/`SETDIBITSTODEVICE`, `BITBLT`/`STRETCHBLT` with a bitmap, WMF DIB records)
+  is a DIB you can wrap in a BMP header and OCR like any image. Anything you cannot decode stays not checkable
+  (`templates/att_gate.py` decodes the common EMF/WMF bitmap records and marks the rest not checkable).
+- Also recurse into what an Office file EMBEDS (`*/embeddings/*`: OLE objects, embedded workbooks) and into e-mail
+  (`.eml`) attachments — a text extractor that blanks long base64 runs skips them silently.
 - Until a document's embedded images are OCR'd its verdict is NOT clean (not checkable = held), whatever its text says.
 - When the rule changes, RE-SCAN everything already released under the old rule — the releases were the exposure.
 
@@ -144,6 +159,81 @@ late release). `templates/attachment_verdicts.py` merges them:
   files the light-on-dark pass had held.
 - Report disagreements: ~100 files read "clean" in a scan file that had been rewritten after the copy while the held
   list said held. Held won; the cause of the rewrite was investigated separately.
+
+## One gate, called by every upload path
+
+The scanner is not the gate; the gate is the last function the BYTES pass before the PUT/POST. Field notes from one
+run: the screenshot lens existed in one release script while four other upload scripts (late release, release of
+later-cleared files, hidden items, page restores) kept their own idea of "clean"; the warning "don't reuse them until
+the check is wired in" was a status note. Two later uploads then went out through exactly such paths:
+
+- a **restore** of archives whose compiled binaries had been stripped (fail closed made the tools useless) checked the
+  binaries' strings for NAMES only and put back the ORIGINAL archive — including a real private key that the earlier
+  transform had removed;
+- a **blurred** document was verified with the OCR lens that had missed the name in the first place; one page still
+  showed a non-mover's e-mail in a white-on-blue "Sign in" row.
+
+Rules:
+- One function: `gate(name, bytes, context) -> clean | HIT | HELD_UNREADABLE | SECRET` + reasons + lines to blur
+  (`templates/att_gate.py`): archives recursively, Office text + embedded images + embeddings, every PDF page and
+  image, EMF/WMF, `data:` images, e-mail parts, metadata, file names and member paths, binary strings, user-profile
+  paths, secrets, video/audio held. Your list matcher plugs in; the name-SHAPE lens is built in.
+- Every upload script calls it right before the write — copy, release, late release, restore, replace, comment
+  attachments, report CSVs. `templates/check_upload_paths.py` greps for attachment WRITE calls without the gate and
+  exits 1; run it in preflight and as a ratchet test (today's offenders listed, any new one fails, delete a line when a
+  script is fixed).
+- Restores and transforms are uploads too: they go through the full gate, SECRET lens included.
+- The gate judges BYTES. Verdict records keyed by (space, item, file) are bookkeeping; a name collision or a stale
+  record cannot launder a file through a gate that reads the bytes.
+
+## Compiled binaries inside archives
+
+Removing every binary member as "unreadable" rebuilt tool archives as 1-4 KB shells; the owner reported "corrupted
+files". Read binaries as text instead: ASCII and UTF-16 string runs, checked with the name lenses plus a
+user-profile-path rule (`C:\Users\<name>`, `/home/<name>`; skip generic ones like Administrator, and OCR misspellings of
+them). Expect open-source author credits compiled into libraries (zlib's copyright line naming its two authors, a
+BoringSSL AES credit with a first name): allowlist the exact PHRASES, never the first names. Inside application jars,
+the bundled dependency tree (`BOOT-INF/lib/*.jar`, `WEB-INF/lib`, `node_modules/`) carries public authors in
+LICENSE/pom files: allow name findings there by PATH, while secrets and profile paths still count. A key-parsing class
+carries `-----BEGIN PRIVATE KEY-----` as a constant: a secret needs the base64 body after the marker. Carve PNG/JPEG
+resources out of binaries and OCR the larger ones; an unknown non-executable blob with near-random bytes
+(compressed/encrypted payload) stays not checkable.
+
+## Blur instead of hold (when the owner agrees)
+
+Holding a whole manual for a few names in its screenshots removed the team's documentation. With the data owner's
+yes, blur and upload:
+- per embedded image: OCR with word boxes (normal + inverted, upscaled), blur every LINE that carries a hit — blurring
+  only the flagged token left the surname next to a blurred first name; in PDFs replace the embedded image and check
+  the text layer too;
+- verify the OUTPUT with the full gate (every lens, not only the one that found the hit), then look at every changed
+  image; blur whole dialogs when a line is not enough;
+- replace a leaky file by DELETE + purge + upload of the blurred bytes, never as a new version (old versions stay
+  downloadable);
+- when a fragment survives several passes (a short Cyrillic name fragment, a first name), keep that file out and say
+  so — the Word version of the same manual may be enough.
+
+## Allowlists are data; eye verdicts are per file hash
+
+Fail-closed matching over-holds: ordinary words in other languages ("raza", "lies"), OCR fragments of UI words cut to a
+name stem, texture noise in a photo matching the local part of someone's e-mail, functional mailboxes printed in
+manuals, an org-unit label used as document author, font names, product and company names. Keep each class as DATA with
+a reason and a source (noise tokens with a scope — OCR only or everywhere —, functional mailboxes exact or by domain
+suffix, OSS credit phrases, dependency paths, product/font names). Never allowlist a lone first name, nor a token that
+could be the fragment of a real person: give that FILE an eye verdict instead, stored by sha256 of its bytes with the
+reason; an eye verdict never clears a SECRET. The name-SHAPE lens is noisy on UI screenshots and photos by design: a
+shape-only finding means "a human looks", not "held forever".
+
+## Test the gate with the real cases
+
+Every privacy gap in the run was found by looking at real content, never by a scanner designed for it. So the gate's
+regression suite is built from the REAL files (referenced by path on the private machine, never copied): each file
+that leaked must stay non-clean with the named person in the reasons (recall); each file a human cleared must come
+back clean, and switching off the one allowlist entry it relies on must flip it (proving the lens read the content and
+the entry is the only reason it passes); one synthetic test per lens (nested archive, data: image in a diagram, EMF
+bitmap, e-mail attachment, dependency path vs the same text outside it, depth limit, video, random blob, matcher
+timeout and gate exception fail closed). Run it before any lens change. The suite of one run caught, on its first
+day, a leaked e-mail in an already-uploaded blurred PDF and a private key in an already-restored archive.
 
 ## A list change invalidates verdicts
 

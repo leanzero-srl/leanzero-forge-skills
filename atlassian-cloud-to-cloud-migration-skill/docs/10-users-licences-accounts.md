@@ -195,3 +195,37 @@ use that to tell "my path is wrong" from "the org is in the wrong state".
 - Admin user pages can take >20 s to render and have no `<main>` landmark — wait on a text marker ("Managed account" /
   "External user"), not a landmark.
 - Assert the identity at the start of every browser script (the profile may be logged into a different account).
+
+## Contractor-suffixed accounts replaced by full accounts (the second identity problem)
+
+Weeks after the move, people get a new "full" account (address without the contractor suffix) while their old account
+still owns their history. The owner's rule was: switch each person as soon as the full account exists, keep their
+history, deactivate the old account to free the licence. Per person, in this order:
+
+1. Find the full account in the ORG directory (admin hub user search by exact e-mail). An Atlassian account that exists
+   but was never added to this site does not show up there; `POST /rest/api/3/user {"emailAddress": ...}` on the site
+   attaches the EXISTING account (it does not create a second one) — but on a mailbox that does not exist it would
+   create a dead invited account, so only do it for addresses the owner confirmed.
+2. Copy every group of the old account to the new one (licence groups too; a full product may refuse with
+   LicenceExceeded until step 6 frees the old seat — retry after).
+3. Move reporter/assignee on your migrated projects under the silent window (lock + silent scheme + read-back), and on
+   other projects with `notifyUsers=false` (admin). Comments/page authorship cannot be moved; a deactivated author still
+   shows by name.
+4. If the old account is unmanaged, claim it first — the org can only deactivate managed accounts.
+5. Deactivate (admin hub user menu "Deactivate account" → confirm "Deactivate"; session endpoint
+   `POST /gateway/api/users/{accountId}/deactivate`). The dialog warns it blocks the account in every org; content stays.
+   Read the status back.
+6. Retry the licence-group adds, remove the old account from your migration groups, record it, and tell the person to
+   log in with the new address.
+
+Run it as one script and schedule it daily for a couple of weeks: full accounts keep appearing.
+
+## Freeing licence seats when a product is full
+
+`LicenceExceededException` on a group add means the product is at its seat cap (measure: retry one add). With the
+owner's explicit rule (e.g. "inactive 2-3+ months may be suspended, note them down"): list org members with access to
+that product (`/directories/-/users/search` with `resourceIds:[<product site ARI>]`), read per-product last activity
+(`/directory/users/{id}/last-active-dates`), exclude anyone added in the last ~90 days (new invites show "never
+active") and your own movers/testers/admins, suspend the oldest (`POST .../directories/{dirId}/users/{id}/suspend` —
+the UI menu item fires WITHOUT a confirmation), and keep a restore list. Seats freed by deactivation/suspension can
+take several minutes to register.

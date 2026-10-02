@@ -81,3 +81,24 @@ limit as per user, per minute, without a number.
   "unexecuted" bucket — a cosmetic status bucket, reported.
 - Run the scrubber's detector over steps and execution comments after the load (tests loaded with an older matcher
   can carry a name the newer one catches).
+
+## Field note: the steps are there, but the issue shows no test panel
+
+After the load, testers reported "only part of each case was migrated — the body is missing". The steps WERE complete
+in the test app (its API returned every step); the Jira issue view simply showed no test panel. A natively created test
+in another project, same issue type, did show it.
+
+Cause: the test app renders its steps/executions as **Forge issue panels**, and the new issue view only shows a Forge
+panel that has been *added to that issue*. Adding one (by a user, via the issue's "View app actions" button) writes two
+issue properties; issues created over REST never get them:
+
+| issue property key | value |
+|---|---|
+| `ari:cloud:ecosystem::extension/<appId>/<envId>/static/<moduleKey>` (one per panel, e.g. the steps and executions modules) | `[{"id": "<8 hex>", "added": <epoch ms>, "collapsed": false}]` |
+| `issue.content.panel.customised.flag` | `{"createdOn": "<ISO timestamp>"}` |
+
+Without the flag the view ignores the panel list (proven: setting only the panel property did nothing; adding the panel
+once in the UI showed the flag appearing next to it). Read both keys off a native issue first (`GET
+/rest/api/3/issue/{key}/properties`), then PUT them on every migrated test. Issue properties send no notifications.
+It is not a project setting (the app's project page may only offer unrelated toggles) and not a data-security policy —
+check those quickly, then look at issue properties.

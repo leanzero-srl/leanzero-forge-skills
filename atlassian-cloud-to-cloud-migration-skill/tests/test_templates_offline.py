@@ -7,7 +7,9 @@ atl_http retry budgets and read-only source.
 
     python3 tests/test_templates_offline.py -v        (Python 3.8+, stdlib only)
 """
+import base64
 import datetime
+import hashlib
 import io
 import json
 import os
@@ -457,6 +459,110 @@ class AtlHttp(unittest.TestCase):
             self.assertEqual(s.get("/x"), {"ok": 1})
         finally:
             urllib.request.urlopen, atl_http.time.sleep = orig, osl
+
+
+class AttGate(unittest.TestCase):
+    """templates/att_gate.py without OCR tools: the image OCR step is stubbed, everything else runs for real."""
+    def setUp(self):
+        import att_gate
+        self.G = att_gate
+        self.names = lambda t: [w for w in ("Jane Roe", "Roe, Jane") if w in t]
+        self.ctx = {"names": self.names, "first_names": {"Jane", "Ola"}}
+
+    def _zip(self, entries):
+        import zipfile
+        b = io.BytesIO()
+        with zipfile.ZipFile(b, "w") as z:
+            for n, d in entries:
+                z.writestr(n, d)
+        return b.getvalue()
+
+    def test_no_list_lens_is_never_clean(self):
+        self.assertEqual(self.G.gate("a.txt", b"hello", {})["status"], "HELD_UNREADABLE")
+
+    def test_text_hit_and_clean(self):
+        self.assertEqual(self.G.gate("a.txt", b"owner: Jane Roe", self.ctx)["status"], "HIT")
+        self.assertEqual(self.G.gate("a.txt", b"nothing to see", self.ctx)["status"], "clean")
+
+    def test_nested_archive_member_and_file_name(self):
+        inner = self._zip([("notes/b.txt", b"by Jane Roe")])
+        v = self.G.gate("outer.zip", self._zip([("inner.zip", inner)]), self.ctx)
+        self.assertEqual(v["status"], "HIT")
+        self.assertTrue(any("inner.zip!notes/b.txt" in f["where"] for f in v["findings"]))
+        self.assertEqual(self.G.gate("for Jane Roe.txt", b"x", self.ctx)["status"], "HIT")
+
+    def test_depth_limit_fails_closed(self):
+        z = self._zip([("a.txt", b"hello")])
+        for i in range(8):
+            z = self._zip([(f"l{i}.zip", z)])
+        self.assertEqual(self.G.gate("deep.zip", z, self.ctx)["status"], "HELD_UNREADABLE")
+
+    def test_secrets(self):
+        self.assertEqual(self.G.gate("t.zip", self._zip([("app/.env", b"X=1")]), self.ctx)["status"], "SECRET")
+        marker = b'if (l.startsWith("-----BEGIN PRIVATE KEY-----")) parse();'
+        self.assertNotEqual(self.G.gate("P.java", marker, self.ctx)["status"], "SECRET")
+        key = b"-----BEGIN PRIVATE KEY-----\n" + b"\n".join(base64.b64encode(os.urandom(48)) for _ in range(5)) + b"\n-----END PRIVATE KEY-----"
+        self.assertEqual(self.G.gate("k.txt", key, self.ctx)["status"], "SECRET")
+
+    def test_media_and_random_blob_unreadable(self):
+        self.assertEqual(self.G.gate("clip", b"\x00\x00\x00\x18ftypmp42" + os.urandom(100), self.ctx)["status"], "HELD_UNREADABLE")
+        self.assertEqual(self.G.gate("blob.dat", os.urandom(100000), self.ctx)["status"], "HELD_UNREADABLE")
+
+    def test_datauri_and_office_images_are_ocrd(self):
+        with mock.patch.object(self.G, "_ocr", return_value="Signed in as Roe, Jane"):
+            png = base64.b64encode(b"\x89PNG\r\n\x1a\nfake")
+            v = self.G.gate("d.drawio", b'<mxfile><mxCell style="image=data:image/png;base64,' + png * 4 + b';"/></mxfile>', self.ctx)
+            self.assertEqual(v["status"], "HIT")
+            self.assertTrue(any("datauri" in f["where"] for f in v["findings"]))
+            docx = self._zip([("word/document.xml", b"<w:t>Manual</w:t>"), ("word/media/image1.png", b"\x89PNG fake")])
+            v = self.G.gate("m.docx", docx, self.ctx)
+            self.assertEqual(v["status"], "HIT")
+            self.assertTrue(any("word/media/image1.png" in f["where"] for f in v["findings"]))
+
+    def test_ocr_failure_fails_closed(self):
+        with mock.patch.object(self.G, "_ocr", side_effect=RuntimeError("tesseract not installed")):
+            v = self.G.gate("shot.png", b"\x89PNG fake", self.ctx)
+        self.assertEqual(v["status"], "HELD_UNREADABLE")
+
+    def test_eml_attachment(self):
+        from email.message import EmailMessage
+        m = EmailMessage()
+        m["Subject"] = "x"
+        m.set_content("see attached")
+        m.add_attachment(b"author: Jane Roe", maintype="text", subtype="plain", filename="n.txt")
+        self.assertEqual(self.G.gate("m.eml", bytes(m), self.ctx)["status"], "HIT")
+
+    def test_allowlist_data(self):
+        d = tempfile.mkdtemp(dir=TMP)
+        json.dump([{"token": "Jane Roe", "scope": "ocr", "reason": "test"}], open(os.path.join(d, "noise_tokens.json"), "w"))
+        json.dump([{"phrase": "Jane Roe and contributors", "reason": "OSS credit"}], open(os.path.join(d, "oss_credits.json"), "w"))
+        json.dump([{"regex": r"(^|[!/])BOOT-INF/lib/[^!/]+\.jar!", "reason": "dependency"}], open(os.path.join(d, "oss_paths.json"), "w"))
+        ctx = dict(self.ctx, data_dir=d)
+        self.assertEqual(self.G.gate("a.txt", b"Jane Roe", ctx)["status"], "HIT")          # scope ocr does not cover text
+        self.assertEqual(self.G.gate("L.txt", b"(c) Jane Roe and contributors", ctx)["status"], "clean")
+        jar = self._zip([("BOOT-INF/lib/dep.jar", self._zip([("META-INF/LICENSE", b"Copyright Jane Roe")]))])
+        self.assertEqual(self.G.gate("app.jar", jar, ctx)["status"], "clean")
+        self.assertEqual(self.G.gate("own.zip", self._zip([("LICENSE", b"Copyright Jane Roe")]), ctx)["status"], "HIT")
+        b = b"plain"
+        json.dump([{"sha256": hashlib.sha256(b).hexdigest(), "verdict": "hold", "reason": "t"}], open(os.path.join(d, "eye_verdicts.json"), "w"))
+        self.assertEqual(self.G.gate("p.txt", b, ctx)["status"], "HIT")
+
+
+class CheckUploadPaths(unittest.TestCase):
+    def test_offender_gated_read(self):
+        import check_upload_paths as C
+        d = tempfile.mkdtemp(dir=TMP)
+        up = 'r = call(f"/wiki/rest/api/content/{pid}/child/attachment", body, "PUT")\n'
+        open(os.path.join(d, "a.py"), "w").write(up)
+        open(os.path.join(d, "b.py"), "w").write("import att_gate\nif not att_gate.ok(fn, data): raise SystemExit\n" + up)
+        open(os.path.join(d, "c.py"), "w").write('x = call(f"/wiki/rest/api/content/{pid}/child/attachment?limit=200")\n')
+        open(os.path.join(d, "d.py"), "w").write('r = post(f"/rest/api/3/issue/{k}/attachments", data=b, method="POST")\n')
+        with redirect_stdout(io.StringIO()) as out:
+            rc = C.main([d, "--json"])
+        res = json.loads(out.getvalue())
+        self.assertEqual(rc, 1)
+        self.assertEqual(sorted(res["offenders"]), ["a.py", "d.py"])
+        self.assertEqual({r["file"]: r["status"] for r in res["rows"]}["b.py"], "GATED")
 
 
 if __name__ == "__main__":
