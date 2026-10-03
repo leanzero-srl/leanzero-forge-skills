@@ -65,7 +65,7 @@ A capability your app provides. Each module type serves a specific purpose:
 |-------------|---------|
 | `trigger` | Run a function when product events fire (`avi:jira:created:issue`, etc.) |
 | `jira:workflowValidator` | Block a transition when validation fails |
-| `jira:workflowCondition` | Hide/show transitions based on app logic |
+| `jira:workflowCondition` | Hide/show transitions with a Jira expression (no function call) |
 | `jira:workflowPostFunction` | Run logic after a transition completes |
 | `scheduledTrigger` | Run functions on a cron schedule |
 | `consumer` | Process events from an async queue (`@forge/events`) |
@@ -75,7 +75,7 @@ A capability your app provides. Each module type serves a specific purpose:
 | `jira:customField` / `jira:customFieldType` | Custom fields |
 | `jira:dashboardGadget` | Dashboard widgets |
 
-> The three workflow modules are real, supported Forge modules — see `developer.atlassian.com/platform/forge/manifest-reference/modules/jira-workflow-validator` (and the parallel `jira-workflow-condition` / `jira-workflow-post-function` pages). They run your Forge function during the transition. Jira expressions are an alternative for simple checks that don't need code, but the modules are the right choice when you need to call REST APIs, KVS, or external systems.
+> The three workflow modules are real, supported Forge modules — see `developer.atlassian.com/platform/forge/manifest-reference/modules/jira-workflow-validator` (and the parallel `jira-workflow-condition` / `jira-workflow-post-function` pages). A validator and a post-function run your Forge function during the transition. A condition is different: it is a Jira expression in the manifest that Jira evaluates itself, so it can never call REST APIs, KVS, a model or an external system. Work like that belongs in a validator.
 
 ### Function
 

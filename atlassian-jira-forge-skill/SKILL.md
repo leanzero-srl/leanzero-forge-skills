@@ -21,7 +21,7 @@ Skip this skill for:
 
 - **Scaffolding a new module**: copy a template from `templates/` (validator, condition, post-function, async-queue-consumer, custom-field-type, capability-token-webtrigger, workflow-config-view, etc.).
 - **Production patterns** (sharding, backoff+jitter, drafts/locks, write-verify, two-engine parity, capability tokens, async offload, fail-open validators): `docs/24-production-patterns.md`.
-- **Workflow rules in depth** (create/edit/view split, `expression:"true"`, per-instance ids, agentic validation, semantic-PF editmeta pre-flight): `docs/25-workflow-modules-deep-dive.md`.
+- **Workflow rules in depth** (create/edit/view split, conditions are expressions never functions, per-instance ids, agentic validation, semantic-PF editmeta pre-flight): `docs/25-workflow-modules-deep-dive.md`.
 - **AI / LLM in a Forge app** (`@forge/llm` hosted, BYOK multi-provider, three-layer cost guard): `docs/31-forge-ai-and-llm.md`.
 - **Live multi-user UI** (`@forge/realtime`): `docs/32-forge-realtime.md`.
 - **Limits & quotas** (timeouts, KVS quotas, queue limits): `docs/27-faas-limits-and-cost.md`.
@@ -195,7 +195,7 @@ Copy-paste-ready manifests in `templates/`:
 | `bitbucket-merge-check.yml` | `bitbucket:mergeCheck` |
 | `custom-field-type.yml` | `jira:customFieldType` (view + edit + contextConfig) |
 | `capability-token-webtrigger.yml` | Webtrigger with token + bearer auth |
-| `workflow-config-view.yml` | Validator/condition/post-fn create+edit+view split (`expression:"true"`) |
+| `workflow-config-view.yml` | Validator/condition/post-fn create+edit+view split (the condition is a manifest `expression`, no function) |
 | `byok-provider-adapter.js` | Unified BYOK AI adapter (OpenAI/Anthropic/Azure/OpenRouter/Bedrock/LM Studio/`@forge/llm`) |
 | `forge-llm-cost-guard.js` | Three-layer cost guard (kill-switch + caps + cache-only-clean + metering) |
 | `realtime-publisher.js` | `@forge/realtime` metadata-only, never-throw publisher |
@@ -216,6 +216,7 @@ Recommended workflow: `preflight-check.sh` → make changes → `validate-manife
 
 ## Changelog
 
+- **2026-10-03** — Corrected the claim that a `jira:workflowCondition` runs a Forge function (that `expression: "true"` was "REQUIRED" so Jira would invoke it on every issue view, that `validate` served conditions, a 25 s condition timeout). False per the Forge manifest schema (`@forge/manifest` 12.9.0): the condition module has a REQUIRED `expression` and NO `function` property; Jira evaluates the expression itself, so a condition cannot call REST, KVS or a model. Rewritten: `03-workflow-conditions.md` (also in `jira-api-skill`), `25` ("Conditions are Jira expressions, never functions"), `01`, `27`, `07`, `gotchas.md`, `when-to-use-which.md`, templates `condition.yml` and `workflow-config-view.yml`. The `25`/`01`/`27`/`gotchas` wording matches CogniRunner's F-2616 scrub of these passages word for word, so its knowledge bake is unchanged.
 - **2026-08-26** — `19-rate-limit-handling.md` gains the verified 2026 points findings: **only app-initiated backend traffic counts** (`@forge/bridge` UI reads with no resolver are exempt — staff post #133 — the highest-leverage fix for a points-constrained app, with its caveats); **Jira's identity class adds Project Roles** on top of Users/Groups/Permissions, so role and permission-scheme walks are identity-priced; the only published multi-object worked example (1 + 8 users = 17) and the fact that everything else is derived; **the rule is measurably not applied consistently** (partner-measured endpoints charging flat 1 point at ~500-1000 objects); **POST-that-reads is charged per object** (`search/jql` measured at ~11.4 pts/call, not 1); measuring against the `X-RateLimit-Remaining` delta rather than a model, and why `FORGE_API_REQUEST_COUNT` cannot substitute; the self-meter defect classes that produced a 4x under-count on a live estate; and that "per Forge environment" pool scope is undocumented.
 - **2026-08-26** — Folded in a day of production learnings from **ChatWise**
   (document → whole Jira backlog). `gotchas.md` gains a **Toolchain** section

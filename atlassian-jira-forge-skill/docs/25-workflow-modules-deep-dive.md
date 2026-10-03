@@ -26,20 +26,23 @@ jira:workflowValidator:
 - `view` is a **separate, read-only** build that Jira embeds in the rule's detail pane in the workflow editor. CogniRunner uses it to render a config summary plus the rule's recent execution-log entries — so an admin sees *what the rule did* without opening the editor.
 - `projectTypes` gates which project styles can attach the rule. Omit it and the rule offers on both; list to restrict.
 
-## `expression: "true"` is REQUIRED on conditions
+## Conditions are Jira expressions, never functions
 
 ```yaml
 jira:workflowCondition:
-  - key: ai-text-field-condition
-    function: validate
-    expression: "true"            # <-- without this the Forge fn is never invoked
+  - key: my-field-condition
+    expression: >-
+      config == null || config.fieldId == null ? true : issue?.[config.fieldId] != null
+    resolver:
+      function: resolver   # backs the condition's create/edit/view UI, never the check itself
 ```
 
-Without `expression: "true"`, Jira treats the condition as static and **never calls your Forge function** to compute button visibility. With it, Jira invokes the function on **every issue view** to decide whether to show the transition button.
+The manifest schema gives `jira:workflowCondition` a required `expression` and **no `function` property** (validators have both). Jira evaluates the expression itself, in its own sandbox, wherever the transition can be offered: the issue view, REST, automation and bulk changes. It cannot call your app, REST, KVS, a model or any network, so an AI condition cannot exist. The rule's saved config arrives in the expression as `config` and the issue as `issue`.
+**Source:** the Forge manifest schema, `@forge/manifest` 12.9.0 `out/schema/manifest-schema.json` (`definitions.ModuleSchema.properties["jira:workflowCondition"]`): properties `name`, `description`, `expression`, `resolver`, `create`/`edit`/`view`, `projectTypes`, `key`; required `description`, `expression`, `name`, `key`; no `function`. `jira:workflowValidator` in the same schema has both `function` and `expression` (neither required). Checked 2026-10-03.
 
 Design impact:
-- **Conditions run on every issue load** — keep them cheap and fail-fast. An expensive condition (LLM call, multi-REST fetch) adds latency to every board/issue render.
-- **Validators run only at transition time** — they can afford expensive work (CogniRunner runs multi-round agentic LLM validation here, see below).
+- **Conditions are free and fast**, but only as expressive as a Jira expression. A check the expression cannot compute must not be offered as a condition: it would allow every transition. Work that needs code or judgement belongs in a validator.
+- **Validators run only at transition time** and are real functions: they can afford expensive work (multi-round agentic LLM validation, see below).
 
 ## One resolver, separately-exported runtime functions
 
@@ -50,13 +53,13 @@ const resolver = new Resolver();
 // ... resolver.define('getConfigs', ...), resolver.define('saveConfig', ...) etc.
 export const handler = resolver.getDefinitions();   // Custom UI invoke backend
 
-export const validate = async (args) => { /* validators AND conditions */ };
+export const validate = async (args) => { /* validators only: a condition is its manifest expression and calls no function */ };
 export const executePostFunction = async (args) => { /* post-functions */ };
 export const serveAttachment = async (req) => { /* webtrigger */ };
 ```
 
 - **One** `resolver` (`getDefinitions`) backs all the config Custom UIs (`invoke('getConfigs')`, etc.).
-- `validate` is shared by validators **and** conditions — it disambiguates via `args.context.extension.type` (the string contains `"Condition"` for conditions).
+- `validate` serves validators only. A condition never reaches it: Jira evaluates the condition's manifest `expression` itself.
 - `executePostFunction` is separate because post-functions return `{ result: true }` semantics but never block.
 
 ## Runtime config transport: handle string AND object

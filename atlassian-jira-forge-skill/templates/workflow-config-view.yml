@@ -9,13 +9,14 @@
 #                                rule detail pane.
 #
 # Key facts baked in (see docs/25-workflow-modules-deep-dive.md):
-#   - `expression: "true"` is REQUIRED on jira:workflowCondition, or Jira never
-#     invokes your Forge function to compute transition-button visibility.
+#   - A jira:workflowCondition is a Jira EXPRESSION, never a function: the manifest
+#     schema (@forge/manifest 12.9.0) gives it a required `expression` and no
+#     `function` property. Jira evaluates it itself; it cannot call REST/KVS/a model.
 #   - One `resolver` (getDefinitions) backs all the config UIs via invoke().
 #   - The runtime functions are SEPARATE exported handlers (validate /
 #     executePostFunction), not resolver-defined.
-#   - Conditions run on EVERY issue view (keep cheap); validators run only at
-#     transition time (can do expensive work, incl. LLM calls).
+#   - Validators run only at transition time and are real functions (they can do
+#     expensive work, incl. LLM calls). Work that needs code never goes in a condition.
 #
 # Auth/caveats:
 #   - Workflow modules are real Forge modules (NOT Connect-only).
@@ -46,11 +47,12 @@ modules:
   jira:workflowCondition:
     - key: my-field-condition
       name: My Field Condition
-      description: Shows the transition only if a field value passes the check.
-      function: validate                 # same handler; disambiguate via context.extension.type
+      description: Shows the transition only if the configured field has a value.
+      # REQUIRED: the check itself. Jira evaluates it; no function is called.
+      expression: >-
+        config == null || config.fieldId == null ? true : issue?.[config.fieldId] != null
       resolver:
-        function: resolver
-      expression: "true"                 # REQUIRED — without it the Forge fn is never invoked
+        function: resolver               # backs the config UIs only, never the check
       create:
         resource: config-ui-resource
       edit:

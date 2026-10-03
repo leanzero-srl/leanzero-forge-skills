@@ -237,6 +237,7 @@ CI-safe helpers in `scripts/`:
 
 ## Changelog
 
+- **2026-10-03** — `01-core-concepts.md`, `03-workflow-conditions.md`, `07-permissions-scopes.md` and `when-to-use-which.md` no longer say the workflow modules are Connect-only or that a condition runs a Forge function. Per the Forge manifest schema (`@forge/manifest` 12.9.0) `jira:workflowCondition` has a REQUIRED `expression` and NO `function`; validators and post-functions run functions.
 - **2026-08-26** — `gotchas.md` gains the `POST /issue/bulk` result-mapping trap,
   found while building a document→backlog generator: the response carries only
   the SUCCESSES in `body.issues` and reports failures separately by
