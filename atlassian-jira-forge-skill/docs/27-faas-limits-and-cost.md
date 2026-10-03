@@ -8,7 +8,7 @@ The hard numbers you need to design around. All values are from `developer.atlas
 |---|---|---|
 | Resolver | 25 s | 25 s (hard ceiling) |
 | Trigger | 25 s | 25 s |
-| Workflow validator / condition / post-function | 25 s | 25 s |
+| Workflow validator / post-function | 25 s | 25 s |
 | Scheduled trigger | 55 s | `timeoutSeconds:` up to 900 s |
 | Web trigger | 55 s | 55 s (verified 2026-09-14, limits-invocation page) |
 | **Consumer (async event handler)** | 55 s | **`timeoutSeconds:` up to 900 s** (default 55 s verified 2026-09-14, limits-invocation page) |

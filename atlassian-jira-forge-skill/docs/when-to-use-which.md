@@ -122,10 +122,9 @@ modules:
     - key: manager-only-close
       name: Manager Only
       description: Only managers can see close transition
-      function: checkManagerPermission
-      
-      create:
-        resource: config-ui
+      # A condition is a Jira expression Jira evaluates itself; it never calls a function
+      # (the manifest schema gives this module a required `expression` and no `function`).
+      expression: user.inGroup('managers')
 ```
 
 ---
@@ -226,8 +225,9 @@ Use `@forge/bridge` when you need:
 
 | Module Type | Timeout |
 |-------------|---------|
-| Workflow validators/conditions | 30 seconds |
-| Post functions | 30 seconds |
+| Workflow validators | 25 seconds |
+| Post functions | 25 seconds |
+| Workflow conditions | none: a condition is a Jira expression and runs no function |
 | Scheduled triggers | 60 seconds |
 | Automation actions | 30 seconds |
 
@@ -254,7 +254,7 @@ Use `@forge/bridge` when you need:
 | Issue | Likely Solution |
 |-------|-----------------|
 | Validator doesn't appear in workflow editor | Check `create: resource: config-ui` is present |
-| Condition not hiding/showing transitions | Verify condition returns `{ result: true/false }` |
+| Condition not hiding/showing transitions | Check the module's `expression` (a Jira expression; no function runs). An expression that errors hides the transition, so guard nulls (`config == null ? true : ...`) |
 | Post function runs before expected | Ensure it's configured to run at correct stage |
 | External API calls failing | Add domain to permissions.external.fetch.backend |
 

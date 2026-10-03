@@ -2,28 +2,33 @@
 
 ## Overview
 
-Forge apps **DO have a `jira:workflowCondition` module type**. This allows you to execute custom Forge functions to control the visibility of transitions, providing much more power than simple Jira expressions.
+A workflow condition decides whether a transition is offered to the user. Forge has a real module for it, `jira:workflowCondition`, and that module **is a Jira expression declared in the manifest**. Jira evaluates the expression itself; it never invokes a Forge function to decide a condition.
 
-While Jira expressions are useful for simple logic, the `jira:workflowCondition` module is the correct way to implement complex, data-driven visibility rules that require external API calls, database lookups, or advanced business logic.
+**Source:** the Forge manifest schema, `@forge/manifest` 12.9.0 `out/schema/manifest-schema.json` (`definitions.ModuleSchema.properties["jira:workflowCondition"]`): properties `name`, `description`, `expression`, `resolver`, `create`/`edit`/`view`, `projectTypes`, `key`; required `description`, `expression`, `name`, `key`; no `function`. `jira:workflowValidator` in the same schema has both `function` and `expression` (neither required). Checked 2026-10-03.
 
-### When to use `jira:workflowCondition` vs Jira Expressions
+What follows from that:
+- A condition **cannot** call your app, REST APIs, KVS, a model or any network. An "AI condition" or an "external API condition" cannot exist.
+- A condition costs no Forge invocation and has no function timeout: Jira runs it wherever it offers the transition (issue view, REST, automation, bulk changes).
+- Work that needs code or judgement belongs in a **validator** (`jira:workflowValidator` with `function`): it runs at transition time and can refuse with an error message.
+- An expression that errors hides the transition (it fails closed), so guard every lookup (`config == null ? true : ...`, `issue?.[...]`).
 
-| Feature | Jira Expressions | `jira:workflowCondition` |
-|---------|-----------------|---------------------------|
-| **Complexity** | Simple logic (field presence, group check) | Complex logic (external API, KVS, DB) |
-| **Execution** | Within Jira engine (fast) | As a Forge function (more powerful) |
-| **Manifest** | No declaration needed | Requires `manifest.yml` entry |
-| **Configuration** | Direct in Workflow UI | Workflow UI + Forge Function |
+### Which one to use
+
+| Need | Use |
+|------|-----|
+| A one-off visibility rule an admin types by hand | A Jira expression condition in the workflow editor (no app needed) |
+| A visibility rule your app ships, configured per transition through a UI | `jira:workflowCondition` (manifest `expression` + config UI) |
+| A check that needs REST, KVS, external systems or a model | `jira:workflowValidator` with a `function` (runs on transition, can block with a message) |
+| Visibility that depends on data only code can compute | Compute it elsewhere (a trigger, a post-function, a scheduled job) into an **issue property**, and have the condition's expression read the property |
 
 ### What Are Jira Expressions?
 
-Jira expressions are a simple expression language that allows you to perform basic validation/visibility checks. They run within Jira's workflow engine.
+Jira expressions are a small expression language that Jira evaluates inside its own engine.
 
 **Key Points:**
-- No `manifest.yml` module declaration needed
-- Configured in Jira workflow editor or via REST API
+- Configured in the Jira workflow editor or via REST API, or shipped by an app as a `jira:workflowCondition` module's `expression`
 - Uses simple expression syntax like: `user.inGroup('release-managers')`
-- Runs within Jira's engine, not as a separate Forge function
+- Runs within Jira's engine, never as a Forge function
 
 ## Configuration Approach
 
@@ -31,77 +36,60 @@ Jira expressions are a simple expression language that allows you to perform bas
 
 1. Open your workflow in Jira
 2. Select the transition you want to add a condition to
-3. Add a condition of type **"Forge workflow condition"** (for custom modules) or **"Jira expression"** (for simple logic)
-4. If using a Forge module, select your app and the specific condition key
+3. Add your app's condition (for an app-provided module) or a **"Jira expression"** condition (for hand-written logic)
+4. If using an app's module, select your app and the specific condition, then fill in its configuration UI
 5. If using a Jira expression, enter your expression: `user.inGroup('release-managers')`
 
 ### Using the Forge Module (`jira:workflowCondition`)
-
-To implement a custom condition via Forge, you must declare it in your `manifest.yml`:
 
 ```yaml
 modules:
   jira:workflowCondition:
     - key: my-custom-condition
       name: Custom Visibility Rule
-      description: Hides transition based on complex external logic
-      function: checkVisibility
-      # Optional: UI for configuring the condition
+      description: Shows the transition only when the configured field has a value
+      # The check itself. Jira evaluates it; no function is called.
+      expression: >-
+        config == null || config.fieldId == null ? true : issue?.[config.fieldId] != null
+      # Optional: a Custom UI to configure the condition per transition.
+      resolver:
+        function: resolver        # backs the create/edit/view UI only, never the check
       create:
+        resource: condition-config-ui
+      edit:
         resource: condition-config-ui
 
 functions:
-  - key: checkVisibility
-    handler: src/index.checkVisibility
+  - key: resolver
+    handler: index.handler
 
 resources:
   - key: condition-config-ui
     path: static/condition-config/build
 ```
 
-### Function Implementation
+The config UI saves the rule's configuration (`workflowRules.onConfigure` from `@forge/jira-bridge` returns it as a JSON string). Jira hands that saved configuration to the expression as `config`, next to `issue`, `user` and `project`.
 
-Your Forge function must return a response indicating whether the transition should be visible.
+### Reading data your app computed
 
-```javascript
-export const checkVisibility = async (payload) => {
-  const { issue, configuration } = payload;
+The expression cannot fetch anything, but it can read **issue properties**. Have code write the answer to a property, then read it in the expression:
 
-  try {
-    // Example: Check an external system or KVS
-    const isAllowed = await api.asApp().requestJira(route`/rest/api/3/issue/${issue.id}/some-custom-endpoint`);
-    
-    if (isAllowed.ok) {
-       return { result: true };
-    }
-
-    return { result: false };
-
-  } catch (error) {
-    console.error("Condition error:", error);
-    // Best practice: Fail closed (hide transition) if error occurs during critical checks
-    return { result: false };
-  }
-};
+```yaml
+expression: >-
+  issue.properties?.["myapp.checks"] == null ? true :
+  issue.properties?.["myapp.checks"]?.approved == true
 ```
 
-## Response Formats
-
-The function must return an object with a `result` property (boolean).
-
-| Scenario | Return Value | Result in Jira |
-|----------|--------------|----------------|
-| **Visible** | `{ result: true }` | Transition is shown to users |
-| **Hidden** | `{ result: false }` | Transition is hidden from users |
+Decide on purpose what an absent property means (above: shown). A property your code has not written yet is the common case right after an issue is created.
 
 ## Comparison: Connect vs Forge Approach
 
 | Aspect | Connect Apps | Forge Apps |
 |--------|-------------|------------|
 | Module Type | `jiraWorkflowConditions` | `jira:workflowCondition` |
-| Manifest Entry | Required with `enabledForTmp` property | Required for custom modules |
-| Configuration | In manifest or via JS API | Workflow UI + Forge Function |
-
+| Manifest Entry | Required with `enabledForTmp` property | Required for an app-shipped condition |
+| The check | The module's Jira expression | The module's `expression` (a Jira expression); no function |
+| Configuration | In manifest or via JS API | Workflow UI + optional Custom UI config (`create`/`edit`/`view`) |
 
 ## Jira Expression Syntax for Conditions
 
@@ -133,7 +121,7 @@ project.key == "PROJ"
 
 ### Operators
 
-- **Comparison**: `=`, `!=`, `>`, `<`, `>=`, `<=`
+- **Comparison**: `==`, `!=`, `>`, `<`, `>=`, `<=`
 - **Logical**: `&&`, `||`, `!`
 - **Methods**: `.inGroup()`, `.inProjectRole()`
 
@@ -165,12 +153,12 @@ user.accountId == issue.reporter.accountId
 
 ## Response Handling
 
-When a Jira expression evaluates to false:
+When a condition's expression evaluates to false:
 
 1. The transition is hidden from users
 2. Users cannot see or execute that transition
 3. **No Forge event is fired**
-4. Your Forge app functions do NOT run for condition evaluation
+4. No Forge function runs, for an app-provided condition or a hand-written one
 
 ### Important: No "Condition Failed" Event
 
@@ -188,8 +176,8 @@ To configure conditions via REST API:
 ```yaml
 permissions:
   scopes:
-    - read:jira-work       # View issue data
-    - manage:jira-config   # Manage workflow configuration (requires Administer Jira)
+    - read:jira-work             # View issue data
+    - manage:jira-configuration  # Manage workflow configuration (requires Administer Jira)
 ```
 
 **Note**: Most condition configurations are done through the Jira UI, not programmatically.
@@ -215,16 +203,8 @@ If you have an existing Connect app with `jiraWorkflowConditions`:
 ```
 
 ### After (Forge)
-- For **simple logic**: Use Jira Expressions directly in the workflow editor (no `manifest.yml` entry).
-- For **complex logic**: Implement a `jira:workflowCondition` module in your `manifest.yml` and point it to a Forge function.
-
-## Comparison: Connect vs Forge Approach
-
-| Aspect | Connect Apps | Forge Apps |
-|--------|-------------|------------|
-| Module Type | `jiraWorkflowConditions` | `jira:workflowCondition` |
-| Manifest Entry | Required with `enabledForTmp` property | Required for custom modules |
-| Configuration | In manifest or via JS API | Workflow UI + Forge Function |
+- The same expression moves into a `jira:workflowCondition` module's `expression`, with a config UI if the rule needs per-transition settings.
+- Logic that needs code (REST, KVS, external systems) cannot move into a condition: make it a `jira:workflowValidator` with a `function`, or precompute it into an issue property the expression reads.
 
 ## Event Handling
 
@@ -232,25 +212,23 @@ Forge apps do NOT receive events when conditions are evaluated. This is a key di
 
 ### What happens during condition evaluation:
 
-1. User opens issue transition screen
-2. Jira evaluates all condition expressions (either via Jira Expressions or Forge functions)
-3. If expression/function returns false → transition hidden
-4. If expression/function returns true → transition shown
-5. **No event is fired** (even if a Forge function was executed to determine visibility)
+1. User opens an issue (or REST, automation or a bulk change asks which transitions are available)
+2. Jira evaluates every condition's Jira expression itself
+3. If an expression returns false, or errors, the transition is hidden
+4. If it returns true, the transition is shown
+5. **No event is fired** and no Forge function runs
 
 ## Common Use Cases
 
-1. **Licensing Check**: Only show transition if app license is active
-2. **Role-Based Visibility**: Show transitions only for specific roles/groups
-3. **Business Logic**: Hide transitions until prerequisites are met
-4. **Feature Flags**: Conditionally enable based on configuration
-
-**Note**: For complex condition logic that requires external API calls, consider using a trigger module instead.
+1. **Role-Based Visibility**: Show transitions only for specific roles/groups
+2. **Business Logic**: Hide transitions until prerequisites (fields, linked data in issue properties) are met
+3. **Feature Flags**: Conditionally enable based on the condition's saved configuration
+4. **App-computed state**: Show a transition once your app has written an approval into an issue property
 
 ## Next Steps
 
-- **Workflow Validators**: Validate data when transition completes (also uses Jira expressions)
-- **Workflow Post Functions**: Execute after successful transitions (uses Jira expressions)
-- **Jira Expressions Guide**: Learn more about the expression syntax at Atlassian's documentation
+- **Workflow Validators**: `02-workflow-validators.md` - a Forge function (or an expression) run when the transition is attempted; the place for checks that need code
+- **Workflow Post Functions**: `04-workflow-post-functions.md` - a Forge function run after a successful transition
+- **Deep dive**: `25-workflow-modules-deep-dive.md` - "Conditions are Jira expressions, never functions"
 
-**Remember**: Forge apps use Jira expressions for workflow conditions - not custom module types.
+**Remember**: a Forge `jira:workflowCondition` is a manifest Jira expression. It never calls a function.

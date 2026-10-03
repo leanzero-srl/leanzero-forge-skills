@@ -1,8 +1,8 @@
-# Jira Workflow Condition Template (Preview)
+# Jira Workflow Condition Template
 
 Copy this file and modify for your specific use case.
 
-**Note**: The `jira:workflowCondition` module is in **Preview** status per Atlassian's official documentation. Preview features are deemed stable but remain under active development.
+**The one fact that shapes everything below:** a `jira:workflowCondition` is a **Jira expression in the manifest**. Jira evaluates it itself; it never calls a Forge function. The manifest schema (`@forge/manifest` 12.9.0 `out/schema/manifest-schema.json`, `definitions.ModuleSchema.properties["jira:workflowCondition"]`) gives the module a REQUIRED `expression` and NO `function` property (a `jira:workflowValidator` has both). So a condition cannot call REST, KVS, a model or any network. A check that needs code is a validator (`templates/` validator, `docs/02-workflow-validators.md`).
 
 ## File: manifest.yml (add to modules section)
 
@@ -11,123 +11,68 @@ modules:
   jira:workflowCondition:
     - key: my-condition               # REQUIRED: Unique identifier
       name: My Condition              # REQUIRED: Display name
-      description: Controls visibility  # REQUIRED: Description
-      
-      function: checkMyCondition      # Function handler (or use expression)
-      # expression: issue.fields.status.name == 'Open'  # OR: Use Jira expression
-      
+      description: Shows the transition only when the configured field has a value  # REQUIRED
+      # REQUIRED: the check. A Jira expression; Jira evaluates it, no function runs.
+      # `config` is the configuration your config UI saved; `issue`, `user`, `project` are Jira's.
+      # Guard every lookup: an expression that errors HIDES the transition.
+      expression: >-
+        config == null || config.fieldId == null ? true : issue?.[config.fieldId] != null
+
       projectTypes:
         - company-managed
         - team-managed
-        
+
+      # Optional: a Custom UI to configure the condition per transition.
+      resolver:
+        function: resolver            # backs the config UI's invoke() calls, never the check
       create:
-        resource: condition-config-ui   # Required for configuration UI
+        resource: condition-config-ui
+      edit:
+        resource: condition-config-ui
+
+functions:
+  - key: resolver
+    handler: index.handler
+
+resources:
+  - key: condition-config-ui
+    path: static/condition-config/build
 ```
 
-## File: src/index.js
+## File: src/index.js (only the config UI's resolver; the condition itself has no code)
 
 ```javascript
-export const checkMyCondition = async (args) => {
-  const { issue, configuration, context } = args;
-  
-  console.log('Checking condition for issue:', issue.key);
-  console.log('Issue status:', issue.fields.status?.name);
-  
-  // Configuration contains user's saved settings
-  const allowedStatuses = configuration.allowedStatuses || [];
-  const requireLicense = configuration.requireLicense || false;
-  
-  try {
-    // Example 1: Check issue field value
-    if (issue.fields.status?.name === 'Done') {
-      return { result: true };  // Show transition
-    }
-    
-    // Example 2: Check license status (for licensed apps)
-    if (requireLicense) {
-      const isActive = context.license?.isActive === true;
-      if (!isActive) {
-        return { result: false };  // Hide transition
-      }
-    }
-    
-    // Example 3: Check user permissions
-    const userContext = await getUserContext();
-    if (userContext.role === 'manager') {
-      return { result: true };
-    }
-    
-    return { result: false };  // Default: hide transition
-    
-  } catch (error) {
-    console.error('Condition check error:', error);
-    return { result: false };  // Hide on error
-  }
-};
+import Resolver from '@forge/resolver';
 
-// Helper function to get user context
-async function getUserContext() {
-  try {
-    const bridge = require('@forge/bridge').bridge;
-    const context = await bridge.getContext();
-    
-    return {
-      accountId: context.accountId,
-      role: context.role || 'user'
-    };
-  } catch (error) {
-    console.error('Error getting user context:', error);
-    return { accountId: null, role: 'unknown' };
-  }
-}
+const resolver = new Resolver();
+// e.g. resolver.define('getFields', ...) to fill the config UI's field picker
+export const handler = resolver.getDefinitions();
 ```
 
-## File: src/Configure.js (Optional - for custom configuration UI)
+## File: static/condition-config/src/App.js (Custom UI config, optional)
 
 ```javascript
-import React from 'react';
-import { Form, Select, Checkbox } from '@forge/bridge';
+import React, { useEffect, useRef, useState } from 'react';
+import { workflowRules } from '@forge/jira-bridge';
 
-export const Configure = () => {
-  const [allowedStatuses, setAllowedStatuses] = React.useState([]);
-  const [requireLicense, setRequireLicense] = React.useState(false);
-  
-  // Status options for dropdown
-  const statusOptions = [
-    { label: 'Open', value: 'Open' },
-    { label: 'In Progress', value: 'In Progress' },
-    { label: 'Done', value: 'Done' }
-  ];
-  
+export default function App() {
+  const [fieldId, setFieldId] = useState('');
+  const fieldRef = useRef('');
+  useEffect(() => { fieldRef.current = fieldId; }, [fieldId]);
+
+  useEffect(() => {
+    // Jira calls this when the admin saves the rule. The returned JSON string is the `config`
+    // the manifest expression reads. Read from a ref: the callback is registered once.
+    workflowRules.onConfigure(async () => JSON.stringify({ fieldId: fieldRef.current || null }));
+  }, []);
+
   return (
-    <Form>
-      <Select
-        label="Allowed Statuses"
-        options={statusOptions}
-        multiple={true}
-        value={allowedStatuses}
-        onChange={(e) => setAllowedStatuses(e.target.value)}
-      />
-      
-      <Checkbox
-        label="Require Active License"
-        checked={requireLicense}
-        onChange={(e) => setRequireLicense(e.target.checked)}
-      />
-    </Form>
+    <label>
+      Field that must have a value
+      <input value={fieldId} onChange={(e) => setFieldId(e.target.value)} placeholder="customfield_10010" />
+    </label>
   );
-};
-
-// Save configuration function
-export const onSaveConfiguration = async () => {
-  const config = {
-    allowedStatuses: document.getElementById('allowed-statuses').value,
-    requireLicense: document.getElementById('require-license').checked,
-    enabled: true
-  };
-  
-  return JSON.stringify(config);
-};
+}
 ```
 
 ## Permissions Required
@@ -135,56 +80,40 @@ export const onSaveConfiguration = async () => {
 ```yaml
 permissions:
   scopes:
-    - read:jira-work        # View issue data
-    - read:user:jira        # View user information (if needed)
-    - storage:app           # Access app storage (if needed)
+    - read:jira-work        # only if the config UI's resolver reads Jira data (e.g. a field list)
 ```
 
-## Common Use Cases
+
+## Common Use Cases (expressions)
 
 ### Hide Transitions for Non-Managers
 
-```javascript
-export const checkManagerPermission = async (args) => {
-  const { context } = args;
-  
-  // Check if user has manager role
-  const hasManagerRole = context.groups?.includes('jira-managers');
-  
-  return { result: hasManagerRole };
-};
+```yaml
+expression: user.inGroup('jira-managers')
 ```
 
-### Show Only for Specific Project Types
+### Show Only in One Project (configured)
 
-```javascript
-export const checkProjectType = async (args) => {
-  const { issue } = args;
-  
-  // Check if project matches allowed types
-  const allowedProjectTypes = ['software', 'service'];
-  const projectType = issue.fields.project.scheme?.type;
-  
-  return { result: allowedProjectTypes.includes(projectType) };
-};
+```yaml
+expression: >-
+  config == null || config.projectKey == null ? true : project.key == config.projectKey
 ```
 
-### Conditional Visibility Based on Issue Fields
+### Show Once Your App Has Approved the Issue (data only code can compute)
 
-```javascript
-export const checkIssueFields = async (args) => {
-  const { issue, configuration } = args;
-  
-  // Only show if required fields are filled
-  const requiredField = issue.fields[configuration.requiredFieldId];
-  
-  return { result: !!requiredField };
-};
+Code elsewhere (a trigger, a post-function, a scheduled job) writes an issue property; the expression reads it:
+
+```yaml
+expression: >-
+  issue.properties?.["myapp.checks"] == null ? true :
+  issue.properties?.["myapp.checks"]?.approved == true
 ```
+
+Decide on purpose what an absent property means (above: shown).
 
 ## Key Points
 
-- **Return format**: `{ result: true }` to show, `{ result: false }` to hide
-- Conditions run before UI renders (transition won't appear if false)
-- Use `context.license.isActive` for license-based conditions
-- Handle errors gracefully by returning `{ result: false }`
+- The check is the manifest `expression`; there is no `{ result }` function and no handler to write
+- `true` shows the transition, `false` hides it, and an ERROR hides it too: guard nulls
+- No Forge invocation, no function timeout, no event when a condition is evaluated
+- Anything that needs REST, KVS, a model or an external system is a validator, or is precomputed into an issue property

@@ -64,13 +64,13 @@ A capability your app provides. Each module type serves a specific purpose:
 | Module Type | Purpose |
 |-------------|---------|
 | `jira:issueCreatedTrigger` | Trigger when an issue is created |
-| `jira:workflowCondition` | Control visibility of transitions using Jira expressions (Connect/Forge pattern) |
-| `jira:workflowPostFunction` | Execute logic after transition using Jira expressions (Connect/Forge pattern) |
+| `jira:workflowCondition` | Control visibility of transitions with a Jira `expression` in the manifest (Jira evaluates it; no function runs) |
+| `jira:workflowPostFunction` | Run a Forge function after a successful transition |
 | `scheduledTriggers` | Run functions at scheduled intervals |
 | `trigger` | Handle webhook events from external systems |
 | `macro` | Insert content in Confluence pages |
 
-**Important Note**: Forge apps primarily use **Jira expressions** for workflow validators, conditions, and post functions - not custom module declarations like Connect apps. The `jira:workflowValidator`, `jira:workflowCondition`, and `jira:workflowPostFunction` keys shown in manifest examples are from the older Connect app framework.
+**Important Note**: `jira:workflowValidator`, `jira:workflowCondition` and `jira:workflowPostFunction` are real Forge modules declared in `manifest.yml`. A validator runs a Forge `function` (or a Jira `expression`) when the transition is attempted; a post-function runs a Forge `function` after it; a condition is ONLY a Jira `expression` that Jira evaluates itself and never calls a function (the manifest schema, `@forge/manifest` 12.9.0, gives the condition module a required `expression` and no `function`).
 
 ### Function
 
@@ -225,4 +225,4 @@ export const dailyReport = async (event, context) => {
 - **API Endpoints**: Know how to call Jira REST APIs from your app
 - **Permissions**: Configure required scopes for your app's functionality
 
-**Important Note on Workflow Rules**: Forge apps use **Jira expressions** (not custom module types) for workflow validators, conditions, and post functions. These are configured via the Jira UI or through the Jira Management API, not in the `manifest.yml`.
+**Important Note on Workflow Rules**: an app ships workflow rules as the `jira:workflowValidator` / `jira:workflowCondition` / `jira:workflowPostFunction` modules in `manifest.yml`; admins attach them to transitions in the workflow editor (or through the workflows REST API). A condition is a Jira expression and never runs a function. Hand-written Jira expression conditions and validators need no app at all.

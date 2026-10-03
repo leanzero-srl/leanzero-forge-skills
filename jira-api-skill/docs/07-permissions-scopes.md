@@ -276,4 +276,4 @@ permissions:
 - **Permissions by Module Type**: See individual module docs for scope requirements
 - **API Endpoints**: Each API requires specific scopes to function
 
-**Note on Forge Module Types**: Forge apps use trigger modules (`scheduledTriggers`, `trigger`) rather than workflow-specific module types. Workflow validation, conditions, and post functions are handled via Jira expressions configured in the Jira UI or Management API.
+**Note on Forge Module Types**: Forge has real workflow modules: `jira:workflowValidator` (a Forge `function` or a Jira `expression`, run when the transition is attempted), `jira:workflowCondition` (a Jira `expression` in the manifest that Jira evaluates itself; the manifest schema, `@forge/manifest` 12.9.0, gives it a required `expression` and no `function`) and `jira:workflowPostFunction` (a Forge `function` run after the transition). Admins can also type plain Jira expression conditions/validators in the workflow editor without any app.
