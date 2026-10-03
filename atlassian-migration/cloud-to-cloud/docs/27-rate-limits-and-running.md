@@ -1,7 +1,7 @@
 # Rate limits and running a multi-hour migration
 
-General rate-limit math, backoff and bulk endpoints: `atlassian-migration-scripts-skill/docs/27-rate-limits-and-quotas.md`.
-Launching and observing long scripts as an AI agent: `atlassian-migration-scripts-skill/docs/13-running-and-monitoring.md`.
+General rate-limit math, backoff and bulk endpoints: `plan-sync-audit/docs/27-rate-limits-and-quotas.md`.
+Launching and observing long scripts as an AI agent: `plan-sync-audit/docs/13-running-and-monitoring.md`.
 This doc is what was specific to a two-site copy under a deadline.
 
 ## The Jira cost budget is per ACCOUNT per SITE per hour

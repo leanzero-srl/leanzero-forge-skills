@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install-skills.sh — symlink the nine LeanZero Atlassian skills into agent-discovered paths.
+# install-skills.sh — symlink the eight LeanZero Atlassian skills into agent-discovered paths.
 #
 # Default: install into ~/.claude/skills/ and ~/.cline/skills/ (global, for personal use).
 #
@@ -20,8 +20,7 @@ SKILLS=(
   atlassian-organizations-api-skill
   jira-api-skill
   confluence-api-skill
-  atlassian-migration-scripts-skill
-  atlassian-cloud-to-cloud-migration-skill
+  atlassian-migration
   forge-security-review
   automation-engineer
 )

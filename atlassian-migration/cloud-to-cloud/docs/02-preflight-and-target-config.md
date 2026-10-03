@@ -242,7 +242,7 @@ PUT  {AUTO}/rest/v1/rule/{uuid}/state  {"value":"ENABLED"}       # resume exactl
 ## 7. Seats, roles and accounts before the first write
 
 - Both migration accounts: Administrators (and **Service Desk Team** on desks — a chain once marked two desks "done"
-  with 0 items copied because the second account had no desk role; see `atlassian-migration-scripts-skill` doc 19).
+  with 0 items copied because the second account had no desk role; see the Plan/Sync/Audit track (`plan-sync-audit/`) doc 19).
 - **Check every project permission the run needs, per new project**, after creating it:
   `GET /rest/api/3/mypermissions?projectKey=K&permissions=BROWSE_PROJECTS,CREATE_ISSUES,DELETE_ISSUES,EDIT_ISSUES,
   TRANSITION_ISSUES,RESOLVE_ISSUES,SCHEDULE_ISSUES,MOVE_ISSUES,MANAGE_SPRINTS_PERMISSION,EDIT_ALL_WORKLOGS,
