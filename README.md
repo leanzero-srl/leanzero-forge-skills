@@ -8,7 +8,7 @@ A skill is a directory containing a `SKILL.md` file with YAML frontmatter (name 
 
 ## Available skills
 
-This repo ships **nine skills**. Pick the one that matches your task — they don't overlap when used correctly.
+This repo ships **eight skills**. Pick the one that matches your task — they don't overlap when used correctly.
 
 | Skill | Use when… | Don't use when… |
 |---|---|---|
@@ -17,20 +17,16 @@ This repo ships **nine skills**. Pick the one that matches your task — they do
 | **[atlassian-organizations-api-skill](atlassian-organizations-api-skill/)** | Cross-product **org admin** operations — managing users, groups, directories, domains, audit events, policies, workspaces. Uses `api.atlassian.com/admin/`. | Working with Jira issues or Confluence content — those have their own skills. |
 | **[jira-api-skill](jira-api-skill/)** | Calling the **Jira Cloud REST API v3** from an **external app** (Node/Python service, CI job, bot). API token + OAuth flows, JQL search, ADF construction. | Building a Forge app → `atlassian-jira-forge-skill`. |
 | **[confluence-api-skill](confluence-api-skill/)** | Calling the **Confluence Cloud REST API v2** from an **external app**. Pages, blogposts, attachments, content properties, ADF/storage formats. | Building a Forge app → `atlassian-confluence-forge-skill`. |
-| **[atlassian-migration-scripts-skill](atlassian-migration-scripts-skill/)** | Writing Node.js **migration scripts** — Data Center → Cloud or Cloud ↔ Cloud — using a Plan/Sync/Audit triad, native-https clients, CSV outputs, and Forge KVS remote app-data mending. | One-off curls or building a long-running service — those don't need the resumable/auditable scaffolding. |
+| **[atlassian-migration](atlassian-migration/)** | Atlassian migrations, both kinds. **Plan/Sync/Audit track** (`plan-sync-audit/`): Node.js migration and bulk data-fix scripts — Data Center → Cloud or Cloud ↔ Cloud — resumable plan files, native-https clients, CSV outputs, post-JCMA repair, Forge KVS remote app-data mending. **Cloud-to-Cloud track** (`cloud-to-cloud/`): copying Jira projects (incl. JSM desks) and Confluence spaces between two Cloud sites over REST when the native transfer can't be used — keys and numbers preserved, KEEP-list anonymisation, no notification spam, target config untouched, guard dog, decision log with reverts. Formerly `atlassian-migration-scripts-skill` + `atlassian-cloud-to-cloud-migration-skill`. | One-off curls or building a long-running service — those don't need the resumable/auditable scaffolding. Automation rules → `automation-engineer`. |
 | **[forge-security-review](forge-security-review/)** | Producing a **security review pack** for a Forge app — technical profile, SAST, SCA — for an AAP/security approval, or before shipping a dependency fix. Includes the traps that make a clean-looking report wrong (the OSV-vs-npm-audit split, unvalidated scanner zeros) and the risk classes scanners can't see. | Building app features → the Forge skills. |
-| **[atlassian-cloud-to-cloud-migration-skill](atlassian-cloud-to-cloud-migration-skill/)** | Copying Jira projects (incl. JSM desks) and Confluence spaces between two **Cloud** sites over REST when the native transfer can't be used — keys and numbers preserved, KEEP-list anonymisation, no notification spam, target config untouched, guard dog, decision log with reverts. | Generic Plan/Sync/Audit plumbing or post-JCMA repair → `atlassian-migration-scripts-skill`. |
 | **[automation-engineer](automation-engineer/)** | Reading, creating, updating or migrating **Jira/Confluence Automation rules** over REST — the real API at `api.atlassian.com/automation/public/...`, not the site's own `/rest/api/3/...` surface most people give up on. Includes the three undocumented rules that make `POST /rule` (create) actually work. | Native workflow validators/conditions/post-functions (a different subsystem) → the Forge skills or `jira-api-skill`. |
 
 ## Quick decision flow
 
 ```
-Copying Jira projects / Confluence spaces between two Cloud sites without the native transfer?
-├── Yes → atlassian-cloud-to-cloud-migration-skill
-└── No, continue:
-
-Are you writing a migration / bulk data-fix script?
-├── Yes → atlassian-migration-scripts-skill
+Copying Jira projects / Confluence spaces between two Cloud sites without the native transfer,
+or writing a migration / bulk data-fix script?
+├── Yes → atlassian-migration (cloud-to-cloud/ track or plan-sync-audit/ track)
 └── No, continue:
 
 Are you writing code that runs *inside* Atlassian (as a Forge function)?
@@ -55,7 +51,7 @@ Skills are discovered automatically by Cline / Claude Code from these paths:
 - **Project-scoped** (recommended for teams): `.cline/skills/`, `.clinerules/skills/`, or `.claude/skills/`
 - **Globally-available** (your personal collection): `~/.cline/skills/` or `~/.claude/skills/`
 
-To install all nine skills globally, run:
+To install all eight skills globally, run:
 
 ```bash
 ./scripts/install-skills.sh
@@ -69,7 +65,7 @@ To install manually:
 mkdir -p ~/.claude/skills ~/.cline/skills
 for s in atlassian-jira-forge-skill atlassian-confluence-forge-skill \
          atlassian-organizations-api-skill jira-api-skill confluence-api-skill \
-         atlassian-migration-scripts-skill atlassian-cloud-to-cloud-migration-skill \
+         atlassian-migration \
          forge-security-review automation-engineer; do
   ln -sf "$(pwd)/$s" "$HOME/.claude/skills/$s"
   ln -sf "$(pwd)/$s" "$HOME/.cline/skills/$s"
@@ -88,12 +84,13 @@ skill-jira-forge/                          # repo root
 ├── atlassian-jira-forge-skill/            # ──┐
 ├── atlassian-confluence-forge-skill/      #   │
 ├── atlassian-organizations-api-skill/     #   │
-├── jira-api-skill/                        #   │  the nine skills
+├── jira-api-skill/                        #   │  the eight skills
 ├── confluence-api-skill/                  #   │
-├── atlassian-migration-scripts-skill/     #   │
-├── atlassian-cloud-to-cloud-migration-skill/ # │
+├── atlassian-migration/                   #   │  (plan-sync-audit/ + cloud-to-cloud/ tracks)
 ├── forge-security-review/                 #   │
 ├── automation-engineer/                   # ──┘
+├── atlassian-migration-scripts-skill/     # moved-notice stub (no SKILL.md) → atlassian-migration
+├── atlassian-cloud-to-cloud-migration-skill/ # moved-notice stub (no SKILL.md) → atlassian-migration
 └── docs/                                  # repo-level documentation (not skill content)
 ```
 

@@ -304,7 +304,7 @@ clean everything the post-work writes: comments (paged), attachments, worklogs, 
 
 - Default DENY: upload only files whose scan verdict is clean (doc 09); everything else becomes a note.
 - Upload: `POST /rest/api/3/issue/{k}/attachments`, multipart, header `X-Atlassian-Token: no-check` (see
-  `atlassian-migration-scripts-skill` doc 28 for a retry-safe multipart body).
+  the Plan/Sync/Audit track (`plan-sync-audit/`) doc 28 for a retry-safe multipart body).
 - Media ids for ADF: `GET /rest/api/3/attachment/content/{id}` without following the redirect; the `Location` header
   contains `/file/<uuid>/` = the media id. Do it on both sites to build the source→target media map.
 - A copy-time upload once silently uploaded NOTHING on a project (likely fresh-item 404 retries exhausted). Make upload

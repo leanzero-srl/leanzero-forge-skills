@@ -6,7 +6,7 @@ field by field, what they carry. That is both the cost (you rebuild what the pla
 point (nothing reaches the target that your code did not write).
 
 For the generic plumbing — resumable plan files, retrying http client, pagination, ADF builders, multipart uploads,
-seeded audits — use `atlassian-migration-scripts-skill`. This skill is about what is specific to copying between two
+seeded audits — use the Plan/Sync/Audit track (`plan-sync-audit/`). This track is about what is specific to copying between two
 live cloud sites under production constraints.
 
 ## When the native Cloud-to-Cloud tooling is not the answer
@@ -183,4 +183,4 @@ revert, and tell the owner (doc 15).
 ## See also
 
 - `docs/15-decision-log-and-reporting.md` — the decision log is a first-class artefact, not an afterthought.
-- `atlassian-migration-scripts-skill/docs/01-core-concepts.md` — Plan→Sync→Audit triad, two-gate safety flags.
+- `plan-sync-audit/docs/01-core-concepts.md` — Plan→Sync→Audit triad, two-gate safety flags.

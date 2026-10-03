@@ -4,7 +4,7 @@ Service desks carry the most config that is NOT reachable over REST (queues, SLA
 settings, e-mail channel) and the most people data (customers, participants, organizations). Plan them separately.
 
 For the general JSM migration traps (the `Service Desk Team` role requirement for any mutating actor, app-actor
-roles, Assets workspace remap) see `atlassian-migration-scripts-skill/docs/19-jsm-migration-patterns.md`.
+roles, Assets workspace remap) see `plan-sync-audit/docs/19-jsm-migration-patterns.md`.
 
 ## Shared target desk config, or the desk's own config?
 
