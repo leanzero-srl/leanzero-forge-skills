@@ -138,8 +138,9 @@ Plain `kvs.set` is *not* encrypted at rest in the same way. Use `kvs.setSecret(k
 - Keep messages short and actionable.
 - Fail-open in `catch` blocks for external-dependency validators — never block a transition on your dependency's outage.
 
-### `expression: "true"` is required on `jira:workflowCondition`
-Without it, Jira treats the condition as static and **never invokes your Forge function** to compute transition-button visibility. With it, the function runs on every issue view — keep it cheap. See `25-workflow-modules-deep-dive.md`.
+### `jira:workflowCondition` has no function: it is an `expression`
+The manifest schema gives the condition module a required `expression` and no `function` property. Jira evaluates that expression itself wherever it offers the transition and never invokes your Forge function, so a condition cannot call REST, KVS or a model. Put work that needs code in a validator. See `25-workflow-modules-deep-dive.md`.
+**Source:** the Forge manifest schema, `@forge/manifest` 12.9.0 `out/schema/manifest-schema.json` (`definitions.ModuleSchema.properties["jira:workflowCondition"]`): properties `name`, `description`, `expression`, `resolver`, `create`/`edit`/`view`, `projectTypes`, `key`; required `description`, `expression`, `name`, `key`; no `function`. `jira:workflowValidator` in the same schema has both `function` and `expression` (neither required). Checked 2026-10-03.
 
 ### Warm-container registry/cache staleness (~30 s)
 A module-scoped cache (e.g. a disabled-rules registry read on the hot path) persists across invocations in a warm container. If you invalidate it only on the resolver write path, *another* warm container won't see the change — so a just-disabled rule can run for up to your cache TTL (~30 s in CogniRunner). Bounded staleness is fine for advisory data; never cache credentials this way (a stale key is binary-wrong).
