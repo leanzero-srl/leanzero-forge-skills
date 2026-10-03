@@ -122,7 +122,7 @@ import re, os, sys
 broken = []
 for skill in ['atlassian-jira-forge-skill', 'atlassian-confluence-forge-skill',
               'atlassian-organizations-api-skill', 'jira-api-skill', 'confluence-api-skill',
-              'atlassian-migration-scripts-skill', 'atlassian-cloud-to-cloud-migration-skill',
+              'atlassian-migration',
               'forge-security-review', 'automation-engineer']:
     roots = [f'{skill}/SKILL.md']
     for d in ['docs', 'templates', 'scripts']:

@@ -48,7 +48,7 @@ class ExcelReportWriter {
     }
     this.filePath = filePath;
     this.wb = new ExcelJS.Workbook();
-    this.wb.creator = "atlassian-migration-scripts-skill";
+    this.wb.creator = "atlassian-migration";
     this.wb.created = new Date();
   }
 
