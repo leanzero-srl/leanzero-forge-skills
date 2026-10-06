@@ -234,12 +234,12 @@ export const Configure = () => {
 ```yaml
 modules:
   scheduledTrigger:
-    - key: sync-external-system
-      name: { value: 'Sync Issues to External System' }
-      description: { value: 'Sends updated issues to external CRM' }
+    - key: sync-external-system   # sends updated issues to the external CRM
       function: syncToExternalSystem
-      schedule:
-        period: hour
+      interval: hour              # fiveMinute | hour | day | week (no cron)
+  function:
+    - key: syncToExternalSystem
+      handler: index.syncToExternalSystem
 ```
 
 ### Sync Function with Batching
