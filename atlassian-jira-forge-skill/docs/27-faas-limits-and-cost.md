@@ -19,9 +19,10 @@ Need >25 s? Push to a queue. See `26-async-events-and-queues.md`.
 ## Memory & CPU
 
 ```yaml
-runtime:
-  name: nodejs22.x   # also: nodejs24.x, nodejs20.x
-  memoryMB: 512      # raises CPU proportionally
+app:
+  runtime:
+    name: nodejs22.x   # also: nodejs24.x, nodejs20.x
+    memoryMB: 512      # raises CPU proportionally
 ```
 
 - Per-function override: `function.runtime.memoryMB`.
@@ -151,12 +152,13 @@ Numbers people get wrong, with the trap each one sets.
 | Custom UI static resource | 100 MB per resource | Enough to vendor a WASM OCR engine (~22 MB) twice. |
 
 ```yaml
-function:
-  - key: file-consumer-function
-    handler: chat/fileConsumer.handler
-    timeoutSeconds: 900
-    runtime:
-      memoryMB: 1024        # per function, not app-wide
+modules:
+  function:
+    - key: file-consumer-function
+      handler: chat/fileConsumer.handler
+      timeoutSeconds: 900
+      runtime:
+        memoryMB: 1024      # per function, not app-wide
 ```
 
 ### The 500 KB invoke limit is the one that catches people

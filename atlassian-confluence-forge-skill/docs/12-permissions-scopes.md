@@ -140,9 +140,11 @@ permissions:
 # Bad: Overly broad permissions
 permissions:
   scopes:
-    - read:confluence-content         # Full content access
+    - read:confluence-content.all     # Full content access
     - write:confluence-space          # All space modifications
+```
 
+```yaml
 # Good: Minimal required permissions
 permissions:
   scopes:

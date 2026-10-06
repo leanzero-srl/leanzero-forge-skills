@@ -282,16 +282,15 @@ async function notifyAboutSLABreach(issue, groupId) {
 
 ```yaml
 modules:
-  # Scheduled trigger to check SLAs every hour
+  # Scheduled trigger to check SLAs every hour (an interval, never cron)
   scheduledTrigger:
     - key: sla-monitor
       function: checkSLABreaches
-      schedule: "0 * * * *"  # Every hour
-      
-# Functions
-functions:
-  - key: checkSLABreaches
-    handler: src/sla.checkSLABreaches
+      interval: hour
+  # Functions are modules too
+  function:
+    - key: checkSLABreaches
+      handler: sla.checkSLABreaches   # src/sla.js
 
 # Permissions
 permissions:
@@ -308,10 +307,9 @@ permissions:
 
 ```yaml
 modules:
-  # Add custom widget to customer portal
-  jira:portalCustomContent:
+  # A panel under the title of customer portal pages
+  jiraServiceManagement:portalSubheader:
     - key: my-portal-widget
-      title: Quick Actions
       resource: widgetResource
       
 resources:
@@ -837,13 +835,9 @@ permissions:
   scopes:
     - read:jira-work
     - write:jira-work
-    - read:confluence-content      # Search KB articles
-    - read:confluence-space        # Read space info
-    
-  external:
-    fetch:
-      backend:
-        - "*.atlassian.net"
+    - search:confluence               # CQL search for KB articles
+    - read:confluence-space.summary   # Read space info
+  # No egress entry: product REST through @forge/api needs none.
 ```
 
 ---
@@ -968,7 +962,7 @@ async function sendEmail(config) {
 |------------|----------------|----------|
 | Custom request types | `scheduledTrigger` + REST API | `/servicedesk/api/v1/requests/type` |
 | SLA monitoring | `trigger`, `scheduledTrigger` | `/servicedesk/api/v1/sla/metrics` |
-| Portal widgets | `jira:portalCustomContent` | Custom UI |
+| Portal widgets | `jiraServiceManagement:portalHeader` / `portalSubheader` / `portalFooter` | Custom UI or UI Kit |
 | Auto-assignment | `jira:workflowPostFunction` | REST API + team logic |
 | KB integration | Trigger functions | Confluence CQL API |
 | Customer notifications | `trigger` + webhooks | External email/SMS services |

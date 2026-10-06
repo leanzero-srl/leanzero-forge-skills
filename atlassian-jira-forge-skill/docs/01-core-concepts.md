@@ -2,14 +2,7 @@
 
 ## What is Forge?
 
-Forge is Atlassian's serverless platform for building apps that extend Jira, Confluence, Bitbucket, and Jira Service Management. Apps run in a secure, isolated environment on Atlassian infrastructure.
-
-### Key Benefits
-
-- **Serverless**: No infrastructure management required
-- **Secure**: Runs in sandboxed environment with controlled permissions
-- **Portable**: Apps work across all Atlassian Cloud products
-- **Scalable**: Automatically scales based on usage
+Forge is Atlassian's serverless platform for building apps that extend Jira, Confluence, Bitbucket, and Jira Service Management. Apps run in a secure, isolated environment on Atlassian infrastructure, with no servers to manage.
 
 ## App Structure
 
@@ -19,41 +12,49 @@ Forge is Atlassian's serverless platform for building apps that extend Jira, Con
 your-forge-app/
 ├── manifest.yml           # App configuration (required)
 ├── package.json           # Dependencies (required)
-└── src/                   # Source code
-    └── index.js          # Function implementations
+├── package-lock.json      # Commit it: `npm ci` fails without one
+└── src/
+    ├── index.js           # Backend functions (handler: index.<export>)
+    └── frontend/index.jsx # UI Kit frontend
 ```
 
 ### App Manifest (`manifest.yml`)
 
-The central configuration file defining your app's capabilities.
+A UI Kit issue panel plus a trigger on issue creation. With the id `forge register` writes in `app.id`, `forge lint` accepts it as is:
 
 ```yaml
-modules:
-  jira:issueCreatedTrigger:
-    - key: my-trigger
-      name: My Trigger
-      description: Triggers when an issue is created
-      events:
-        - jira:issue_created
-
-function:
-  - key: handleIssueCreated
-    handler: index.handleIssueCreated
-
-resources:
-  - key: config-ui
-    path: static/config/build
-
-permissions:
-  scopes:
-    - read:jira-work
-    - storage:app
-
 app:
   id: ari:cloud:ecosystem::app/YOUR-APP-ID
   runtime:
-    name: nodejs22.x
+    name: nodejs24.x                        # or nodejs22.x / nodejs20.x
+modules:
+  jira:issuePanel:
+    - key: hello-issue-panel
+      resource: main
+      resolver:
+        function: resolver
+      render: native                        # UI Kit
+      title: Hello panel
+      icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg  # required
+  trigger:
+    - key: issue-created-trigger
+      function: on-issue-created
+      events:
+        - avi:jira:created:issue
+  function:                                 # a module too, never top level
+    - key: resolver
+      handler: index.handler
+    - key: on-issue-created
+      handler: index.onIssueCreated
+resources:
+  - key: main
+    path: src/frontend/index.jsx            # Custom UI: its build/ folder
+permissions:
+  scopes:
+    - read:jira-work
 ```
+
+`package.json`: `@forge/react` already depends on `@forge/bridge` (12.3 needs ^7.1, Oct 2026), so declare the same `@forge/bridge` major or npm installs two; never `"latest"`. Commit `package-lock.json`, or `npm ci` fails.
 
 ## Core Components
 
@@ -63,11 +64,12 @@ A capability your app provides. Each module type serves a specific purpose:
 
 | Module Type | Purpose |
 |-------------|---------|
+| `function` | Backend code (`key` + `handler: file.export`); other modules name it |
 | `trigger` | Run a function when product events fire (`avi:jira:created:issue`, etc.) |
 | `jira:workflowValidator` | Block a transition when validation fails |
 | `jira:workflowCondition` | Hide/show transitions with a Jira expression (no function call) |
 | `jira:workflowPostFunction` | Run logic after a transition completes |
-| `scheduledTrigger` | Run functions on a cron schedule |
+| `scheduledTrigger` | Run a function every `fiveMinute`/`hour`/`day`/`week` (no cron) |
 | `consumer` | Process events from an async queue (`@forge/events`) |
 | `webtrigger` | Public HTTPS endpoint into your app |
 | `jira:globalPage` / `jira:adminPage` / `jira:projectPage` | Full-page UIs |
@@ -79,18 +81,17 @@ A capability your app provides. Each module type serves a specific purpose:
 
 ### Function
 
-The code that executes when a module is triggered. Functions are defined in `manifest.yml` and implemented in JavaScript/Node.js.
+The code that executes when a module is triggered. A function is the `function` module in `manifest.yml` (`key`, plus `handler: <file>.<export>` relative to `src/`); other modules name it by key.
 
 ```javascript
-export const myHandler = async (args, context) => {
+export const myHandler = async (event, context) => {
   // Your logic here
-  return { result: true };
 };
 ```
 
 ### Resource
 
-Static assets for Custom UI (HTML/CSS/JS/JSX). Resources are referenced by modules that need configuration UIs.
+What a UI module displays: the UI Kit source file (`src/frontend/index.jsx`) or a Custom UI build folder. Modules name it by key.
 
 ### Resolver
 
@@ -98,19 +99,12 @@ A bridge between frontend UI and backend functions. Resolvers allow your React a
 
 ## Context Object
 
-Every function receives two arguments:
+A trigger function receives `(event, context)`. A resolver receives ONE request object, `{ payload, context }`:
 
 ```javascript
-export const handler = async (payload, context) => {
-  // payload: Module-specific data
-  // context: Execution environment information
-  
-  console.log(context.installContext);    // App installation ARI
-  console.log(context.accountId);         // User's Atlassian account ID
-  console.log(context.workspaceId);       // Workspace identifier
-  console.log(context.license);           // License info (if applicable)
-  
-  return { result: true };
+export const onIssueCreated = async (event, context) => {
+  console.log(event.issue.key);           // the event payload
+  console.log(context.installContext);    // installation ARI
 };
 ```
 
@@ -118,13 +112,13 @@ export const handler = async (payload, context) => {
 
 | Property | Description |
 |----------|-------------|
-| `accountId` | User's Atlassian account ID |
-| `accountType` | 'licensed', 'unlicensed', 'customer', or 'anonymous' |
-| `cloudId` | Cloud instance identifier |
-| `installContext` | App installation ARI |
-| `workspaceId` | Workspace identifier (newer architecture) |
-| `principal` | User identity information |
-| `license` | License status for paid apps |
+| `accountId` | Resolver: the user who triggered the call |
+| `accountType` | Resolver: 'licensed', 'unlicensed', 'customer' or 'anonymous' |
+| `cloudId` / `localId` / `extension` | Resolver: site, UI instance, module data |
+| `principal` | Trigger: the interacting user (not a user on a schedule) |
+| `installContext` | Both: installation ARI |
+| `workspaceId` | Both: workspace identifier |
+| `license` | Both: license (production only) |
 
 ## Function Types
 
@@ -136,37 +130,34 @@ Executed when specific events occur:
 // Event: Issue created in Jira
 export const issueCreated = async (event, context) => {
   console.log('New issue:', event.issue.key);
-  return { status: 'processed' };
 };
 ```
 
 ### Resolver Functions
 
-Called from Custom UI to backend logic:
+Called from the frontend with `invoke('getSummary', { issueKey })` (`@forge/bridge`):
 
 ```javascript
-import { get, load } from '@forge/bridge';
+import Resolver from '@forge/resolver';
+import api, { route } from '@forge/api';
 
-const fetchData = async () => {
-  // Can make Jira API calls with proper auth
-  return { data: await response.json() };
-};
-
-// Export functions for use in UI
-export const handler = async (args, context) => {
-  return fetchData();
-};
+const resolver = new Resolver();
+resolver.define('getSummary', async ({ payload }) => {
+  const res = await api.asUser().requestJira(
+    route`/rest/api/3/issue/${payload.issueKey}?fields=summary`);
+  return (await res.json()).fields.summary;
+});
+export const handler = resolver.getDefinitions();
 ```
 
 ### Scheduled Triggers
 
-Run at configured intervals:
+Run on the manifest's `interval` (`fiveMinute`, `hour`, `day` or `week`; cron is not supported):
 
 ```javascript
-export const dailyReport = async (event, context) => {
-  console.log('Scheduled execution:', event.scheduledTime);
-  // Generate and send report
-  return { status: 'sent' };
+export const dailyReport = async ({ context }) => {
+  // No user: context.principal is not a person.
+  // The return value is ignored; a throw is not retried.
 };
 ```
 
@@ -176,17 +167,16 @@ export const dailyReport = async (event, context) => {
 
 | Section | Purpose |
 |---------|---------|
-| `modules` | Define all app capabilities |
-| `app.id` | Unique app identifier (ARN format) |
-| `app.runtime` | Node.js version and memory settings |
+| `app.id` | The app's ARI (`ari:cloud:ecosystem::app/...`) |
+| `app.runtime.name` | `nodejs24.x`, `nodejs22.x` or `nodejs20.x` |
+| `modules` | Every capability, functions included |
+| `permissions` | Scopes; egress goes under `permissions.external.fetch` |
 
 ### Optional Sections
 
-- `function` - Define executable functions
-- `resolver` - Define resolver functions for UI communication  
-- `resources` - Declare static asset locations
-- `permissions` - Request required scopes
-- `external.fetch` - Allow calls to external APIs (e.g., OpenAI)
+- `resources` - UI Kit source files / Custom UI build folders
+
+There is no top-level `function`, `resolver` or `external`: functions are `modules.function`, a resolver is a UI module's `resolver: { function: <key> }`.
 
 ## Testing Best Practices
 
