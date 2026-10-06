@@ -770,12 +770,13 @@ export { handler as adminResolver } from './resolvers/admin-resolver';
 
 ```yaml
 # manifest.yml — note: index.<fn>, no directory prefix
-function:
-  - key: trackActivity
-    handler: index.trackActivity
-  - key: checkInactivity
-    handler: index.checkInactivity
-    timeoutSeconds: 900
+modules:
+  function:
+    - key: trackActivity
+      handler: index.trackActivity
+    - key: checkInactivity
+      handler: index.checkInactivity
+      timeoutSeconds: 900
 ```
 
 `package.json` `"main": "src/index.ts"`. Keep the two barrels in sync (same export names).

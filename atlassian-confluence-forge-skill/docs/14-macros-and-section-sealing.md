@@ -15,18 +15,21 @@ This extends `content-macro.yml` (standard inline macro) and `21-custom-content.
 Sentinel declares both in one manifest (`manifest.yml`):
 
 ```yaml
-macro:
-  - key: sentinel-vault-panel            # standard: file-reservation status panel
-    resource: inline-panel-ui
-    resolver: { function: action-router }
-    layout: block
-    config: { resource: panel-setup-ui, openOnInsert: false, viewportSize: medium }
+modules:
+  macro:
+    - key: sentinel-vault-panel            # standard: file-reservation status panel
+      title: Sentinel Vault panel          # title is required
+      resource: inline-panel-ui
+      resolver: { function: action-router }
+      layout: block
+      config: { resource: panel-setup-ui, openOnInsert: false, viewportSize: medium }
 
-  - key: sentinel-vault-sealed-section   # bodied: locks the content inside this section
-    resource: section-setup-ui
-    resolver: { function: action-router }
-    layout: bodied
-    config: { resource: section-setup-ui, openOnInsert: true, viewportSize: medium }
+    - key: sentinel-vault-sealed-section   # bodied: locks the content inside this section
+      title: Sealed section
+      resource: section-setup-ui
+      resolver: { function: action-router }
+      layout: bodied
+      config: { resource: section-setup-ui, openOnInsert: true, viewportSize: medium }
 ```
 
 `openOnInsert: true` opens the config dialog the moment the author inserts the macro — that's where you mint and persist the section's identity (below).

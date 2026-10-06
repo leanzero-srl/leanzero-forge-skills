@@ -7,19 +7,21 @@ The basics of `jira:workflowValidator` / `jira:workflowCondition` / `jira:workfl
 Each workflow module declares **three UI resources** plus a runtime function:
 
 ```yaml
-jira:workflowValidator:
-  - key: ai-text-field-validator
-    name: CogniRunner Field Validator
-    function: validate            # runtime — called at transition time
-    resolver:
-      function: resolver          # backend for the config Custom UIs (invoke)
-    create:
-      resource: config-ui-resource    # Custom UI CRUD form (new rule)
-    edit:
-      resource: config-ui-resource    # same form, pre-filled (edit rule)
-    view:
-      resource: config-view-resource  # read-only summary + execution log
-    projectTypes: [company-managed, team-managed]
+modules:
+  jira:workflowValidator:
+    - key: ai-text-field-validator
+      name: CogniRunner Field Validator
+      description: AI check of a field   # name + description are required
+      function: validate            # runtime — called at transition time
+      resolver:
+        function: resolver          # backend for the config Custom UIs (invoke)
+      create:
+        resource: config-ui-resource    # Custom UI CRUD form (new rule)
+      edit:
+        resource: config-ui-resource    # same form, pre-filled (edit rule)
+      view:
+        resource: config-view-resource  # read-only summary + execution log
+      projectTypes: [company-managed, team-managed]
 ```
 
 - `create` + `edit` point at the **same** Custom UI build — a CRUD form that writes the rule's JSON config. Jira pre-fills it on edit from the stored `parameters`.
@@ -29,12 +31,15 @@ jira:workflowValidator:
 ## Conditions are Jira expressions, never functions
 
 ```yaml
-jira:workflowCondition:
-  - key: my-field-condition
-    expression: >-
-      config == null || config.fieldId == null ? true : issue?.[config.fieldId] != null
-    resolver:
-      function: resolver   # backs the condition's create/edit/view UI, never the check itself
+modules:
+  jira:workflowCondition:
+    - key: my-field-condition
+      name: Field is set
+      description: Offers the transition only when the field has a value
+      expression: >-
+        config == null || config.fieldId == null ? true : issue?.[config.fieldId] != null
+      resolver:
+        function: resolver   # backs the condition's create/edit/view UI, never the check itself
 ```
 
 The manifest schema gives `jira:workflowCondition` a required `expression` and **no `function` property** (validators have both). Jira evaluates the expression itself, in its own sandbox, wherever the transition can be offered: the issue view, REST, automation and bulk changes. It cannot call your app, REST, KVS, a model or any network, so an AI condition cannot exist. The rule's saved config arrives in the expression as `config` and the issue as `issue`.
