@@ -334,3 +334,35 @@ missing key and the caller falls through to the product-REST path.
 - Cross-skill: **atlassian-confluence-forge-skill** (license-via-group-membership from the
   Forge side), **confluence-api-skill** (Confluence group REST endpoints and their
   suspended-user blind spot).
+
+
+---
+
+## Pattern 8 — Count seats per product per site in one tiny call (measured 2026-10-09)
+
+Measured live against a 17-site org (wolfaenpak) while building CogniRunner 1.32.0's rolling-licence
+agent. These filters WORK on the v2 directory users endpoints and make a whole-org seat census cheap:
+
+```
+GET /v2/orgs/{orgId}/directories/{dirId}/users/count
+      ?resourceIds=ari:cloud:jira-software::site/{cloudId}
+      &roleIds=atlassian/user&roleIds=atlassian/admin
+      &status=active
+→ {"count": 5}
+```
+
+- Same filters on `GET .../users?limit=100` list exactly those users (with `platformRoles`,
+  `accountType`, `email`, `status`); without `roleIds`+`status` the same resource returned 16 rows
+  (guests, suspended, customers) where only 5 were billable.
+- Billable = role `atlassian/user` or `atlassian/admin` on the product ARI, user directory status
+  active. `jira` + `atlassian/admin` is the Jira product-admin role; `guest`, `customer`,
+  `stakeholder`, `user-access-admin` are not seats. JSM agent seat = `jira-servicedesk` +
+  `atlassian/user`.
+- `GET .../groups?accountIds={id}&resourceIds={productARI}` returns ONLY that user's groups granting
+  that product on that site (verified: onlygabee → `confluence-users-wolfaenpak`).
+- There is NO v2 "list group members" GET (`/groups/{id}/memberships` answers 404 "Request failed
+  to match any route"); use the users endpoint with `groupIds=` or the per-user role assignments.
+- An org admin's `/users/{id}/role-assignments` is ~30 KB (every site): filter with
+  `resourceIds`/`resourceOwners` before handing it to a model.
+- `GET .../users/{id}` (user details) carries `platformRoles` (`atlassian/org-admin`,
+  `atlassian/site-admin`): the cheap "is this person protected" read before any removal.
