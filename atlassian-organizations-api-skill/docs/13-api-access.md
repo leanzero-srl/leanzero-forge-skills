@@ -10,7 +10,13 @@ The API Access endpoints allow you to view, search, and revoke API tokens and AP
 
 > **Important:** These endpoints require API key authentication with organization admin permissions. **Forge and OAuth2 apps cannot access these REST resources.**
 
-**Base URL:** `https://api.atlassian.com/admin/v1`
+**Base URL:** `https://api.atlassian.com/admin/api-access/v1`
+
+> **CORRECTED 2026-10-14 (measured on the wolfaenpak org with a working org API key):**
+> `GET https://api.atlassian.com/admin/api-access/v1/orgs/{orgId}/api-tokens` -> **200**;
+> `GET https://api.atlassian.com/admin/v1/orgs/{orgId}/api-tokens` -> **404 "Request failed to match any route"**.
+> The `admin/v1` paths in the examples below are wrong for the API-tokens resource; use `admin/api-access/v1`.
+> Positive control: the same key answers `GET /admin/v1/orgs` with 200. Other resources on this page were not re-probed.
 
 ---
 
