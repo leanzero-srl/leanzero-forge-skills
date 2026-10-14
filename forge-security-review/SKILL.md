@@ -123,6 +123,8 @@ it is what stops a confident-but-wrong report going out under someone's name.
 
 ## Changelog
 
+**2026-10-11 — lz-ppm full verification.** Gates were green but three were partly blind: a crashing local Semgrep rule dropped two whole files, trufflehog had no detector for the dev HARNESS_SECRET committed in a doc (stale, proven dead), and a raw NUL in source hid a file from grep. Manual review (2 parallel agents, each claim re-verified) found real authz/integrity bugs no scanner sees: a legacy Apply completion that read stranger issues AS THE APP via verification diffs, an AI review with no server-side prompt bound (site-wide cap burn), an unbounded presence value, a portfolio id addressing the registry key. Traps in `docs/gotchas.md` §10.
+
 **2026-09-26 — became CI gates.** lz-ppm-forge `security/` turns this method into `npm run test:security` (SAST+canary, SCA npm+OSV tiered by bundle source maps, trufflehog history scan, FSRT with coverage canary, manifest allow-list, authz suites, AI-prompt inventory) with SLA-dated baselines; the standard is leanzero-forge-app-baseline `references/security-gates.md`. New traps in `docs/gotchas.md` §9 (FSRT blind to register*(resolver); Semgrep silent timeouts; CRA audit ≠ shipped set; gitleaks noise).
 
 **2026-07-29 — rebuilt around what a real review actually missed.** ChatWise (ITSM-80215): a
