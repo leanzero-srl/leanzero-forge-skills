@@ -303,3 +303,13 @@ Beyond the ~24h delay noted above (observed in production, 2026-06):
 - **[01-core-concepts.md](01-core-concepts.md)** — API overview
 - **[15-license-and-activity-patterns.md](15-license-and-activity-patterns.md)** — license-via-group + per-site activity
 - **[problem-patterns.md](problem-patterns.md)** — Error handling and solutions
+
+## Reading an org audit log WITHOUT an admin API key (learned 2026-10-17, wolfaenpak incident review)
+
+- No wolfaenpak org admin API key is stored on disk (checked laptop + workhorse). A user API token (Basic auth) gets 401 on api.atlassian.com/admin. Working route: clone the forge-live-harness persistent admin profile (forge/auth-clone.mjs), open https://admin.atlassian.com/o/{orgId}/audit-log headless, then `fetch()` GET inside the page against `https://admin.atlassian.com/gateway/api/admin/v1/orgs/{orgId}/events?limit=100&from=<ms>&to=<ms>` (same shape as the public events API). from/to must be epoch MILLISECONDS; an ISO string answers 400 ADMIN-400-5.
+- PAGINATION TRAP: `links.next` is an absolute URL that drops from/to. Take only its `cursor` value and set it on your ORIGINAL url, or the walk silently runs past `from`.
+- 429 is returned as a normal response; retry with backoff, and never read a 0-event window as "empty" until you know it was not a 429 (a 75-minute window read 0 that way, then 242 on retry).
+- `ip=` and `action=` filters work (positive-controlled: ip=<own IP> returned only that IP). Distinct IP / location lists come from GraphQL persisted queries (ipAddressQuery capped at 100 nodes; locationQuery) and need a `content-type: application/json` header even on GET, else 415.
+- With Atlassian Guard the log records every user-API-token REST call (`jira_accessed_api` / `confluence_accessed_api`) with tokenName, tokenId, IP, method, path — but NOT every path (403'd /rest/api/3/auditing/record and /rest/webhooks/1.0/webhook calls were absent). Orgs without Guard show no API-call events.
+- Opening id.atlassian.com/manage-profile/security/api-tokens headless triggers a step-up that EMAILS a code to the account owner. Do not do it unannounced.
+- Volume reference: wolfaenpak org = ~154k events for 2026-09-25..10-17, ~100 events/page, ~30 min to pull by day.
