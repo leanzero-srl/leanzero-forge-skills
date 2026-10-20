@@ -144,6 +144,19 @@ app:
 | `Cannot access 'x' before initialization` in a deployed function | A `const` read above its declaration; only runtime sees it. Turn on `no-use-before-define` | `gotchas.md` → Toolchain |
 | Trigger fires on your own writes | Check `event.atlassianId` against your app's cached accountId (`filter.ignoreSelf` is **Jira-only** — not supported for Confluence product events) | `24-production-patterns.md` (Pattern 5) |
 
+## Cost and robustness — read before designing (2026-10-20)
+
+Forge bills the VENDOR for every invocation, SQL request, KVS op and GB-second, on every install including
+idle and free-tier ones. Cost Slasher billed USD 15.92 on test installs alone from a 5-minute scheduled
+trigger doing ~560 SQL statements per run. Before building a scheduled trigger, event trigger, queue
+consumer or Forge SQL workflow, apply LeanZero baseline pillar 14:
+`~/.claude/skills/leanzero-forge-app-baseline/references/idle-cost-and-robustness.md`. The short form:
+an idle install does no SQL/provider/write work (one cheap read, then return); zero-work runs write nothing;
+probe due work in one batched read; filter and coalesce events; batch telemetry; model populated cost at
+100/1,000/10,000 users before launch; Forge SQL does not preserve JSON key order; every write can succeed
+without an ACK (intent → effect → readback); read every page; every lock/intent has an exit; deploy doors
+check that the bundle was built from the deployed commit.
+
 ## Documentation map
 
 ### Core
