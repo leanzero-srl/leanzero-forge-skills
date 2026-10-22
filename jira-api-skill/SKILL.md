@@ -239,6 +239,16 @@ CI-safe helpers in `scripts/`:
 - [OAuth 2.0 (3LO) for Atlassian Cloud](https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/)
 - [API tokens](https://id.atlassian.com/manage-profile/security/api-tokens)
 
+## Workflow post function: set a DATE field to the transition date (proven live 2026-10-22, wolfaenpak)
+
+`POST /rest/api/3/workflows/update`, on the transition's `actions`:
+`{"ruleKey":"system:update-field","parameters":{"field":"customfield_NNNNN","value":"%%CURRENT_DATETIME%%","mode":"replace"}}`.
+Works for a date-picker custom field (stored `2026-10-22`). The new editor shows it as "Use date of transition". There is no separate
+"Update issue custom field" rule in the capabilities list; `system:update-field` covers custom fields. `%%CURRENT_DATE%%` or any non-date
+value is ACCEPTED by /workflows/update (200) but then BLOCKS every transition ("field has invalid input from the workflow"), so always run one
+test transition after writing it. It writes even when the field is on no screen (changelog + JQL show it). Detail:
+~/Projects/alterdomus-pipefy/data/analysis/2026-10-22/M5-proofs-wolfaenpak.md.
+
 ## Changelog
 
 - **2026-10-29** — New `docs/31-boards-and-queues.md`: writing board columns (incl. WIP limits), quick filters, swimlanes, JSM queues (create, edit List-view columns, delete, reorder) and a queue's Board view (a hidden Kanban board, added through a GraphQL mutation) with an API token. All internal and unsupported, every recipe run end to end on a test site and read back. Traps: filter lookup by name is fuzzy (take the id from the POST response), `currentStatisticsField:"none_"` switches WIP limits off, unmapped statuses drop their issues off the board, unknown queue column ids are stored silently, deleted queues leave undeletable project-scoped filters.
@@ -257,3 +267,4 @@ CI-safe helpers in `scripts/`:
 - Added four new REST-API-specific docs: `24-rest-integration-patterns.md`, `27-rate-limits-and-quotas.md`, `28-adf-construction.md`, `30-testing-rest-integrations.md`.
 - Standardized scripts: stripped emoji, added `set -euo pipefail`, made CI-safe.
 - Added a "Pick a starting point" block and a documentation map that distinguishes canonical REST coverage from the bundled Forge-flavored reference content.
+- 2026-10-22: added the transition-date post function recipe (system:update-field + %%CURRENT_DATETIME%%), proven live on wolfaenpak.
