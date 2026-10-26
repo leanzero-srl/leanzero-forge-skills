@@ -1,6 +1,6 @@
 ---
 name: jira-api-skill
-description: Atlassian Jira Cloud REST API v3 integration from external apps — issues, projects, workflows, JQL search, ADF bodies, OAuth 2.0 / API-token auth, rate-limit handling. Use for non-Forge integrations calling Jira Cloud over HTTPS.
+description: "Jira Cloud REST API v3 from external (non-Forge) apps over HTTPS: issues, projects, workflows, JQL search, ADF bodies, OAuth 2.0 / API-token auth, rate limits. Forge apps: use atlassian-jira-forge-skill."
 ---
 
 # Atlassian Jira Cloud REST API v3
