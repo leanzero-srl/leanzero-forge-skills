@@ -1,6 +1,6 @@
 ---
 name: atlassian-confluence-forge-skill
-description: Atlassian Confluence Forge app development — page banners, content actions, macros, content properties, async events with @forge/events, KVS storage, ADF/storage-format bodies, and Confluence REST API v2 integration.
+description: "Build Confluence Forge apps: page banners, content actions, macros, content properties, @forge/events async events, KVS storage, ADF/storage-format bodies, Confluence REST v2 from Forge. Not external (non-Forge) integrations: use confluence-api-skill."
 ---
 
 # Atlassian Confluence Forge Development
