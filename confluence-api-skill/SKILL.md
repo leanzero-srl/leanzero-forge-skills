@@ -1,6 +1,6 @@
 ---
 name: confluence-api-skill
-description: Atlassian Confluence Cloud REST API v2 integration from external apps — pages, blogposts, spaces, attachments, content properties, ADF/storage bodies, OAuth 2.0 / API-token auth, rate-limit handling. Use for non-Forge integrations calling Confluence Cloud over HTTPS.
+description: "Confluence Cloud REST API v2 from external (non-Forge) apps over HTTPS: pages, blogposts, spaces, attachments, content properties, ADF/storage bodies, OAuth 2.0 / API-token auth, rate limits. Forge apps: use atlassian-confluence-forge-skill."
 ---
 
 # Atlassian Confluence Cloud REST API v2
