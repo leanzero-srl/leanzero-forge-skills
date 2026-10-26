@@ -1,6 +1,6 @@
 ---
 name: atlassian-organizations-api-skill
-description: Atlassian Organizations REST API. Use when managing Atlassian organizations, users, groups, directories, domains, events, policies, workspaces, and app access settings across all Atlassian Cloud products (Jira, Confluence, Bitbucket).
+description: "Atlassian Organizations REST API (admin.atlassian.com). Use when managing org users, groups, directories, domains, events, policies, workspaces and app access across Jira, Confluence and Bitbucket Cloud."
 ---
 
 # Atlassian Organizations REST API
