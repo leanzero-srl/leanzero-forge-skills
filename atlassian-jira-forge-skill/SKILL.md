@@ -1,6 +1,6 @@
 ---
 name: atlassian-jira-forge-skill
-description: Atlassian Jira Forge app development — workflow validators/conditions/post-functions, custom UIs with @forge/react, async events with @forge/events, KVS storage, and Jira REST API integration.
+description: "Build Jira Forge apps: workflow validators/conditions/post-functions, custom UIs with @forge/react, @forge/events async events, KVS storage, Jira REST from Forge. Not external (non-Forge) integrations: use jira-api-skill."
 ---
 
 # Atlassian Jira Forge Development
