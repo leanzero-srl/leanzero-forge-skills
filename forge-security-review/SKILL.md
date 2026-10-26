@@ -1,14 +1,6 @@
 ---
 name: forge-security-review
-description: >-
-  Produce a real security review pack for an Atlassian Forge app — technical profile, SAST and SCA — and
-  survive an actual security reviewer reading it. Use whenever someone asks for a technical profile, SAST
-  report, SCA report, dependency/vulnerability scan, SBOM, AAP/security-approval evidence, or a "is this app
-  safe" assessment for ANY Forge app (ChatWise, CogniRunner, Sentinel Vault, Altomata, lz-ppm-forge,
-  se-ppm-forge, or a client's). Also use before shipping a dependency/security fix in a Forge app. Holds the
-  runnable scanner, the report template, and — critically — the traps that make a naive report worse than
-  none (the OSV-vs-npm-audit split, unvalidated scanner zeros, and the risk classes Forge scanning
-  structurally cannot see). Living skill — append what you learn.
+description: "Security review pack for any Atlassian Forge app (technical profile, SAST, SCA, SBOM, vulnerability scan, AAP/security-approval evidence, \"is this app safe\") that survives a real reviewer. Use for ChatWise, CogniRunner, Sentinel Vault, Altomata, lz-ppm-forge, se-ppm-forge or a client's app, and before shipping a dependency/security fix."
 ---
 
 # Forge app security review — run the reports, then write one that holds up
@@ -122,6 +114,8 @@ scanner behaviour, add it to the right reference and a dated line below. The tra
 it is what stops a confident-but-wrong report going out under someone's name.
 
 ## Changelog
+
+**2026-10-11 — lz-ppm full verification.** Gates were green but three were partly blind: a crashing local Semgrep rule dropped two whole files, trufflehog had no detector for the dev HARNESS_SECRET committed in a doc (stale, proven dead), and a raw NUL in source hid a file from grep. Manual review (2 parallel agents, each claim re-verified) found real authz/integrity bugs no scanner sees: a legacy Apply completion that read stranger issues AS THE APP via verification diffs, an AI review with no server-side prompt bound (site-wide cap burn), an unbounded presence value, a portfolio id addressing the registry key. Traps in `docs/gotchas.md` §10.
 
 **2026-09-26 — became CI gates.** lz-ppm-forge `security/` turns this method into `npm run test:security` (SAST+canary, SCA npm+OSV tiered by bundle source maps, trufflehog history scan, FSRT with coverage canary, manifest allow-list, authz suites, AI-prompt inventory) with SLA-dated baselines; the standard is leanzero-forge-app-baseline `references/security-gates.md`. New traps in `docs/gotchas.md` §9 (FSRT blind to register*(resolver); Semgrep silent timeouts; CRA audit ≠ shipped set; gitleaks noise).
 

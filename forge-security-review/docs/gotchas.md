@@ -159,3 +159,24 @@ verification.
 - **gitleaks' generic-api-key rule is noise at history scale.** It gave 86,775 hits on 2,292
   commits. trufflehog gave 5 hits, one of them a real (expired) Forge context token committed in
   test evidence. Harness evidence files are a place credentials leak into.
+
+## 10. Three more silent holes (lz-ppm full review, 2026-10-11)
+
+- **One crashing Semgrep rule drops the WHOLE FILE for EVERY rule.** Semgrep 1.178's
+  `metavariable-pattern` crashes (`Other syntax error … Invalid_argument: String.sub`, level
+  `warn`) when it re-parses a PARENTHESISED argument, e.g. `console.warn(msg, (err && err.message) || err)`.
+  The error is reported at line 1 and the file yields 0 results from all rulesets — two resolver
+  files on lz-ppm were unscanned while the gate said PASS (proved by planting eval/exec in a copy:
+  0 hits vs 5). Fix: avoid `metavariable-pattern` (use `pattern-inside` + sub-expression match),
+  put a parenthesised argument in the local canary, and FAIL the gate on any non-`PartialParsing`
+  Semgrep error (lz-ppm `security/gates/sast.mjs`).
+- **Raw control bytes in source hide a file from grep.** A regex literal holding a raw NUL made
+  `grep`/ugrep treat `confluence-publish.mjs` as binary (searches silently returned nothing) and
+  Semgrep part-parse it. Write `\u0000`-style escapes; lz-ppm has a test failing the build on any
+  raw C0 byte in src/.
+- **trufflehog only knows shapes it has a detector for.** A real 48-hex `HARNESS_SECRET=` sat in a
+  committed doc for 3 months; the history scan passed over it. Add a custom detector for every
+  app-specific secret, and prove EACH custom detector by its planted VALUE (all custom detectors
+  report as DetectorName `CustomRegex`, so the name proves only that one fired). Prove a leaked
+  secret dead with a positive control (current value → 200) and the leaked value (→ 404) on the
+  same endpoint before baselining it.
