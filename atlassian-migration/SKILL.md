@@ -1,20 +1,6 @@
 ---
 name: atlassian-migration
-description: >-
-  Atlassian migrations, both kinds, in one skill. (1) PLAN/SYNC/AUDIT migration scripts in Node.js —
-  Data Center to Cloud or Cloud to Cloud: idempotent, resumable jobs with native-https clients and
-  429/5xx retry, post-JCMA ID mapping and repair, identity resolution, seeded-sample audits with CSV
-  spot-check outputs, Forge KVS remote app-data mending, bulk custom-field/security-level/content-property
-  backfills, macro rewriting at scale, broken filter JQL after a tenant move. (2) CLOUD-TO-CLOUD copy over
-  REST when the native transfer cannot be used: busy production target, issue keys AND numbers preserved,
-  only a subset moves, KEEP-list anonymisation and attachment privacy scanning, silent loading (no
-  notification spam), JSM desks on own config, sprints/links/boards, users and seats, test-management
-  data, guard dog, verification, source snapshot and a decision log with reverts. Use for "migrate
-  projects/spaces to another Atlassian cloud site", "copy Jira between cloud instances keeping keys",
-  "cloud to cloud without the migration tool", "anonymise users during migration", "load without
-  spamming users", cleaning up after JCMA, mending Forge app data after a migration, or any two-phase
-  Atlassian sync job with audit verification. Formerly two skills: atlassian-migration-scripts-skill
-  and atlassian-cloud-to-cloud-migration-skill.
+description: "Atlassian migrations: Node.js DC-to-Cloud or Cloud-to-Cloud sync/audit scripts (post-JCMA ID repair, identity resolution, Forge KVS mending, bulk backfills, macro rewrites, broken filter JQL) and Cloud-to-Cloud copy over REST without the native tool (keys kept, subsets, anonymisation, silent loading). Use for moving Jira/spaces between cloud sites or JCMA cleanup."
 ---
 
 # Atlassian Migration
