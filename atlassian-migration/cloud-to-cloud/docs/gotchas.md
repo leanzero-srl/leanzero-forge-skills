@@ -66,7 +66,7 @@ Each line was paid for in a real run. The doc number points at the detail.
 - Link counts per item cannot detect inverted links (05, 13).
 - A target link type may carry the opposite wording of the source type with the same name (05).
 - Only filters shared with you are readable (05).
-- Board columns/swimlanes/quick filters: no public write API (05).
+- Board columns/swimlanes/quick filters: no PUBLIC documented write API; internal endpoints work with an API token, unsupported and may change (05, [`31-boards-and-queues.md`](../../../jira-api-skill/docs/31-boards-and-queues.md)).
 - Closed sprint `completeDate` cannot be set (05).
 - Adding an item to a replayed sprint moves it out of its open sprint — re-seat afterwards (05).
 - Sprints of deleted source boards are invisible from the board side — read the item's Sprint field (05).

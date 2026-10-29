@@ -26,6 +26,7 @@ Skip this skill for:
 - **ADF (descriptions, comments, worklog bodies)**: `docs/28-adf-construction.md`.
 - **Testing your integration**: `docs/30-testing-rest-integrations.md`.
 - **Endpoint reference**: `docs/06-api-endpoints.md` (and the per-resource appendix in `docs/api/`).
+- **Board columns, quick filters, swimlanes, JSM queues and queue Board views** (internal endpoints, proven recipes): `docs/31-boards-and-queues.md`.
 
 ## API Base URL
 
@@ -118,6 +119,8 @@ Refresh tokens via `grant_type=refresh_token` before `expires_in` lapses (defaul
 | Get current user | `/rest/api/3/myself` | GET |
 | User search | `/rest/api/3/user/search?query=...` | GET |
 | Notify users about issue | `/rest/api/3/issue/{issueKey}/notify` | POST |
+| Create board / write board columns | `/rest/agile/1.0/board` (public) / `/rest/greenhopper/1.0/rapidviewconfig/columns` (internal) | POST / PUT |
+| Create / edit JSM queue | `/rest/servicedesk/1/servicedesk/{projectKey}/queues[/{id}]` (internal) | POST / PUT |
 
 > Issue descriptions, comments, and worklog bodies use **ADF** (Atlassian Document Format) — a JSON tree, not Markdown or HTML. See `docs/28-adf-construction.md`.
 
@@ -193,6 +196,7 @@ Accept: application/json
 | `27-rate-limits-and-quotas.md` | 429 behavior, per-endpoint guidance, batching |
 | `28-adf-construction.md` | Building ADF for descriptions, comments, worklogs |
 | `30-testing-rest-integrations.md` | Mocking, fixtures, dev-loop patterns |
+| `31-boards-and-queues.md` | Board create, columns/WIP, quick filters, swimlanes, JSM queue create/edit/delete/reorder, queue Board views (internal, unsupported endpoints; proven recipes + traps) |
 
 ### Reference (inherited content)
 | File | Topic |
@@ -237,6 +241,7 @@ CI-safe helpers in `scripts/`:
 
 ## Changelog
 
+- **2026-10-29** — New `docs/31-boards-and-queues.md`: writing board columns (incl. WIP limits), quick filters, swimlanes, JSM queues (create, edit List-view columns, delete, reorder) and a queue's Board view (a hidden Kanban board, added through a GraphQL mutation) with an API token. All internal and unsupported, every recipe run end to end on a test site and read back. Traps: filter lookup by name is fuzzy (take the id from the POST response), `currentStatisticsField:"none_"` switches WIP limits off, unmapped statuses drop their issues off the board, unknown queue column ids are stored silently, deleted queues leave undeletable project-scoped filters.
 - **2026-10-03** — `01-core-concepts.md`, `03-workflow-conditions.md`, `07-permissions-scopes.md` and `when-to-use-which.md` no longer say the workflow modules are Connect-only or that a condition runs a Forge function. Per the Forge manifest schema (`@forge/manifest` 12.9.0) `jira:workflowCondition` has a REQUIRED `expression` and NO `function`; validators and post-functions run functions.
 - **2026-08-26** — `gotchas.md` gains the `POST /issue/bulk` result-mapping trap,
   found while building a document→backlog generator: the response carries only

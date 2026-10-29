@@ -97,3 +97,17 @@ an index is the only reliable way home.
 Related: **JQL is eventually consistent**, so do not verify a bulk create by
 searching for it. `parent = KEY` can return zero seconds after the children
 exist while `GET /issue/{key}` shows the parent set correctly. Read back by key.
+
+## Boards and JSM queues: "no write API" means no PUBLIC one
+
+Board columns, quick filters, swimlanes, JSM queue create/edit/delete/reorder and a queue's Board view have no
+public documented write API, but the internal endpoints the UI uses work with an API token. They are unsupported
+and may change. Recipes, request shapes and read-back steps: `31-boards-and-queues.md`. The traps that cost the most:
+
+- Never find a board's filter by `GET /rest/api/3/filter/search?filterName=` — it is fuzzy and can hand you someone
+  else's filter. Take the id from the `POST /rest/api/3/filter` response.
+- `PUT /rest/greenhopper/1.0/rapidviewconfig/columns` with `currentStatisticsField:{"id":"none_"}` switches the
+  board's WIP limits off. Send the board's current statistic id.
+- A status left out of the column body is unmapped and its issues vanish from the board. Fold leftover statuses into
+  the first column of the same status category, then check `unmappedStatuses` in the editmodel.
+- A queue's List-view columns accept unknown field ids silently. Validate against `GET /rest/api/3/field`.

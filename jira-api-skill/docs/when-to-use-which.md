@@ -260,6 +260,21 @@ Use `@forge/bridge` when you need:
 
 ---
 
+## Boards and JSM queues: which endpoint
+
+| You want to... | Use | Supported? |
+|---|---|---|
+| Create or delete a board, read its columns or quick filters | `/rest/agile/1.0/board...` | Public |
+| Set board columns, WIP limits, quick filters, swimlanes | `/rest/greenhopper/1.0/...` | Internal, works with an API token |
+| Read JSM queues | `/rest/servicedeskapi/servicedesk/{id}/queue` (public) or `/rest/servicedesk/1/servicedesk/{KEY}/queues/categories` (internal, has order and Board view ids) | Mixed |
+| Create, edit, delete, reorder JSM queues | `/rest/servicedesk/1/servicedesk/{KEY}/queues...` | Internal |
+| Add a Board view to a queue, then set its columns | GraphQL `createSimpleNavigationItem`, then `rapidviewconfig/columns` | Internal |
+
+Internal means unsupported by Atlassian and liable to change: back up, write, read back. Details in
+`31-boards-and-queues.md`.
+
+---
+
 ## Next Steps
 
 1. Review existing docs in `docs/` for detailed module configurations

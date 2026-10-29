@@ -1,6 +1,6 @@
 # JSM service desks
 
-Service desks carry the most config that is NOT reachable over REST (queues, SLAs, customer notifications, portal
+Service desks carry the most config that is NOT reachable over the public REST API (queue writes: internal endpoints only; SLAs, customer notifications, portal
 settings, e-mail channel) and the most people data (customers, participants, organizations). Plan them separately.
 
 For the general JSM migration traps (the `Service Desk Team` role requirement for any mutating actor, app-actor
@@ -59,7 +59,7 @@ source**, and nothing shared is touched.
    (`GET /rest/api/3/workflowscheme/{id}/projectUsages`, `GET /rest/api/3/workflow/{id}/projectUsages`, issue type
    scheme `expand=projects`; positive control: a shared scheme reports N projects). Stop on SHARED.
 
-Not mirrored (no REST, or not readable on the source without desk admin there): SLAs, queues, approvals, portal name /
+Not mirrored (no REST, or not readable on the source without desk admin there): SLAs, queues (internal API only, see the Queues section), approvals, portal name /
 groups / forms / announcements, e-mail channel, customer-notification templates, the exact source transition graph
 (global transitions instead), field configuration. List them in the report.
 
@@ -96,14 +96,20 @@ had only `summary`; `description` → 400 "not valid for this request type"). Cr
 - The `Service Desk Team` role: the target admin required group-only grants → a group for the desk agents added to the
   role, never individual actors.
 
-## Queues (no REST create)
+## Queues (no PUBLIC create)
 
-`GET /rest/servicedeskapi/servicedesk/{id}/queue` reads queues; there is no create. A queue requested by a desk agent
+`GET /rest/servicedeskapi/servicedesk/{id}/queue` reads queues; the public API has no create. Internal endpoints create,
+edit, delete and reorder queues with an API token (`POST`/`PUT /rest/servicedesk/1/servicedesk/{KEY}/queues...`, see
+[`31-boards-and-queues.md`](../../../jira-api-skill/docs/31-boards-and-queues.md)); unsupported by Atlassian and liable
+to change, so read back with `GET /rest/servicedesk/1/servicedesk/{KEY}/queues/categories` (the public listing
+leaves out queues in ITSM practice categories). The UI route below is the fallback. A queue requested by a desk agent
 after the move was created by driving the UI (`/jira/servicedesk/projects/{KEY}/queues/custom/new`):
 - the form is already scoped to the project ("This queue is already filtered by: project = …"): type the JQL WITHOUT
-  the project clause; REST will store `project = KEY AND …` afterwards
+  the project clause; the public listing then shows `project = KEY AND …` (internally `jql` has no project clause,
+  `completeJql` has it)
 - copy the column set of an existing queue
-- queue order is desk-wide; a new queue lands at the bottom — moving it is a second UI step
+- a new queue lands at the bottom of its list — moving it is a second step (UI, or the internal reorder call in
+  `31-boards-and-queues.md`, which accepted only the set of queues the public listing shows)
 - `stage` mode that fills the form, validates, screenshots and CANCELS; `apply` mode only after; then read back over
   REST that the other queues' JQL and columns are unchanged:
   `GET /rest/servicedeskapi/servicedesk/projectKey:{KEY}/queue?includeCount=true` (list order, jql, fields, issueCount — a queue has no order field).

@@ -464,7 +464,8 @@ Skip this skill for:
 | Two admin migration accounts with disjoint project lists | **Yes, when the target owner provides them** — each had its own observed budget; never create accounts just to multiply limits |
 | `notifyUsers=false` on issue edits and worklogs | **Yes, with Administer Jira or Administer Projects** — otherwise it is ignored; comment create, transitions, attachments, links have no such flag |
 | Admin hub APIs (`admin.atlassian.com/gateway/api/admin/...`) with a user API token | **No** — 401; use the logged-in browser session, or an org API key on `api.atlassian.com/admin` (see `atlassian-organizations-api-skill`) |
-| JSM customer notifications, JSM queue create, board columns, account claiming over REST | **No public endpoint** — browser automation, read back, screenshot |
+| JSM customer notifications, account claiming over REST | **No public endpoint** — browser automation, read back, screenshot |
+| JSM queue create/edit/delete/reorder, queue Board views, board columns, quick filters, swimlanes | **No PUBLIC documented API**; internal endpoints work with an API token ([`31-boards-and-queues.md`](../jira-api-skill/docs/31-boards-and-queues.md)), unsupported by Atlassian, may change — back up, write, read back |
 | Setting comment `author`/`created` or issue `created` | **No** — 201 and silently ignored / 400; keep original author+date as TEXT |
 | Test-management app API keys | Per USER **and** per SITE; generated in the app UI on the target |
 

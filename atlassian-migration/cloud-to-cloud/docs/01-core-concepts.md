@@ -80,8 +80,8 @@ From Atlassian's own pages (re-fetched and quoted during the engagement; reprodu
 | Votes, watchers | Deliberately not copied (watchers would also be e-mailed) | Nothing |
 | Confluence page history and authors | New pages start at v1 by the migration account | Origin note at the TOP of every page (readers asked for top, not bottom) |
 | Inline comment anchors | `POST /wiki/api/v2/inline-comments` mints its own marker ref and ignores yours | Re-post as footer comments quoting the selection, or re-bind (doc 11) |
-| JSM SLA history, request participants, organizations, portal settings, queues, customer-notification templates | Not readable/writable over REST, or personal data | Rebuild queues in the UI; SLAs start fresh; say so |
-| Board columns, swimlanes, quick filters | No public write API | List the source columns in the report; set by hand if wanted |
+| JSM SLA history, request participants, organizations, portal settings, queues, customer-notification templates | Not readable/writable over REST, or personal data (queues: readable, and writable only through internal endpoints) | Queues: no PUBLIC write API, internal endpoints can create/edit/reorder them with a token (see [`31-boards-and-queues.md`](../../../jira-api-skill/docs/31-boards-and-queues.md)), or rebuild in the UI; SLAs start fresh; say so |
+| Board columns, swimlanes, quick filters | No PUBLIC documented write API; internal endpoints work with an API token (see [`31-boards-and-queues.md`](../../../jira-api-skill/docs/31-boards-and-queues.md)), unsupported by Atlassian, may change | Read the source's settings (editmodel) and replay them with the internal PUT, then read back; or list them in the report |
 | Closed sprint `completeDate` | Agile API ignores it on close | Sprint closes "today"; say so |
 | Automation rules | Separate subsystem | `automation-engineer` skill |
 | Fields the target has no home for | No field / not on the screen | Decision: append as a marked section in the description (doc 04) |

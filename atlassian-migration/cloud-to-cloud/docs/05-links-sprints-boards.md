@@ -112,7 +112,11 @@ After ALL projects are loaded, a separate pass recreates links whose two ends li
   (a type, a project that is not migrating) must be simplified — and recorded as a decision.
 - Boards: `POST /rest/agile/1.0/board {"name","type":"scrum|kanban","filterId",
   "location":{"type":"project","projectKeyOrId":"K"}}` (without `location` the board sits under the calling user). Columns, swimlanes, quick filters
-  and card layout have **no public write API** — list the source's columns per board in the report; set by hand.
+  and card layout have **no PUBLIC documented write API**. Columns, quick filters and swimlanes can be written with an
+  API token through internal endpoints (see [`31-boards-and-queues.md`](../../../jira-api-skill/docs/31-boards-and-queues.md)),
+  unsupported by Atlassian and liable to change: back up, write, read back. Card layout/colours: not proven, list them
+  in the report. Take the board's filter id from the `POST /filter` response, never from `/filter/search?filterName=`
+  (fuzzy: it can return someone else's filter).
 - A board filter that referenced a stale project id crashed the board pass; recreate the filter and continue per
   board (one failing board must not stop the rest).
 - Verify each board's filter by count: `filter = <id>` vs the source board's count.
