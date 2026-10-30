@@ -27,6 +27,15 @@ Skip this skill for:
 - **Testing your integration**: `docs/30-testing-rest-integrations.md`.
 - **Endpoint reference**: `docs/08-api-endpoints.md`.
 
+## Definition of Done
+
+A Confluence REST integration is done when the site shows the result:
+1. `scripts/test-auth.sh` reaches `/wiki/api/v2/spaces` with the credential the integration really uses, so a later 404 means "not visible to this user", not "missing".
+2. Every list read follows the `_links.next` cursor to the end; a count or an empty result was checked against a page or space known to exist (positive control).
+3. Every write was read back: a page PUT re-GETs with `version.number` bumped and the body as sent (no `409`, no `Unknown macro` / render error in the rendered view), attachments and properties are present on re-GET.
+4. The client honours `Retry-After` on 429 and backs off with jitter on 5xx, shown by a test or a log line, not assumed.
+5. On a client's production Confluence, no create/update/delete probe without the client's yes; try it on a test site first (a CREATE probe that "should 400" can return 200 and create real pages).
+
 ## API Base URLs
 
 | Surface | Base URL | When |
@@ -249,9 +258,4 @@ CI-safe helpers in `scripts/`:
 
 ## Changelog
 
-- **2026-08-26** — `27-rate-limits-and-quotas.md` now states plainly that the 2026 **points-based model does NOT govern API-token integrations** — CHANGE-2958: "API token-based traffic is not affected by this change" — so token auth stays on the classic burst limits and must not be re-architected around points. Flags the exception that DOES reach here (OAuth 2.0 3LO is app-initiated backend traffic and IS in scope, sharing one 65k/hr pool across every tenant of the client id) and points at the Forge points guide for that case. Plus: the delta in `X-RateLimit-Remaining` across two consecutive responses is the real cost of what happened between them — log it before modelling anything.
-- 2026-06-26 — Added `docs/31-groups-users-and-activity.md` + `templates/group-membership.yml` distilling the v1-only group/user/activity cluster from **License Leash**: membership add/remove/list/count (`userByGroupId`, `membersByGroupId?shouldReturnTotalSize=true`), `user/memberof`, scoped `user/email`, CQL last-active backfill (`contributor`/`creator`/`watcher`), multi-site group filtering, guest-group seat semantics, and notify-via-Jira email. Added pattern 12 (privileged-identity-first group writes) to `24-rest-integration-patterns.md`; expanded `gotchas.md` (suspended-user invisibility, eventual consistency, multi-site contamination, email scope). Cross-skill see-also → `atlassian-organizations-api-skill` for suspended visibility and license management.
-- Replaced the legacy "JWT — Server-to-server authentication" claim with the three actually-valid Cloud REST options (API token Basic auth, OAuth 2.0 3LO, Forge `api.asUser/asApp`). Locally-signed JWTs are an Atlassian Connect pattern and are not validated by the v2 REST API.
-- Added four new REST-API-specific docs: `24-rest-integration-patterns.md`, `27-rate-limits-and-quotas.md`, `28-adf-and-storage.md`, `30-testing-rest-integrations.md`.
-- Standardized scripts: stripped emoji, added `set -euo pipefail`, made CI-safe.
-- Added a "Pick a starting point" block and a documentation map that distinguishes canonical REST coverage from the bundled Forge-flavored reference content.
+Dated history: `references/CHANGELOG.md` (add new dated entries there, not here).

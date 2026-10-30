@@ -31,6 +31,15 @@ Skip this skill for:
 - **Points-based API rate limits** (65k/hr shared Tier-1 pool, 2 pts/identity object, tripwires/budget/quiet-window survival patterns, **what actually counts — `@forge/bridge` UI reads are exempt**, the `/spaces/{id}/permissions` 501-pts-per-page trap, and how to measure truthfully): `docs/31-points-rate-limiting.md`.
 - **ADF vs storage format**: `docs/28-adf-and-storage-format.md`.
 
+## Definition of Done
+
+A Confluence Forge change is done when the installed app proves it on a real site:
+1. `scripts/preflight-check.sh` and `scripts/validate-manifest.sh` (`forge lint`) pass with zero errors, and `node_modules/@forge/*` match the lock file (no `"version": "0.0.0"` stubs).
+2. `scripts/deploy-and-install.sh` deployed it and ran `forge install --upgrade` on the test site, so new scopes are actually granted.
+3. Each module touched (banner, content action, macro, content property, event trigger) was exercised on a real page and the visible result checked; `forge logs` for that window shows no errors or timeouts.
+4. Every page/property write was read back (version bumped, body as intended, no `409`), and an event trigger was shown to ignore the app's own writes (`event.atlassianId` check).
+5. Anything scheduled, event-driven or queue-backed was checked against the cost rules above: an idle run does one cheap read and writes nothing.
+
 ## Quick Reference
 
 | Task | Module |
@@ -260,27 +269,8 @@ Recommended workflow: `preflight-check.sh` → make changes → `validate-manife
 
 ## Changelog
 
-- **2026-08-26** — `gotchas.md` gains a **Toolchain** section carried over from
-  the ChatWise incident, because it is platform-wide rather than Jira-specific:
-  a stubbed `node_modules/@forge/*` deploys silently and looks exactly like an
-  Atlassian outage (lint, webpack, `forge lint` and the unit suite all pass —
-  the unit tests stub those packages themselves); `no-use-before-define` as a
-  runtime rather than style rule; and the KVS 240 KiB value limit being **bytes,
-  not characters**, which turns character-based chunking into a bug that waits
-  for the first non-ASCII document. Pre-deploy check:
-  `atlassian-jira-forge-skill/templates/check-forge-deps.mjs`.
+Dated history: `references/CHANGELOG.md` (add new dated entries there, not here).
 
-- **2026-08-26** — `31-points-rate-limiting.md` substantially extended after Atlassian returned server-side telemetry for License Leash (~1.11M pts/day against a self-reported 250-280k — a 4x under-count in the APP'S OWN METER, not a hidden consumer). New: **only app-initiated BACKEND traffic counts** — `@forge/bridge` UI reads with no resolver are exempt (staff post #133), the cheapest optimisation available and absent from the docs; **no official per-endpoint cost catalog exists** and the rule is measurably NOT applied consistently, so derived costs are upper bounds not plans; the **`/spaces/<built-in function id>/permissions` trap** (permissions ARE identity objects — 2 pts per permission ROW, ~501/page at limit=250, partner-measured and staff-acknowledged-then-dropped, plus live confirmation from a 429 on page 94); **POST-that-reads ambiguity** (users-bulk 1 vs 501); **measuring truthfully** (the `X-RateLimit-Remaining` delta is ground truth; `FORGE_API_REQUEST_COUNT` counts requests and cannot carry the object multiplier; Forge exposes no trace id); the **self-meter defect classes** (only 2 of 3 model terms implemented, one call site passing `objects:` instead of `identityObjects:`, tallies never flushed from resolvers) and the rule that a meter feeding a budgeter is NOT capture-only; and **pool scope** — every doc says per-app-across-all-tenants, while "per Forge environment" is undocumented and contradicted in public. Also corrected this file's own now-false "~12-point quiet hours" claim.
-- **2026-08-20** — `31-points-rate-limiting.md` gains three patterns and two gotchas from the License Leash 4.87.0 incident day: **credit your own writes** (an app that watches group counts AND writes memberships reads its own writes as external change — ledger genuine changes only at the lowest HTTP write layer; Confluence 409-on-duplicate-add / 404-on-absent-delete are the no-op signals; a credited no-op is the one shape that can mask real change), **failed-pass retries are schedule, not evidence** (defer non-load-bearing repair retries to the quiet window with 48h degradation and a run-now bypass), **grace windows are not ground truth** (a 24h stale-verdict auth fallback still locked out an admin returning after a longer gap — durable mirrored state beats recent-success TTLs); plus Forge SQL's own installation rate limits being hit by product-event write storms, and same-wall-clock-hour pool exhaustion across days as the fingerprint of a foreign tenant's scheduled job in the shared pool.
-- **2026-08-12** — Added `31-points-rate-limiting.md`: the points quota model verified against live enforcement (1 pt/request + 2 pts/identity object; Tier 1 = 65k/hr shared across ALL installs; Tier 2 per-tenant post-review; `RateLimit-Reason`/`Beta-RateLimit-Policy` headers — observed live value `conf-global-based` differs from the doc's), plus the survival architecture proven on License Leash 4.75→4.86 (scheduling-layer containment, count tripwires with the raw-representation rule, quiet-window re-baselines with episode-stamp bounds, soft budget with admission clamp, capture-only telemetry incl. previously-invisible auth walks, org-pool relief valve) and the platform gotchas met on the way (forge logs -n cap, warm-container module scope, auth-before-migrations schema tolerance, cross-hop queue fields, build-stamp verification).
-
-- **2026-06-26** — Folded battle-tested learnings from **Sentinel Vault** (content protection / Forge LLM) and **License Leash** (cross-product license manager). Added docs `14-macros-and-section-sealing.md`, `15-forge-llm-integration.md`, `16-unified-content-triggers.md`, `17-forge-sql.md`, `18-unlicensed-access-and-web-triggers.md`. Enhanced `24-production-patterns.md` (4 new patterns: in-isolate cache, debounced writes, dual `index.ts`, Custom UI assets/dialogs/theme), `27-faas-limits-and-cost.md` (consumer budget + cursor-resume, siloed cross-product storage, Forge SQL limits), `28-adf-and-storage-format.md` (canonical ADF hashing), `30-testing-and-tunneling.md` (multi-layer harness), and `gotchas.md` (`asUser()` in background jobs, event field parsing, group-API quirks, HTTPS egress ports). New templates: `bodied-macro-section-seal.yml`, `forge-sql-migration.js`, `unlicensed-access-page.yml`, `hmac-web-trigger.js`. Forge-LLM model ids per the `claude-api` skill; `@forge/sql` limits per the official docs. Cross-skill see-also: Forge LLM (`atlassian-jira-forge-skill` + `claude-api`), license-via-group-membership (`atlassian-organizations-api-skill` + `confluence-api-skill`).
-- Replaced the legacy "Authentication via OAuth 2.0 (3LO) or JWT from Forge" claim with the three actually-valid patterns; added an explicit "Auth note" preamble to every doc/template that still contained `AP.context.getToken()` (Atlassian Connect, not Forge).
-- Standardized on the named KVS import: `import { kvs } from '@forge/kvs'`. Legacy `storage` from `@forge/api` flagged with the 2025-03-17 deprecation date.
-- Removed the spurious `forge register` step from `templates/page-custom-ui.yml` (no such command — use `forge install --upgrade`).
-- Renumbered duplicate prefixes: `07-permissions-scopes.md` → `12-`, `08-cli-commands.md` → `13-`.
-- Added five new docs: `24-production-patterns.md` (15 patterns from Sentinel Vault and License Leash), `26-async-events-and-queues.md`, `27-faas-limits-and-cost.md`, `28-adf-and-storage-format.md`, `30-testing-and-tunneling.md`. Removed `24-real-world-patterns.md` (folded in).
-- Stripped emoji from shell scripts; added `set -euo pipefail` headers.
 
 ## Related skills
 
