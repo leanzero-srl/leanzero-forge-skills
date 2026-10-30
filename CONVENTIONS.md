@@ -125,7 +125,7 @@ for skill in ['atlassian-jira-forge-skill', 'atlassian-confluence-forge-skill',
               'atlassian-migration',
               'forge-security-review', 'automation-engineer']:
     roots = [f'{skill}/SKILL.md']
-    for d in ['docs', 'templates', 'scripts']:
+    for d in ['docs', 'templates', 'scripts', 'references']:
         p = f'{skill}/{d}'
         if os.path.isdir(p):
             for f in os.listdir(p):

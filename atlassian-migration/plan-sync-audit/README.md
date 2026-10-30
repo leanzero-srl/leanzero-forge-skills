@@ -58,4 +58,4 @@ atlassian-migration/plan-sync-audit/
 └── scripts/           ← CI-safe bash helpers
 ```
 
-See `../SKILL.md` for the full documentation map and template index.
+See `../SKILL.md` (CORE card + reference index) and `../references/track1-docs-templates-scripts-index.md` for the full documentation map and template index.
