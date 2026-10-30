@@ -69,7 +69,7 @@ The Atlassian Admin API is composed of 6 sub-APIs. This skill covers 4 of them:
 Org API work is done when the org itself shows the result, not when a call returned 2xx:
 1. The credential was proven first: `GET /v1/orgs` lists the target org with this key/token, so a later 401/403/404 means scope or id, not a dead key.
 2. Every read was paginated to the end (cursor in the body for `/admin/v2/orgs/{orgId}/workspaces`), and counts were cross-checked once by hand (e.g. `users/count` against a listed page).
-3. Every write (invite, group membership, product access, policy) was read back after the eventual-consistency delay (~15 s for memberships) and shows the new state; a suspended user is checked here, not via product group reads that hide them.
+3. Every write (invite, group membership, product access, policy) was read back after the eventual-consistency delay (up to 30 s, `docs/gotchas.md`) and shows the new state; a suspended user is checked here, not via product group reads that hide them.
 4. Bulk changes ran on a snapshot taken first, a small canary before the full set, with 429 `Retry-After` honoured and the failure count reported as a number.
 5. On a client org, no user, group, policy or access change without the client's yes.
 

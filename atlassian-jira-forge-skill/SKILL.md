@@ -34,7 +34,7 @@ A Jira Forge change is done when the installed app proves it on a real site:
 2. `scripts/deploy-and-install.sh` deployed it and ran `forge install --upgrade` on the test site, so new scopes are actually granted.
 3. Each module touched was exercised for real: a validator blocks the bad transition and allows the good one, a condition hides and shows the transition, a post-function's write is visible on the issue afterwards, a UI renders with data; `forge logs` for that window shows no errors or timeouts.
 4. Every Jira write was read back (bulk create: `body.errors[].failedElementNumber` checked before trusting `body.issues`), and triggers ignore the app's own writes.
-5. Anything scheduled, event-driven or queue-backed was checked against the cost rules above: an idle run does one cheap read and writes nothing.
+5. Anything scheduled, event-driven or queue-backed was checked against "Cost and robustness" below: an idle run does one cheap read and writes nothing.
 
 ## Quick Reference
 

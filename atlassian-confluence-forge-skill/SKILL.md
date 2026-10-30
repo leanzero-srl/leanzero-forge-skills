@@ -38,7 +38,7 @@ A Confluence Forge change is done when the installed app proves it on a real sit
 2. `scripts/deploy-and-install.sh` deployed it and ran `forge install --upgrade` on the test site, so new scopes are actually granted.
 3. Each module touched (banner, content action, macro, content property, event trigger) was exercised on a real page and the visible result checked; `forge logs` for that window shows no errors or timeouts.
 4. Every page/property write was read back (version bumped, body as intended, no `409`), and an event trigger was shown to ignore the app's own writes (`event.atlassianId` check).
-5. Anything scheduled, event-driven or queue-backed was checked against the cost rules above: an idle run does one cheap read and writes nothing.
+5. Anything scheduled, event-driven or queue-backed was checked against "Cost and robustness" below: an idle run does one cheap read and writes nothing.
 
 ## Quick Reference
 
