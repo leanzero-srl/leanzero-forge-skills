@@ -107,6 +107,23 @@ Check where the repo actually lives before claiming a cadence.
 8. **Find where the code actually runs before you "remediate" it.** `forge install list`. Deploying a fix to
    an environment with zero installs remediates nothing and misleads the reviewer.
 
+## Definition of Done
+
+A review pack is done when a hostile reviewer re-running the scans finds nothing you did not already say:
+1. `forge_sec_scan.py <app>` ran on the shipping tree and its SECURITY-REVIEW-<App>.md, sast-semgrep.json and
+   sca-npm-audit-{prod,all}.json exist; every SAST zero is backed by a canary that fired (gotchas §2).
+2. SCA read in both advisory models: `npm audit` (sca-npm-audit-prod.json) AND an OSV-backed scanner (osv-scanner,
+   Trivy or Grype, gotchas.md §1) over the same lockfile, its output saved beside the pack and every disagreement
+   explained; every "inherited from the SDK" row has `fixAvailable` checked.
+3. `forge_authz_scan.py <app>` ran and EVERY candidate it listed was confirmed or dismissed by reading the code, with
+   file:line in the pack; the classes in docs/03-beyond-scanners.md and docs/05-authorization-and-llm-agents.md
+   were hunted by hand (an empty scan is not a pass).
+4. Every finding graded in both directions, refutations checked with `git log -S` first; remediation claims name the
+   environment from `forge install list` and tests that are in the repo and in `npm test`.
+5. The "Before you send it" checklist in `templates/security-review-report.md` is fully ticked, no secret attached.
+6. Client-facing pack: independently attacked (a second agent with the code and the pack, no conclusions) before it is
+   posted, per the global gate-and-adversarial-review rule.
+
 ## Standing directive: keep this current
 
 Advisory databases, Forge scopes, and the SDK move. When you learn a new trap, a new risk class, or a
