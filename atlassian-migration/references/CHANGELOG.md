@@ -5,6 +5,7 @@ Moved verbatim from SKILL.md on 2026-10-30 (skills audit); lines 546-576 of the 
 
 ## Changelog
 
+- **2026-10-31 (blubber audit)** LONG RUNS cut to a compact six-label block (full text: references/long-runs.md); stale `automation-engineer` pointer -> `atlassian-automation`; dangling "below" pointers replaced by reference paths. SKILL.md 14,287 -> 11,957 chars.
 - **2026-10-30** Added "LONG RUNS (>30 min)" near the top: measured job durations, the light-on-dark incident,
   preflight + one-project probe, front-loaded guard-dog proof and lenses, vigil lines and kill criteria.
 - **2026-10-03 — merged** `atlassian-migration-scripts-skill` and `atlassian-cloud-to-cloud-migration-skill`

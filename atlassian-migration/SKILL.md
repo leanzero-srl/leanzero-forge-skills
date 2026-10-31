@@ -13,13 +13,11 @@ prove every negative, audit with an independent method) and link to each other i
 
 | Your job | Track | Start at |
 |---|---|---|
-| Writing migration / bulk data-fix scripts (DC→Cloud or Cloud↔Cloud), post-JCMA repair, Forge KVS mending, filter JQL rewrites, macro rewrites | **Plan/Sync/Audit** — `plan-sync-audit/` | the "Plan→Sync→Audit triad" below, then `plan-sync-audit/docs/` |
-| Copying whole Jira projects (incl. JSM desks) and Confluence spaces between two CLOUD sites over REST, keeping keys, under a privacy/KEEP list, without e-mailing anyone | **Cloud-to-Cloud copy** — `cloud-to-cloud/` | "The run, on one screen" below, then `cloud-to-cloud/docs/01-core-concepts.md` |
+| Writing migration / bulk data-fix scripts (DC→Cloud or Cloud↔Cloud), post-JCMA repair, Forge KVS mending, filter JQL rewrites, macro rewrites | **Plan/Sync/Audit** — `plan-sync-audit/` | references/track1-triad-flags-and-skeleton.md, then `plan-sync-audit/docs/` |
+| Copying whole Jira projects (incl. JSM desks) and Confluence spaces between two CLOUD sites over REST, keeping keys, under a privacy/KEEP list, without e-mailing anyone | **Cloud-to-Cloud copy** — `cloud-to-cloud/` | references/track2-run-and-golden-rules.md, then `cloud-to-cloud/docs/01-core-concepts.md` |
 
 Neighbours: org-level user/group/policy work → `atlassian-organizations-api-skill`; Automation rules →
-`automation-engineer`; plain Jira/Confluence REST from an external app → `jira-api-skill` / `confluence-api-skill`.
-(The sections the table calls "below" now live in references/: track1-triad-flags-and-skeleton.md and
-track2-run-and-golden-rules.md; full index at the end of this card.)
+`atlassian-automation`; plain Jira/Confluence REST from an external app → `jira-api-skill` / `confluence-api-skill`.
 
 ## HARD RULES
 1. **No mutation without `--confirm`; dry-run first.** Plans, dry-runs and audits refuse to write without it; dry-run
@@ -85,13 +83,13 @@ track2-run-and-golden-rules.md; full index at the end of this card.)
 Prose only (no code gate): rules 3, 5, 6, 9, 10, 12; the five post-JCMA rules; vigil and kill criteria.
 
 ## LONG RUNS (>30 min)
-Rule home: ~/.claude/CLAUDE.md "ANYTHING OVER 30 MINUTES NEEDS CAUSE, A CHEAPER-PATH CHECK AND A VIGIL" (2026-10-30). This skill's specifics:
-- **Long jobs:** (measured, `cloud-to-cloud/docs/27-rate-limits-and-running.md`) the C2C orchestrator's Jira chains (`ordered_create.py` per project, 2 accounts x 2 chains) ~6-7 h for a few tens of thousands of items; Confluence copy + verify ~2-3 h in parallel; post passes (attachment release ~1 h, URL rewrite ~50 min, boards + sprints ~1.5 h, verify + compare ~1 h); archive rebuild ~1.5 h per archive; test-management load "many hours" (per-user limit ~30/min). Track 1: a Plan→Sync→Audit execute run (`--confirm`); no measured wall clock is on record (the "12,400 entries ~45 min" in `plan-sync-audit/docs/13-running-and-monitoring.md` is an illustrative example transcript, not a measurement): estimate from the per-batch rate of the `--dry-run --limit 5` smoke and the first 3 `progress:` lines.
-- **Past incident:** 2026-09-30, a production C2C copy: the load (~6 h Jira) ran with one attachment scanner that could not read light-on-dark UI text; a later 2 h 34 min OCR pass removed 1,209 files that had been live on the target for ~10-13 h (the lens is now pass 2 in `cloud-to-cloud/docs/09-attachment-privacy.md`; these numbers come from that engagement's private client skill, `references/attachment-privacy-postmortem.md` there, not from this repo). Running every lens on a sample before the load would have shown it. Also on record: a Confluence route that 500ed instantly was retried for 50 minutes (doc 27), and a "chain stalled 50 min" alarm fired on a log written a minute earlier (doc 13).
-- **Cheaper probe first:** `cloud-to-cloud/scripts/preflight-check.sh` (auth on both sites, admin rights, seats, keys free with a positive control; the full evidence walk ~10 min), then ONE small project end to end on a sandbox with production's config (measured on the same private engagement, its client skill's prod runbook: 470 items + 15 fillers ~21 min) before any chain; Track 1: `--dry-run --limit 5` (minutes) before the execute run.
-- **Front-load (first 30 min):** guard-dog baseline taken and PROVEN (synthetic scheme change → T1+T2, foreign watcher → T3, planted name → T5, HALT kills a dummy tree) before the first write; the first project's creates with fillers (any `NUMBER DRIFT` shows at once); the silent window read back (T3) before item 1; every attachment lens (`att_gate.py` + `check_upload_paths.py` exit 0) on a sample; one deliberate 429 wait to see the `x-ratelimit-reset` sleep work; every long scan writes a first checkpoint by a set deadline.
-- **Vigil checklist:** a separate read-only reviewer agent (or a 15-min cron tick in the launching session; the guard dog runs alongside it, never the loading chains themselves): every 15-20 min one line per chain from `runs/<target>/` logs (`PROJ n/max`, items/hour, Confluence space x/y), the ALERTS file (`NUMBER LOST`, `POST FAIL … STILL after pass 2`, `CREATE <P> FAILED`), guard-dog last tick < 10 min old with 0 VIOLATION lines; every 30 min 5 random items + 2 pages field by field against the source (number, type, status, comments, attachments, watchers = migration accounts only, no mentions, origin note, no names outside the KEEP list). A silent chain is checked with `sample <pid>` (a 429 sleep is alive) and the map-log line count / mtime, not the progress line alone.
-- **Kill criteria:** guard-dog HALT (T1-T4); `NUMBER DRIFT` (the template aborts); a detector hit on the newest 30 items / 10 pages (stop the uploads, keep the leak hunt); a long scan with no first checkpoint by its deadline; an instant reproducible 500 (stop retrying, find a second route); a Track 1 run stalled by doc 13's two-of-three signals (e.g. a 429 storm with zero ESTABLISHED sockets): do NOT kill it on your own; surface the diagnosis to the owner and propose doc 13's action (wait ~5 min for the 429 to clear; `kill -SIGTERM <PID>` only on their yes, so the plan saves; `--retry-failed` on resume).
+Rule home: ~/.claude/CLAUDE.md "ANYTHING OVER 30 MINUTES". Measured numbers, incidents and the full vigil: references/long-runs.md.
+- **Long jobs:** CAUSE = a production copy or data fix. C2C Jira chains (`ordered_create.py`, 2 accounts x 2 chains) ~6-7 h; Confluence copy + verify ~2-3 h; post passes ~1-1.5 h each (`cloud-to-cloud/docs/27-rate-limits-and-running.md`); Track 1 `--confirm` runs: estimate from the smoke's per-batch rate.
+- **Past incident:** 2026-09-30 a prod C2C copy ran ~6 h with one attachment lens blind to light-on-dark text; a 2 h 34 min OCR pass later removed 1,209 files live for ~10-13 h.
+- **Cheaper probe first:** `cloud-to-cloud/scripts/preflight-check.sh` (~10 min), then ONE small project end to end on a sandbox with prod config (470 items ~21 min); Track 1 `--dry-run --limit 5` (minutes).
+- **Front-load (first 30 min):** guard-dog baseline PROVEN (T1-T5 synthetic triggers, HALT kills a dummy tree) before the first write; first project's creates with fillers; every attachment lens (`att_gate.py`, `check_upload_paths.py`) on a sample; one deliberate 429 wait.
+- **Vigil checklist:** a separate read-only reviewer every 15-20 min: per chain from `runs/<target>/` logs (`PROJ n/max`, items/h), the ALERTS file (`NUMBER LOST`, `POST FAIL`, `CREATE <P> FAILED`), guard-dog tick < 10 min old with 0 VIOLATION; every 30 min 5 items + 2 pages field by field vs source. A silent chain: `sample <pid>` + map-log mtime.
+- **Kill criteria:** guard-dog HALT; `NUMBER DRIFT`; a detector hit on the newest 30 items / 10 pages; no first checkpoint by its deadline; an instant reproducible 500. A stalled Track 1 run is NOT killed alone: surface doc 13's diagnosis, `kill -SIGTERM <PID>` only on the owner's yes.
 
 ## REFERENCE INDEX (one level deep; open only what your task needs)
 | file | read when |
@@ -107,6 +105,7 @@ Rule home: ~/.claude/CLAUDE.md "ANYTHING OVER 30 MINUTES NEEDS CAUSE, A CHEAPER-
 | references/track2-run-and-golden-rules.md | Track 2: the run on one screen (steps 0-10) and the nine golden rules |
 | references/track2-auth-and-failures.md | Track 2: auth table (what has no REST); symptom -> first fix table |
 | references/track2-docs-templates-scripts-index.md | Track 2: every doc, template and script in `cloud-to-cloud/`; offline tests |
+| references/long-runs.md | LONG RUNS full text: every measured duration, incidents, the full vigil and kill list |
 | references/official-docs.md | Atlassian REST, rate-limit, migration and Forge remote-storage pages |
 | references/CHANGELOG.md | dated history of both tracks and the 2026-10-03 merge (never read it to decide what to do today) |
 Grep across all: `grep -rn "<term>" ~/.claude/skills/atlassian-migration/references/ ~/.claude/skills/atlassian-migration/*/docs/`.
