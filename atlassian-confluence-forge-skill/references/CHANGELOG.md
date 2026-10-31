@@ -23,3 +23,4 @@ Dated entries moved out of SKILL.md (skill-lint, 2026-10-30). Newest entries may
 - Renumbered duplicate prefixes: `07-permissions-scopes.md` → `12-`, `08-cli-commands.md` → `13-`.
 - Added five new docs: `24-production-patterns.md` (15 patterns from Sentinel Vault and License Leash), `26-async-events-and-queues.md`, `27-faas-limits-and-cost.md`, `28-adf-and-storage-format.md`, `30-testing-and-tunneling.md`. Removed `24-real-world-patterns.md` (folded in).
 - Stripped emoji from shell scripts; added `set -euo pipefail` headers.
+- 2026-10-31: blubber audit: "Cost and robustness" section replaced by a pointer to the identical one in atlassian-jira-forge-skill.
