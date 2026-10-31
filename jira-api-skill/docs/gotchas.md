@@ -111,3 +111,12 @@ and may change. Recipes, request shapes and read-back steps: `31-boards-and-queu
 - A status left out of the column body is unmapped and its issues vanish from the board. Fold leftover statuses into
   the first column of the same status category, then check `unmappedStatuses` in the editmodel.
 - A queue's List-view columns accept unknown field ids silently. Validate against `GET /rest/api/3/field`.
+
+## Workflow post function: set a DATE field to the transition date (proven live 2026-10-22, wolfaenpak)
+
+`POST /rest/api/3/workflows/update`, on the transition's `actions`:
+`{"ruleKey":"system:update-field","parameters":{"field":"customfield_NNNNN","value":"%%CURRENT_DATETIME%%","mode":"replace"}}`.
+Works for a date-picker custom field (stored `2026-10-22`). The new editor shows it as "Use date of transition". There is no separate
+"Update issue custom field" rule in the capabilities list; `system:update-field` covers custom fields. `%%CURRENT_DATE%%` or any non-date
+value is ACCEPTED by /workflows/update (200) but then BLOCKS every transition ("field has invalid input from the workflow"), so always run one
+test transition after writing it. It writes even when the field is on no screen (changelog + JQL show it).

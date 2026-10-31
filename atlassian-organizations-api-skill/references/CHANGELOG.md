@@ -22,3 +22,4 @@ Dated entries moved out of SKILL.md (skill-lint, 2026-10-30). Newest entries may
   role-assignments, idempotent membership writes, App Access Funnel role-assign).
 
 ---
+- **2026-10-31** blubber audit: "Key Concepts" and "Common cURL Examples" cut from SKILL.md (duplicates of docs/01-core-concepts.md and the per-resource docs); a two-line pointer left.

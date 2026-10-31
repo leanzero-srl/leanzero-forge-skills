@@ -19,3 +19,4 @@ Moved out of SKILL.md (skill-lint, 2026-10-30). Newest first.
 - Standardized scripts: stripped emoji, added `set -euo pipefail`, made CI-safe.
 - Added a "Pick a starting point" block and a documentation map that distinguishes canonical REST coverage from the bundled Forge-flavored reference content.
 - 2026-10-22: added the transition-date post function recipe (system:update-field + %%CURRENT_DATETIME%%), proven live on wolfaenpak.
+- 2026-10-31: blubber audit: the transition-date post-function recipe moved from SKILL.md to docs/gotchas.md (pointer left), a local client evidence path dropped from it.

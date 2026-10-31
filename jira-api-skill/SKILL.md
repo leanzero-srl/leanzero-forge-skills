@@ -239,15 +239,10 @@ CI-safe helpers in `scripts/`:
 - [OAuth 2.0 (3LO) for Atlassian Cloud](https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/)
 - [API tokens](https://id.atlassian.com/manage-profile/security/api-tokens)
 
-## Workflow post function: set a DATE field to the transition date (proven live 2026-10-22, wolfaenpak)
+## Workflow post function: set a DATE field to the transition date
 
-`POST /rest/api/3/workflows/update`, on the transition's `actions`:
-`{"ruleKey":"system:update-field","parameters":{"field":"customfield_NNNNN","value":"%%CURRENT_DATETIME%%","mode":"replace"}}`.
-Works for a date-picker custom field (stored `2026-10-22`). The new editor shows it as "Use date of transition". There is no separate
-"Update issue custom field" rule in the capabilities list; `system:update-field` covers custom fields. `%%CURRENT_DATE%%` or any non-date
-value is ACCEPTED by /workflows/update (200) but then BLOCKS every transition ("field has invalid input from the workflow"), so always run one
-test transition after writing it. It writes even when the field is on no screen (changelog + JQL show it). Detail:
-~/Projects/alterdomus-pipefy/data/analysis/2026-10-22/M5-proofs-wolfaenpak.md.
+`system:update-field` + `%%CURRENT_DATETIME%%` (proven live 2026-10-22); the payload and the trap that blocks every
+transition: `docs/gotchas.md` "Workflow post function". Always run one test transition after writing it.
 
 ## Definition of Done
 
