@@ -6,7 +6,7 @@ and after (as the done check). Exit 1 while any source item has no target match 
 
 usage: confluence_tree_diff.py --src-base https://a.atlassian.net --src-root <pageId|folderId> --src-auth ENV_EMAIL:ENV_TOKEN
                                --dst-base https://b.atlassian.net --dst-root <id> --dst-auth ENV_EMAIL:ENV_TOKEN
-                               [--excluded "title 1" "title 2" ...]
+                               [--excluded "title 1" ...] [--excluded-ids 123 456 ...]
 Matching is by normalised title (emoji/whitespace-insensitive). Types listed: page, folder, database, whiteboard,
 embed (smart link). Templates and space settings are NOT in a page tree: check them separately and say so.
 """
@@ -48,7 +48,8 @@ def main():
     ap = argparse.ArgumentParser()
     for s in ('src', 'dst'):
         ap.add_argument(f'--{s}-base', required=True); ap.add_argument(f'--{s}-root', required=True); ap.add_argument(f'--{s}-auth', required=True)
-    ap.add_argument('--excluded', nargs='*', default=[])
+    ap.add_argument('--excluded', nargs='*', default=[], help='titles left behind on purpose')
+    ap.add_argument('--excluded-ids', nargs='*', default=[], help='source ids left behind on purpose (safer than long titles)')
     a = ap.parse_args()
     src = tree(a.src_base, a.src_root, auth(a.src_auth))
     if not src:  # an empty source is a blind read, never a pass
@@ -56,11 +57,13 @@ def main():
     dst = tree(a.dst_base, a.dst_root, auth(a.dst_auth))
     have = {norm(x['title']) for x in dst}
     excl = {norm(x) for x in a.excluded}
-    missing = [x for x in src if norm(x['title']) not in have and norm(x['title']) not in excl]
+    xid = set(a.excluded_ids)
+    isx = lambda x: norm(x['title']) in excl or str(x['id']) in xid
+    missing = [x for x in src if norm(x['title']) not in have and not isx(x)]
     print(f"source {len(src)} items by type:", json.dumps({t: sum(1 for x in src if x['type'] == t) for t in sorted({x['type'] for x in src})}))
     print(f"target {len(dst)} items")
     for x in src:
-        flag = 'OK  ' if norm(x['title']) in have else ('EXCL' if norm(x['title']) in excl else 'MISS')
+        flag = 'OK  ' if norm(x['title']) in have else ('EXCL' if isx(x) else 'MISS')
         print(f"{flag} {x['type']:10} {x['id']:>12}  {x['title'][:90]}")
     print(f"missing (not moved, not excluded): {len(missing)}")
     sys.exit(1 if missing else 0)
