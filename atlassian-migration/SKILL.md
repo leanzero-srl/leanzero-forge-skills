@@ -55,6 +55,15 @@ Neighbours: org-level user/group/policy work → `atlassian-organizations-api-sk
   mentions, no names outside the KEEP list; old L25); guard dog with 0 VIOLATION lines; `leak-scan.sh` and
   `check_upload_paths.py` exit 0; cloud-to-cloud/docs/13 section 6 "Before you write done" (every user-visible field
   on the real projects, every number with population + control, what is NOT covered).
+- **Confluence content move (pages between spaces or sites), PERMANENT (owner 2026-11-04):** the scope is the WHOLE
+  source tree, not the list of pages someone approved. Before moving, run `cloud-to-cloud/scripts/confluence_tree_diff.py`
+  on the source and show the owner everything that exists: folders and subfolders, pages, databases, whiteboards, smart
+  links, and (outside the tree) space templates. Folders come along unless excluded by name. Every item NOT moved is
+  listed by title with its reason in the report, as one yes/no question, never left silent. Done = the same diff
+  exits 0 (everything moved or named in `--excluded`). A database is rebuilt as a database (CSV import into a new
+  database, field types and tag colours set), never flattened into a table without asking. WHY: a page-level approval
+  list once became the whole scope; the folder structure and workshop templates the team worked from were left behind,
+  and a tracker database lost its colours and filters, and nobody was told until the team noticed.
 - **Plan/Sync/Audit run** (old L367): `lint-plan-file.sh` passed on the plan; `--execute-only --dry-run` reviewed;
   preflight drift under threshold; the `--confirm` run ends with `failed` = 0 or each failure explained;
   the seeded audit script re-fetched a sample from the DESTINATION and `audit-summary.sh` shows no mismatch.
