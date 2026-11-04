@@ -138,7 +138,8 @@ it / production carried it and was remediated on <date>>`.
 python3 ~/.claude/skills/forge-security-review/scripts/forge_sec_scan.py <path>
 # or, by hand:
 semgrep --config p/javascript --config p/react --config p/nodejs --config p/secrets \
-        --exclude node_modules --exclude build --json -o sast-semgrep.json <src>
+        --exclude node_modules --exclude build --timeout=0 --timeout-threshold=0 \
+        --json -o sast-semgrep.json <src>
 npm audit --omit=dev --json > sca-npm-audit-prod.json
 npm audit --json > sca-npm-audit-all.json
 forge install list

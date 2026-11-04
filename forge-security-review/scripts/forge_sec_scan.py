@@ -146,9 +146,15 @@ def sast(app, out):
         say("  ! semgrep not installed (pip install semgrep) — SAST SKIPPED")
         return None
     tgt = [d for d in ("src", "manifest.yml") if os.path.exists(os.path.join(app, d))]
-    rc, so, se = sh([sg, "scan", *CONFIGS, "--exclude=node_modules", "--exclude=*.bundle.js",
-                     "--exclude=dist", "--exclude=build", "--json", "--quiet",
-                     "-o", os.path.join(out, "sast-semgrep.json"), *tgt], cwd=app)
+    try:
+        rc, so, se = sh([sg, "scan", *CONFIGS, "--exclude=node_modules", "--exclude=*.bundle.js",
+                         "--exclude=dist", "--exclude=build", "--json", "--quiet",
+                         # 2026-11-02: default per-rule timeouts silently skipped 123 rule/file pairs on 52 files
+                         # on a busy MacBook, and the report still said "this zero is real" (gotchas §9, §11)
+                         "--timeout=0", "--timeout-threshold=0",
+                         "-o", os.path.join(out, "sast-semgrep.json"), *tgt], cwd=app, timeout=3600)
+    except subprocess.TimeoutExpired:
+        say("  ! semgrep did not finish within 60 min — SAST INCOMPLETE, do not report it"); return None
     try:
         d = json.load(open(os.path.join(out, "sast-semgrep.json")))
     except Exception:
@@ -199,11 +205,14 @@ def report(app, out, p, pj, direct, phantom, mutable, nonregistry, s, sc):
 
     A("\n## 2. SAST\n")
     if not s:
-        A("_semgrep unavailable — SAST not run._")
+        A("_SAST not run or did not finish (semgrep missing, or the scan passed 60 min): see the console. Report no SAST result._")
     else:
         A(f"| Tool | Semgrep, rulesets p/javascript p/react p/nodejs p/secrets |\n|---|---|\n| Files scanned | **{s['scanned']}** (first-party; node_modules/bundles excluded) |\n| Errors | {s['errors'] or 'none'} |\n| **Findings** | **{s['findings']}** |")
+        timeouts = [e for e in s["errors"] if "Timeout" in str(e.get("type", ""))]
+        if timeouts:
+            A(f"\n**{len(timeouts)} rule/file pairs TIMED OUT** on {len({e.get('path') for e in timeouts})} files — those rules never ran there, so this scan is PARTIAL. Re-run before reporting it.")
         if s["findings"] == 0:
-            A(f"\n**Ruleset canary-validated:** {'YES — a planted-vulnerable file produced ≥3 findings, so this zero is real.' if s['canary_validated'] else '**NO — DO NOT REPORT THIS ZERO.** The ruleset could not be proven live; a scanner with no rules yields the identical result to clean code.'}")
+            A(f"\n**Ruleset canary-validated:** {'YES — a planted-vulnerable file produced ≥3 findings' + (', but timeouts above mean the zero does not cover those files.' if timeouts else ', so this zero is real.') if s['canary_validated'] else '**NO — DO NOT REPORT THIS ZERO.** The ruleset could not be proven live; a scanner with no rules yields the identical result to clean code.'}")
         else:
             for r in s["results"][:15]:
                 A(f"- `{r['extra']['severity']}` {r['check_id'].split('.')[-1]} — {r['path']}:{r['start']['line']}")
@@ -261,7 +270,7 @@ def main():
     ap.add_argument("app"); ap.add_argument("-o", "--out", default=None)
     a = ap.parse_args()
     app = os.path.abspath(a.app)
-    out = a.out or os.path.join(app, ".security-review")
+    out = os.path.abspath(a.out) if a.out else os.path.join(app, ".security-review")   # relative -o: semgrep runs with cwd=app
     os.makedirs(out, exist_ok=True)
     say(f"[1/4] manifest profile …");  p = profile(app)
     say(f"[2/4] dependencies …");      pj, d, dev, phantom, mutable, nonreg = deps(app)

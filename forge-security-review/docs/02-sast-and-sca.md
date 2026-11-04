@@ -11,6 +11,7 @@ hand when you need to.
 pip install semgrep     # PEP 668: use a venv if the system python refuses
 semgrep scan --config=p/javascript --config=p/react --config=p/nodejs --config=p/secrets \
   --exclude=node_modules --exclude='*.bundle.js' --exclude=dist --exclude=build \
+  --timeout=0 --timeout-threshold=0 \
   --json --quiet src manifest.yml -o sast-semgrep.json
 ```
 

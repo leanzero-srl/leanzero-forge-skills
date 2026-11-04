@@ -149,8 +149,9 @@ verification.
   (lz-ppm `security/gates/fsrt.mjs`, `security/canary/fsrt-{direct,register}`). Build from a
   pinned commit; the README flags are stale — trust `--help`.
 - **Semgrep timeouts are silent partial scans.** Default per-rule timeouts skipped 65 rule×file pairs
-  on the biggest files, listed only under `errors` with 0 results. Use `--timeout=120
-  --timeout-threshold=0` and fail on any remaining Timeout.
+  on the biggest files, listed only under `errors` with 0 results. Use `--timeout=0
+  --timeout-threshold=0` (no per-rule limit; updated 2026-11-02, see §11) and treat any remaining
+  Timeout in `errors` as a partial scan.
 - **`npm audit --omit=dev` is not the shipped set for a CRA Custom UI.** react-scripts sits in
   `dependencies`, so it reported 51 vulnerable packages and 34 high/critical advisories, and none
   of them were in the bundle. The built bundle's source maps list the packages it really contains
@@ -180,3 +181,11 @@ verification.
   report as DetectorName `CustomRegex`, so the name proves only that one fired). Prove a leaked
   secret dead with a positive control (current value → 200) and the leaked value (→ 404) on the
   same endpoint before baselining it.
+
+## 11. The timeout trap again, and a sink count Semgrep got wrong (2026-11-02, Field Steward)
+
+The §9 trap came back on a busy MacBook during the Field Steward review (CogniRunner's Runs on Atlassian edition).
+The backend scan reported 0 findings with 123 `Timeout` entries in `errors` across 52 files, and the UI scan skipped
+40 more. The scanner's own report still said "this zero is real". `forge_sec_scan.py` now runs Semgrep with no
+per-rule limit (the §9 flags), counts the timeouts in every report, and says so plainly when the scan was partial.
+Semgrep also found 1 `dangerouslySetInnerHTML` site in the UI where grep found 7. Count sinks with grep and read each.
